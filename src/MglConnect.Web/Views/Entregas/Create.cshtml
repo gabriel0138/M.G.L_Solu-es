@@ -1,0 +1,205 @@
+@model MglConnect.Web.ViewModels.NovaEntregaViewModel
+@{
+    ViewData["Title"] = "Nova Entrega & Rastreamento";
+    var pedidos = ViewBag.PedidosDisponiveis as List<MglConnect.Web.Models.Pedido> ?? new List<MglConnect.Web.Models.Pedido>();
+    var motoristas = ViewBag.Motoristas as List<MglConnect.Web.Models.Usuario> ?? new List<MglConnect.Web.Models.Usuario>();
+    var veiculos = ViewBag.Veiculos as List<MglConnect.Web.Models.Veiculo> ?? new List<MglConnect.Web.Models.Veiculo>();
+}
+
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm rounded-4 bg-white p-4 p-md-5">
+                <div class="d-flex align-items-center justify-content-between border-bottom pb-3 mb-4">
+                    <div>
+                        <h4 class="fw-bold text-dark mb-1">
+                            <i class="bi bi-box-seam text-warning me-2"></i> Despachar Remessa & Gerar Código de Rastreio
+                        </h4>
+                        <p class="text-muted small mb-0">Crie a etiqueta de rastreio e associe a um pedido expedido.</p>
+                    </div>
+                    <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-arrow-left me-1"></i> Voltar
+                    </a>
+                </div>
+
+                <form asp-action="Create" method="post">
+                    @if (!ViewData.ModelState.IsValid)
+                    {
+                        <div class="alert alert-danger py-2 fs-7 mb-4" asp-validation-summary="All"></div>
+                    }
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-5">
+                            <label asp-for="PedidoId" class="form-label fs-7 fw-semibold">Pedido a ser Despachado</label>
+                            <select asp-for="PedidoId" id="selectPedidoDespacho" class="form-select" required>
+                                <option value="">-- Selecione um Pedido --</option>
+                                @foreach (var ped in pedidos)
+                                {
+                                    <option value="@ped.Id" data-peso="@ped.PesoKg" selected="@(ped.Id == Model.PedidoId)">
+                                        @ped.NumeroPedido — @(ped.Cliente?.NomeFantasia ?? ped.Cliente?.RazaoSocial) (@ped.PesoKg.ToString("F1") kg)
+                                    </option>
+                                }
+                            </select>
+                            <span asp-validation-for="PedidoId" class="text-danger fs-8"></span>
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="MotoristaId" class="form-label fs-7 fw-semibold">Motorista Responsável</label>
+                            <select asp-for="MotoristaId" class="form-select">
+                                <option value="">-- Aguardando Atribuição --</option>
+                                @foreach (var mot in motoristas)
+                                {
+                                    <option value="@mot.Id" selected="@(mot.Id == Model.MotoristaId)">
+                                        @mot.Nome
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="VeiculoId" class="form-label fs-7 fw-semibold">Veículo Sugerido / Frota</label>
+                            <select asp-for="VeiculoId" id="selectVeiculoFrota" class="form-select">
+                                <option value="">-- Frota Padrão --</option>
+                                @foreach (var v in veiculos)
+                                {
+                                    <option value="@v.Id" data-capacidade="@v.CapacidadeCargaKg" selected="@(v.Id == Model.VeiculoId)">
+                                        @v.Modelo (@v.Placa)
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Banner de Sugestão de Frota no Despacho (Módulo 3) -->
+                    <div id="badgeSugestaoDespacho" class="p-2 px-3 rounded-3 mb-4 border d-flex align-items-center gap-2 fs-8" style="background-color: var(--mgl-bg);">
+                        <i class="bi bi-lightbulb-fill text-warning fs-6"></i>
+                        <span id="textoSugestaoDespacho" class="text-secondary">Selecione um pedido para visualizar a recomendação automática de veículo e rota rodoviária.</span>
+                    </div>
+
+                    <h6 class="fw-bold text-dark border-bottom pb-2 mb-3 mt-4">
+                        <i class="bi bi-person text-primary me-1"></i> Dados do Destinatário
+                    </h6>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-7">
+                            <label asp-for="DestinatarioNome" class="form-label fs-7 fw-semibold">Nome Completo / Empresa</label>
+                            <input asp-for="DestinatarioNome" class="form-control" placeholder="Destinatário final" required />
+                            <span asp-validation-for="DestinatarioNome" class="text-danger fs-8"></span>
+                        </div>
+                        <div class="col-md-5">
+                            <label asp-for="DestinatarioDocumento" class="form-label fs-7 fw-semibold">CPF ou CNPJ</label>
+                            <input asp-for="DestinatarioDocumento" class="form-control" placeholder="000.000.000-00" />
+                        </div>
+                    </div>
+
+                    <h6 class="fw-bold text-dark border-bottom pb-2 mb-3 mt-4">
+                        <i class="bi bi-geo-alt text-primary me-1"></i> Endereço de Destino (ViaCEP Integrado)
+                    </h6>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-3">
+                            <label asp-for="CepDestino" class="form-label fs-7 fw-semibold">CEP Destino</label>
+                            <div class="input-group">
+                                <input asp-for="CepDestino" id="CepDestino" class="form-control" placeholder="00000-000" required />
+                                <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+                            </div>
+                            <span class="fs-8 text-muted">Autocompleta via API</span>
+                            <span asp-validation-for="CepDestino" class="text-danger fs-8"></span>
+                        </div>
+                        <div class="col-md-7">
+                            <label asp-for="EnderecoDestino" class="form-label fs-7 fw-semibold">Logradouro</label>
+                            <input asp-for="EnderecoDestino" id="EnderecoDestino" class="form-control" placeholder="Rua / Avenida..." required />
+                            <span asp-validation-for="EnderecoDestino" class="text-danger fs-8"></span>
+                        </div>
+                        <div class="col-md-2">
+                            <label asp-for="NumeroDestino" class="form-label fs-7 fw-semibold">Número</label>
+                            <input asp-for="NumeroDestino" class="form-control" placeholder="100" required />
+                            <span asp-validation-for="NumeroDestino" class="text-danger fs-8"></span>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label asp-for="ComplementoDestino" class="form-label fs-7 fw-semibold">Complemento</label>
+                            <input asp-for="ComplementoDestino" class="form-control" placeholder="Apto, Galpão..." />
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="BairroDestino" class="form-label fs-7 fw-semibold">Bairro</label>
+                            <input asp-for="BairroDestino" id="BairroDestino" class="form-control" required />
+                            <span asp-validation-for="BairroDestino" class="text-danger fs-8"></span>
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="CidadeDestino" class="form-label fs-7 fw-semibold">Cidade</label>
+                            <input asp-for="CidadeDestino" id="CidadeDestino" class="form-control" required />
+                            <span asp-validation-for="CidadeDestino" class="text-danger fs-8"></span>
+                        </div>
+                        <div class="col-md-2">
+                            <label asp-for="EstadoDestino" class="form-label fs-7 fw-semibold">UF</label>
+                            <input asp-for="EstadoDestino" id="EstadoDestino" class="form-control" maxlength="2" placeholder="SP" required />
+                            <span asp-validation-for="EstadoDestino" class="text-danger fs-8"></span>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label asp-for="PrevisaoDias" class="form-label fs-7 fw-semibold">Prazo de Entrega (Dias)</label>
+                            <input asp-for="PrevisaoDias" type="number" min="1" max="30" class="form-control" />
+                        </div>
+                        <div class="col-md-8">
+                            <label asp-for="Observacoes" class="form-label fs-7 fw-semibold">Observações Operacionais</label>
+                            <input asp-for="Observacoes" class="form-control" placeholder="Ex: Deixar na portaria com fulano..." />
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info d-flex align-items-center gap-2 fs-7 py-2">
+                        <i class="bi bi-info-circle-fill fs-5"></i>
+                        <div>
+                            Ao salvar, um <strong>Código de Rastreio exclusivo estilo MGL-XXXXXXXXBR</strong> será gerado automaticamente com o 1º checkpoint no Centro de Distribuição.
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 mt-4">
+                        <a asp-action="Index" class="btn btn-outline-secondary px-4">Cancelar</a>
+                        <button type="submit" class="btn btn-warning fw-bold px-4">
+                            <i class="bi bi-box-seam me-1"></i> Despachar & Gerar Rastreio
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            buscarCep('CepDestino', 'EnderecoDestino', 'BairroDestino', 'CidadeDestino', 'EstadoDestino');
+
+            const selectPedido = document.getElementById('selectPedidoDespacho');
+            const textoSugestao = document.getElementById('textoSugestaoDespacho');
+            const badgeBox = document.getElementById('badgeSugestaoDespacho');
+
+            function atualizarSugestao() {
+                const opt = selectPedido.options[selectPedido.selectedIndex];
+                if (!opt || !opt.value) {
+                    textoSugestao.innerHTML = 'Selecione um pedido para visualizar a recomendação automática de veículo e rota.';
+                    badgeBox.className = 'p-2 px-3 rounded-3 mb-4 border d-flex align-items-center gap-2 fs-8';
+                    badgeBox.style.backgroundColor = 'var(--mgl-bg)';
+                    return;
+                }
+
+                const peso = parseFloat(opt.getAttribute('data-peso')) || 0;
+                if (peso > 3500) {
+                    badgeBox.className = 'p-2 px-3 rounded-3 mb-4 border border-warning d-flex align-items-center gap-2 fs-8 bg-warning-subtle text-dark';
+                    textoSugestao.innerHTML = `<strong>Sugestão: Caminhão Pesado (Truck/Carreta)</strong> — Carga de ${peso.toFixed(1)} kg (>3,5t). Rota obrigatória via Rodoanel/Imigrantes com pesagem em balança rodoviária.`;
+                } else {
+                    badgeBox.className = 'p-2 px-3 rounded-3 mb-4 border border-info d-flex align-items-center gap-2 fs-8 bg-info-subtle text-dark';
+                    textoSugestao.innerHTML = `<strong>Sugestão: Van / Utilitário Leve</strong> — Carga de ${peso.toFixed(1)} kg (&le;3,5t). Rota expressa urbana direta autorizada (isenta de ZMRC e balança).`;
+                }
+            }
+
+            if (selectPedido) {
+                selectPedido.addEventListener('change', atualizarSugestao);
+                atualizarSugestao();
+            }
+        });
+    </script>
+}

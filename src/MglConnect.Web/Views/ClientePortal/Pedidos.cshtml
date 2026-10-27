@@ -1,0 +1,134 @@
+@model IEnumerable<MglConnect.Web.Models.Pedido>
+@{
+    ViewData["Title"] = "Portal do Cliente - Meus Pedidos";
+    var cliente = ViewBag.Cliente as MglConnect.Web.Models.Cliente;
+}
+
+<div class="container py-4">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+        <div>
+            <h3 class="fw-bold mb-1" style="color: var(--mgl-dark-primary);">
+                <i class="bi bi-boxes me-2" style="color: var(--mgl-teal);"></i> Meus Pedidos de Carga
+            </h3>
+            <p class="text-muted small mb-0">Listagem completa de ordens de distribuição associadas a @cliente?.RazaoSocial.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a asp-action="NovoPedido" class="btn btn-mgl-teal btn-sm">
+                <i class="bi bi-plus-circle me-1"></i> Novo pedido
+            </a>
+            <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left me-1"></i> Voltar ao Dashboard
+            </a>
+        </div>
+    </div>
+
+    <!-- Barra de Filtros -->
+    <div class="card-mgl p-3 mb-4">
+        <form method="get" class="row g-2 align-items-center">
+            <div class="col-md-7">
+                <div class="input-group">
+                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-search text-muted"></i></span>
+                    <input type="text" name="termo" value="@ViewBag.TermoBusca" class="form-control border-start-0" 
+                           placeholder="Buscar por número do pedido, itens ou código de rastreio..." />
+                </div>
+            </div>
+            <div class="col-md-3">
+                <select name="status" class="form-select">
+                    <option value="">-- Todos os Status --</option>
+                    <option value="Em transporte" selected="@(ViewBag.StatusSelecionado == "Em transporte")">Em trânsito</option>
+                    <option value="Entregue" selected="@(ViewBag.StatusSelecionado == "Entregue")">Entregue</option>
+                    <option value="Pendente" selected="@(ViewBag.StatusSelecionado == "Pendente")">Pendente</option>
+                </select>
+            </div>
+            <div class="col-md-2 d-grid">
+                <button type="submit" class="btn btn-mgl-primary">Filtrar</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Lista de Pedidos -->
+    <div class="card-mgl p-4">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light fs-8 text-uppercase">
+                    <tr>
+                        <th>Número</th>
+                        <th>Data</th>
+                        <th>Itens / Descrição</th>
+                        <th>Valor Total</th>
+                        <th>Status</th>
+                        <th>Rastreamento</th>
+                        <th class="text-end">Ações</th>
+                    </tr>
+                </thead>
+                <tbody class="fs-7">
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-muted">Nenhum pedido encontrado.</td>
+                        </tr>
+                    }
+                    @foreach (var p in Model)
+                    {
+                        <tr>
+                            <td>
+                                <strong class="font-monospace text-dark">@p.NumeroPedido</strong>
+                            </td>
+                            <td>@p.DataPedido.ToString("dd/MM/yyyy HH:mm")</td>
+                            <td>@p.Descricao</td>
+                            <td>
+                                <strong>R$ @p.ValorTotal.ToString("N2")</strong>
+                                <div class="text-muted fs-8">@p.PesoKg.ToString("F1") kg</div>
+                            </td>
+                            <td>
+                                @if (p.Entrega != null)
+                                {
+                                    @if (p.Entrega.StatusEntrega == "Entregue")
+                                    {
+                                        <span class="badge badge-mgl-delivered">Entregue</span>
+                                    }
+                                    else if (p.Entrega.StatusEntrega == "Em transporte")
+                                    {
+                                        <span class="badge badge-mgl-transit">Em trânsito</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge badge-mgl-pending">No CD</span>
+                                    }
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">Aguardando</span>
+                                }
+                            </td>
+                            <td>
+                                @if (p.Entrega != null)
+                                {
+                                    <div class="d-flex align-items-center gap-1">
+                                        <a asp-controller="Rastreio" asp-action="Index" asp-route-codigo="@p.Entrega.CodigoRastreio" 
+                                           class="font-monospace fw-bold text-decoration-none" style="color: var(--mgl-accent-2);">
+                                            @p.Entrega.CodigoRastreio
+                                        </a>
+                                        <button type="button" class="btn btn-sm btn-link text-decoration-none p-0 text-muted" 
+                                                onclick="copiarCodigoRastreio('@p.Entrega.CodigoRastreio', this)" title="Copiar código">
+                                            <i class="bi bi-clipboard"></i>
+                                        </button>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span class="text-muted fs-8">—</span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <a asp-action="PedidoDetalhes" asp-route-id="@p.Id" class="btn btn-mgl-primary btn-sm">
+                                    <i class="bi bi-eye"></i> Detalhes
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

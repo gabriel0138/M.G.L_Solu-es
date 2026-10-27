@@ -1,0 +1,461 @@
+@model MglConnect.Web.Models.Entrega
+@{
+    ViewData["Title"] = "Gerenciar Entrega " + Model.CodigoRastreio;
+    var motoristas = ViewBag.Motoristas as List<MglConnect.Web.Models.Usuario> ?? new List<MglConnect.Web.Models.Usuario>();
+    var veiculos = ViewBag.Veiculos as List<MglConnect.Web.Models.Veiculo> ?? new List<MglConnect.Web.Models.Veiculo>();
+}
+
+<div class="container py-4">
+    <!-- Barra Superior -->
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+        <div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="fs-4 fw-extrabold font-monospace" style="color: var(--mgl-dark-primary);">@Model.CodigoRastreio</span>
+                @if (Model.StatusEntrega == "Entregue")
+                {
+                    <span class="badge badge-mgl-delivered"><i class="bi bi-check-circle-fill me-1"></i> Entregue (POD Confirmado)</span>
+                }
+                else if (Model.StatusEntrega == "Em transporte")
+                {
+                    <span class="badge badge-mgl-transit"><i class="bi bi-truck me-1"></i> Em Transporte</span>
+                }
+                else
+                {
+                    <span class="badge badge-mgl-pending"><i class="bi bi-hourglass-split me-1"></i> Pendente</span>
+                }
+                <span class="signalr-live-badge"><span class="live-dot"></span> SignalR Ativo</span>
+            </div>
+            <p class="text-muted small mb-0">Criado em @Model.DataCriacao.ToString("dd/MM/yyyy às HH:mm")</p>
+        </div>
+
+        <div class="d-flex gap-2">
+            <a asp-action="Navegar" asp-route-id="@Model.Id" 
+               class="btn btn-warning text-dark btn-sm fw-bold shadow-sm">
+                <i class="bi bi-compass me-1"></i> Cockpit GPS Waze
+            </a>
+            @if (Model.StatusEntrega != "Entregue")
+            {
+                <button type="button" class="btn btn-mgl-amber btn-sm fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#modalPOD">
+                    <i class="bi bi-patch-check-fill me-1"></i> Finalizar com Assinatura (POD)
+                </button>
+            }
+            @if (User.IsInRole("Admin"))
+            {
+                <a asp-controller="Roteamento" asp-action="Index" asp-route-entregaId="@Model.Id"
+                   class="btn btn-mgl-primary btn-sm fw-semibold shadow-sm">
+                    <i class="bi bi-map-fill me-1"></i> Rota de Caminhão
+                </a>
+            }
+            <a asp-controller="Rastreio" asp-action="Index" asp-route-codigo="@Model.CodigoRastreio" 
+               class="btn btn-mgl-teal btn-sm fw-bold shadow-sm">
+                <i class="bi bi-eye-fill me-1"></i> Rastreio ML
+            </a>
+            <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left me-1"></i> Voltar
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Coluna Esquerda: Informações Gerais, POD e Veículo -->
+        <div class="col-lg-5">
+            <!-- Comprovante Digital de Entrega (POD) se Concluído -->
+            @if (Model.StatusEntrega == "Entregue" && !string.IsNullOrEmpty(Model.NomeRecebedor))
+            {
+                <div class="card-mgl p-4 mb-4 border-success" style="border-width: 2px;">
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <i class="bi bi-patch-check-fill fs-3 text-success"></i>
+                        <div>
+                            <h6 class="fw-bold text-success mb-0">Comprovante Digital de Entrega (POD)</h6>
+                            <span class="fs-8 text-muted">Proof of Delivery Arquivado</span>
+                        </div>
+                    </div>
+                    <ul class="list-unstyled fs-7 mb-3">
+                        <li class="mb-1"><strong>Nome do Recebedor:</strong> @Model.NomeRecebedor</li>
+                        @if (!string.IsNullOrEmpty(Model.DocumentoRecebedor))
+                        {
+                            <li class="mb-1"><strong>Documento (RG/CPF):</strong> @Model.DocumentoRecebedor</li>
+                        }
+                        <li class="mb-1"><strong>Data e Hora:</strong> @Model.DataHoraRecebimento?.ToString("dd/MM/yyyy às HH:mm")</li>
+                    </ul>
+                    @if (!string.IsNullOrEmpty(Model.AssinaturaDigitalBase64))
+                    {
+                        <div class="p-2 bg-light rounded-3 text-center border">
+                            <div class="text-muted fs-8 mb-1">Assinatura Digital Coletada:</div>
+                            <img src="@Model.AssinaturaDigitalBase64" alt="Assinatura Digital" style="max-height: 80px; max-width: 100%;" />
+                        </div>
+                    }
+                </div>
+            }
+
+            <!-- Dados do Destinatário e Endereço -->
+            <div class="card-mgl p-4 mb-4">
+                <h5 class="fw-bold border-bottom pb-2 mb-3" style="color: var(--mgl-dark-primary);">
+                    <i class="bi bi-geo-alt text-primary me-1"></i> Destino da Encomenda
+                </h5>
+                <div class="fs-7 mb-3">
+                    <div class="fw-bold text-dark fs-6">@Model.DestinatarioNome</div>
+                    @if (!string.IsNullOrEmpty(Model.DestinatarioDocumento))
+                    {
+                        <div class="text-muted fs-8">Doc: @Model.DestinatarioDocumento</div>
+                    }
+                </div>
+
+                <div class="text-muted fs-7 mb-3">
+                    @Model.EnderecoDestino, @Model.NumeroDestino @(string.IsNullOrEmpty(Model.ComplementoDestino) ? "" : $"({Model.ComplementoDestino})")<br />
+                    @Model.BairroDestino • @Model.CidadeDestino / @Model.EstadoDestino<br />
+                    <strong>CEP:</strong> @Model.CepDestino
+                </div>
+
+                @if (!string.IsNullOrEmpty(Model.Observacoes))
+                {
+                    <div class="p-2 bg-light rounded-3 text-secondary fs-8 border">
+                        <i class="bi bi-chat-left-text me-1"></i> @Model.Observacoes
+                    </div>
+                }
+            </div>
+
+            <!-- Veículo Pesado e Restrições de Rota -->
+            <div class="card-mgl p-4 mb-4">
+                <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
+                    <h5 class="fw-bold mb-0" style="color: var(--mgl-dark-primary);">
+                        <i class="bi bi-truck-front-fill me-1" style="color: var(--mgl-teal);"></i> Veículo Pesado & Carga
+                    </h5>
+                    @if (User.IsInRole("Admin"))
+                    {
+                        <a asp-controller="Roteamento" asp-action="Index" asp-route-entregaId="@Model.Id" class="btn btn-outline-primary btn-sm fs-8">
+                            Simular Trajeto
+                        </a>
+                    }
+                </div>
+
+                @if (User.IsInRole("Admin"))
+                {
+                    <form asp-action="AtribuirVeiculo" method="post" class="mb-3">
+                        <input type="hidden" name="entregaId" value="@Model.Id" />
+                        <label class="form-label fs-7 fw-semibold text-secondary">Veículo Pesado de Frota</label>
+                        <div class="input-group input-group-sm">
+                            <select name="veiculoId" class="form-select">
+                                <option value="">-- Selecione o Veículo --</option>
+                                @foreach (var v in veiculos)
+                                {
+                                    <option value="@v.Id" selected="@(v.Id == Model.VeiculoId)">
+                                        @v.Modelo (@v.Placa) — @v.AlturaMetros.ToString("F2")m / @v.PesoToneladas.ToString("F1")t
+                                    </option>
+                                }
+                            </select>
+                            <button type="submit" class="btn btn-outline-secondary">Salvar</button>
+                        </div>
+                    </form>
+                }
+
+                <ul class="list-unstyled fs-8 text-muted mb-0">
+                    <li><strong>Gabarito Altura:</strong> @Model.AlturaMetros.ToString("F2") m</li>
+                    <li><strong>Largura:</strong> @Model.LarguraMetros.ToString("F2") m</li>
+                    <li><strong>Peso Bruto (PBT):</strong> @Model.PesoToneladas.ToString("F1") toneladas (@Model.QtdEixos eixos)</li>
+                    <li><strong>Classificação:</strong> @Model.TipoCarga</li>
+                </ul>
+            </div>
+
+            <!-- Atribuição de Motorista -->
+            @if (User.IsInRole("Admin"))
+            {
+                <div class="card-mgl p-4 mb-4">
+                    <h5 class="fw-bold border-bottom pb-2 mb-3" style="color: var(--mgl-dark-primary);">
+                        <i class="bi bi-person-badge text-warning me-1"></i> Motorista da Rota
+                    </h5>
+                    <form asp-action="AtribuirMotorista" method="post">
+                        <input type="hidden" name="entregaId" value="@Model.Id" />
+                        <div class="mb-3">
+                            <select name="motoristaId" class="form-select fs-7">
+                                <option value="">-- Sem motorista atribuído --</option>
+                                @foreach (var m in motoristas)
+                                {
+                                    <option value="@m.Id" selected="@(m.Id == Model.MotoristaId)">
+                                        @m.Nome (@m.Telefone)
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-mgl-primary btn-sm w-100">
+                            <i class="bi bi-arrow-repeat me-1"></i> Salvar Atribuição de Motorista
+                        </button>
+                    </form>
+                    @if (Model.MotoristaId.HasValue && Model.VeiculoId.HasValue && Model.StatusEntrega is "Pendente" or "Em transporte")
+                    {
+                        <div class="border-top mt-3 pt-3">
+                            <p class="small text-muted">Código único, válido por 15 minutos. Entregue diretamente ao motorista.</p>
+                            <div class="d-flex flex-wrap gap-2">
+                                <form asp-action="EmitirCodigoTurno" method="post">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="entregaId" value="@Model.Id" />
+                                    <button type="submit" class="btn btn-warning btn-sm">Emitir código de turno</button>
+                                </form>
+                                <form asp-action="CancelarCodigoTurno" method="post">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="entregaId" value="@Model.Id" />
+                                    <button type="submit" class="btn btn-outline-danger btn-sm">Cancelar código pendente</button>
+                                </form>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <!-- Coluna Direita: Checkpoints de Rastreamento & Adicionar Novo Checkpoint -->
+        <div class="col-lg-7">
+            <!-- Formulário para Inserir Novo Checkpoint Operacional -->
+            <div class="card-mgl p-4 mb-4">
+                <h5 class="fw-bold border-bottom pb-2 mb-3 d-flex align-items-center gap-2" style="color: var(--mgl-dark-primary);">
+                    <i class="bi bi-plus-circle-fill text-success"></i> Adicionar Checkpoint de Movimentação
+                </h5>
+
+                <form asp-action="AdicionarCheckpoint" method="post">
+                    <input type="hidden" name="EntregaId" value="@Model.Id" />
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-7">
+                            <label class="form-label fs-7 fw-semibold">Título do Evento</label>
+                            <input type="text" name="Titulo" class="form-control" 
+                                   placeholder="Ex: Chegou ao Hub de Distribuição Santos" required />
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label fs-7 fw-semibold">Novo Status</label>
+                            <select name="StatusAssociado" class="form-select">
+                                <option value="Em transporte">Em transporte</option>
+                                @if (User.IsInRole("Admin"))
+                                {
+                                    <option value="Pendente">Pendente (No CD)</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-7">
+                            <label class="form-label fs-7 fw-semibold">Localidade / Hub</label>
+                            <input type="text" name="Localidade" class="form-control" 
+                                   value="Santos - SP" placeholder="Ex: Cajamar - SP, Santos - SP" required />
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label fs-7 fw-semibold">Ícone</label>
+                            <select name="Icone" class="form-select">
+                                <option value="bi-truck">Caminhão (Em Trânsito)</option>
+                                <option value="bi-bicycle">Entregador / Última Milha</option>
+                                <option value="bi-box-seam">Caixa / Centro de Distribuição</option>
+                                <option value="bi-geo-alt-fill">Local / Filial</option>
+                                <option value="bi-patch-check-fill">Comprovante POD / Entregue</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fs-7 fw-semibold">Descrição Complementar</label>
+                        <textarea name="Descricao" class="form-control" rows="2" 
+                                  placeholder="Ex: Carga pesada descarregada nas docas com segurança."></textarea>
+                    </div>
+
+                    <div class="text-end">
+                        <button type="submit" class="btn btn-mgl-teal fw-bold px-4">
+                            <i class="bi bi-broadcast me-1"></i> Gravar & Transmitir via SignalR
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Linha do Tempo Atual -->
+            <div class="card-mgl p-4">
+                <h5 class="fw-bold border-bottom pb-2 mb-4 d-flex align-items-center gap-2" style="color: var(--mgl-dark-primary);">
+                    <i class="bi bi-clock-history me-1" style="color: var(--mgl-teal);"></i> Linha do Tempo Cadastrada (@Model.EventosRastreio.Count eventos)
+                </h5>
+
+                <div class="tracking-timeline" id="adminTimelineContainer">
+                    @foreach (var ev in Model.EventosRastreio.OrderByDescending(e => e.DataHora))
+                    {
+                        <div class="timeline-event">
+                            <div class="timeline-icon-box">
+                                <i class="bi @ev.Icone"></i>
+                            </div>
+                            <div class="timeline-card">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <strong style="color: var(--mgl-dark-primary);">@ev.Titulo</strong>
+                                    <span class="badge bg-light text-secondary border fs-8">
+                                        @ev.DataHora.ToString("dd/MM/yyyy HH:mm")
+                                    </span>
+                                </div>
+                                @if (!string.IsNullOrEmpty(ev.Descricao))
+                                {
+                                    <p class="text-secondary small mb-2">@ev.Descricao</p>
+                                }
+                                <div class="d-flex justify-content-between text-muted fs-8">
+                                    <span><i class="bi bi-geo-alt me-1"></i> @ev.Localidade</span>
+                                    <span class="badge bg-light text-dark border">Status: @ev.StatusAssociado</span>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL PARA REGISTRO DE PROOF OF DELIVERY (POD) COM CANVAS DE ASSINATURA -->
+<div class="modal fade" id="modalPOD" tabindex="-1" aria-labelledby="modalPODLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content card-mgl border-0">
+            <div class="modal-header border-bottom" style="background-color: var(--mgl-dark-primary); color: #fff;">
+                <h5 class="modal-title fw-bold" id="modalPODLabel">
+                    <i class="bi bi-patch-check-fill text-warning me-2"></i> Comprovante Digital de Entrega (POD)
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form asp-action="FinalizarEntregaPOD" method="post" id="formPOD">
+                <div class="modal-body p-4">
+                    <input type="hidden" name="entregaId" value="@Model.Id" />
+                    <input type="hidden" name="assinaturaBase64" id="assinaturaBase64" />
+
+                    <div class="mb-3">
+                        <label class="form-label fs-7 fw-semibold">Nome Completo de Quem Recebeu *</label>
+                        <input type="text" name="nomeRecebedor" class="form-control" placeholder="Ex: Maria Oliveira Santos" required />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fs-7 fw-semibold">Documento de Identificação (RG / CPF)</label>
+                        <input type="text" name="documentoRecebedor" class="form-control" placeholder="Ex: 34.871.992-X" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fs-7 fw-semibold">Local de Entrega</label>
+                        <input type="text" name="localidade" class="form-control" value="@Model.CidadeDestino - @Model.EstadoDestino" />
+                    </div>
+
+                    <!-- Canvas de Assinatura Digital Touch / Mouse -->
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label fs-7 fw-semibold mb-0">Assinatura Digital do Recebedor *</label>
+                            <button type="button" class="btn btn-link btn-sm text-decoration-none text-danger p-0 fs-8" id="btnClearSignature">
+                                <i class="bi bi-eraser"></i> Limpar Assinatura
+                            </button>
+                        </div>
+                        <div class="signature-pad-container">
+                            <canvas id="signatureCanvas" width="450" height="180"></canvas>
+                        </div>
+                        <span class="fs-8 text-muted">Desenhe com o dedo ou mouse no quadro acima.</span>
+                    </div>
+                </div>
+                <div class="modal-footer border-top">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-mgl-teal fw-bold px-4" id="btnSubmitPOD">
+                        <i class="bi bi-check-lg me-1"></i> Concluir Entrega & Gerar POD
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Setup do Canvas de Assinatura Digital (POD)
+        document.addEventListener('DOMContentLoaded', function () {
+            const canvas = document.getElementById('signatureCanvas');
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                let isDrawing = false;
+                let hasSignature = false;
+
+                ctx.strokeStyle = "#0B132B";
+                ctx.lineWidth = 2.5;
+                ctx.lineCap = "round";
+
+                function getPos(e) {
+                    const rect = canvas.getBoundingClientRect();
+                    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                    return {
+                        x: (clientX - rect.left) * (canvas.width / rect.width),
+                        y: (clientY - rect.top) * (canvas.height / rect.height)
+                    };
+                }
+
+                function startDraw(e) {
+                    isDrawing = true;
+                    hasSignature = true;
+                    const pos = getPos(e);
+                    ctx.beginPath();
+                    ctx.moveTo(pos.x, pos.y);
+                    if (e.type === 'touchstart') e.preventDefault();
+                }
+
+                function draw(e) {
+                    if (!isDrawing) return;
+                    const pos = getPos(e);
+                    ctx.lineTo(pos.x, pos.y);
+                    ctx.stroke();
+                    if (e.type === 'touchmove') e.preventDefault();
+                }
+
+                function stopDraw() {
+                    isDrawing = false;
+                }
+
+                canvas.addEventListener('mousedown', startDraw);
+                canvas.addEventListener('mousemove', draw);
+                canvas.addEventListener('mouseup', stopDraw);
+                canvas.addEventListener('mouseleave', stopDraw);
+
+                canvas.addEventListener('touchstart', startDraw, { passive: false });
+                canvas.addEventListener('touchmove', draw, { passive: false });
+                canvas.addEventListener('touchend', stopDraw);
+
+                document.getElementById('btnClearSignature').addEventListener('click', function () {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    hasSignature = false;
+                });
+
+                document.getElementById('formPOD').addEventListener('submit', function (e) {
+                    if (hasSignature) {
+                        document.getElementById('assinaturaBase64').value = canvas.toDataURL('image/png');
+                    }
+                });
+            }
+
+            // Conexão SignalR para atualizações em tempo real
+            const connection = new signalR.HubConnectionBuilder()
+                .withUrl("/trackingHub")
+                .withAutomaticReconnect()
+                .build();
+
+            const joinTrackingGroup = () => connection.invoke("JoinTrackingGroup", "@Model.CodigoRastreio");
+            connection.onreconnected(joinTrackingGroup);
+            connection.start().then(joinTrackingGroup).catch(err => console.error("SignalR Admin:", err));
+
+            connection.on("ReceiveCheckpointUpdate", (data) => {
+                const container = document.getElementById("adminTimelineContainer");
+                if (container) {
+                    const html = `
+                        <div class="timeline-event latest animate__animated animate__fadeInDown">
+                            <div class="timeline-icon-box">
+                                <i class="bi ${data.icone}"></i>
+                            </div>
+                            <div class="timeline-card" style="border-left: 4px solid var(--mgl-teal);">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <strong style="color: var(--mgl-dark-primary);">${data.titulo}</strong>
+                                    <span class="badge bg-light text-secondary border fs-8">${data.dataHora}</span>
+                                </div>
+                                <p class="text-secondary small mb-2">${data.descricao || ''}</p>
+                                <div class="d-flex justify-content-between text-muted fs-8">
+                                    <span><i class="bi bi-geo-alt me-1"></i> ${data.localidade}</span>
+                                    <span class="badge bg-light text-dark border">Status: ${data.status}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    container.insertAdjacentHTML('afterbegin', html);
+                }
+            });
+        });
+    </script>
+}

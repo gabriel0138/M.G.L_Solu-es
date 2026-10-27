@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^dotnet test \"MglConnect\\.sln\" --nologo --verbosity minimal$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

@@ -1,0 +1,114 @@
+@model IReadOnlyList<MglConnect.Web.ViewModels.MotoristaViagemViewModel>
+@{
+    ViewData["Title"] = "Minhas viagens";
+    var nome = User.Identity?.Name ?? "Motorista";
+}
+
+<main class="driver-home container-fluid px-3 px-sm-4 py-4">
+    <header class="driver-home-header d-flex align-items-center justify-content-between gap-3 mb-4">
+        <div>
+            <div class="driver-brand-mark">M.G.L <span>DRIVER</span></div>
+            <h1 class="h4 fw-bold text-white mt-3 mb-1">Olá, @nome</h1>
+            <p class="text-white-50 mb-0">Selecione o veículo e a viagem atribuídos a você.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a asp-action="PerfilMotorista" class="btn btn-outline-light driver-logout" aria-label="Abrir perfil">
+                <i class="bi bi-person-circle me-sm-2"></i><span class="d-none d-sm-inline">Perfil</span>
+            </a>
+            <form asp-controller="Account" asp-action="Logout" method="post">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-outline-light driver-logout" aria-label="Sair da conta">
+                    <i class="bi bi-box-arrow-right me-sm-2"></i><span class="d-none d-sm-inline">Sair</span>
+                </button>
+            </form>
+        </div>
+    </header>
+
+    @if (TempData["MensagemSucesso"] is string sucesso)
+    {
+        <div class="alert alert-success" role="status">@sucesso</div>
+    }
+    @if (TempData["MensagemErro"] is string erro)
+    {
+        <div class="alert alert-danger" role="alert">@erro</div>
+    }
+
+    @if (Model.Count == 0)
+    {
+        <section class="driver-empty-state">
+            <i class="bi bi-truck-front" aria-hidden="true"></i>
+            <h2 class="h5 fw-bold mt-3">Nenhuma viagem atribuída</h2>
+            <p class="mb-0">A operação ainda não atribuiu um veículo e uma viagem ativos à sua conta.</p>
+        </section>
+    }
+    else
+    {
+        <section aria-labelledby="assigned-trips-heading">
+            <h2 id="assigned-trips-heading" class="h6 text-uppercase text-white-50 tracking-wider mb-3">
+                Viagens disponíveis
+            </h2>
+            <div class="driver-trip-list">
+                @foreach (var viagem in Model)
+                {
+                    <article class="driver-trip-card">
+                        <div class="d-flex align-items-start justify-content-between gap-3">
+                            <div>
+                                <span class="driver-trip-label">Veículo atribuído</span>
+                                <h3 class="h5 fw-bold text-white mt-1 mb-1">
+                                    @(viagem.ModeloVeiculo ?? "Veículo pendente")
+                                </h3>
+                                @if (!string.IsNullOrWhiteSpace(viagem.PlacaVeiculo))
+                                {
+                                    <span class="driver-plate">@viagem.PlacaVeiculo</span>
+                                }
+                            </div>
+                            <span class="driver-status">@viagem.Status</span>
+                        </div>
+
+                        <div class="driver-trip-destination mt-4">
+                            <i class="bi bi-geo-alt-fill" aria-hidden="true"></i>
+                            <div>
+                                <span class="driver-trip-label">Destino</span>
+                                <div class="fw-semibold text-white">@viagem.CidadeDestino / @viagem.EstadoDestino</div>
+                            </div>
+                        </div>
+
+                        @if (viagem.TurnoAtivo)
+                        {
+                            <a asp-action="Navegar" asp-route-id="@viagem.EntregaId"
+                               class="btn btn-driver-primary w-100 mt-4">
+                                <i class="bi bi-compass-fill me-2" aria-hidden="true"></i>
+                                Abrir navegação
+                            </a>
+                            <form asp-action="EncerrarTurno" method="post" class="mt-2">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn btn-outline-light w-100">Encerrar turno</button>
+                            </form>
+                        }
+                        else if (viagem.VeiculoAtribuido)
+                        {
+                            <form asp-action="IniciarTurno" method="post" class="mt-4">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="entregaId" value="@viagem.EntregaId" />
+                                <label class="form-label text-white" for="shift-code-@viagem.EntregaId">Código temporário do turno</label>
+                                <input id="shift-code-@viagem.EntregaId" name="codigo" class="form-control"
+                                       type="password" maxlength="100" autocomplete="one-time-code"
+                                       autocapitalize="off" spellcheck="false" required />
+                                <button type="submit" class="btn btn-driver-primary w-100 mt-2">
+                                    <i class="bi bi-key-fill me-2" aria-hidden="true"></i>Validar e iniciar turno
+                                </button>
+                            </form>
+                        }
+                        else
+                        {
+                            <button type="button" class="btn btn-secondary w-100 mt-4" disabled>
+                                <i class="bi bi-hourglass-split me-2" aria-hidden="true"></i>
+                                Aguardando veículo atribuído
+                            </button>
+                        }
+                    </article>
+                }
+            </div>
+        </section>
+    }
+</main>

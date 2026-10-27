@@ -1,0 +1,362 @@
+@model MglConnect.Web.Services.TruckRoutePlan
+@{
+    ViewData["Title"] = "Roteamento Rodoviário & Malha Logística";
+    var entregas = ViewBag.Entregas as List<MglConnect.Web.Models.Entrega> ?? new List<MglConnect.Web.Models.Entrega>();
+    var veiculos = ViewBag.Veiculos as List<MglConnect.Web.Models.Veiculo> ?? new List<MglConnect.Web.Models.Veiculo>();
+    var custo = ViewBag.CustoViagem as MglConnect.Web.Services.TripCostResult ?? new MglConnect.Web.Services.TripCostResult();
+    int? entregaSelId = ViewBag.EntregaSelecionadaId as int?;
+    bool isPesado = Model.PerfilVeiculo == "Pesado";
+}
+
+<div class="container py-4">
+    <!-- Topbar Banner -->
+    <div class="card-mgl p-4 mb-4" style="background: linear-gradient(135deg, #0B132B, #1C2541); color: #fff;">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div>
+                <span class="badge px-3 py-2 rounded-pill fs-8 mb-2 fw-bold" style="background-color: var(--mgl-amber); color: #0B132B;">
+                    <i class="bi bi-geo-alt-fill me-1"></i> Malha Rodoviária Real • OSRM Routing & Fuel Engine
+                </span>
+                <h3 class="fw-bold mb-1" style="color: #F8F9FA;">
+                    @(isPesado ? "Roteamento de Carga Pesada & Caminhões" : "Roteamento Expresso de Veículos Leves / Utilitários")
+                </h3>
+                <p class="text-muted mb-0">
+                    @Model.CorredorRodoviario
+                </p>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                @if (entregaSelId.HasValue)
+                {
+                    <a asp-controller="Entregas" asp-action="Navegar" asp-route-id="@entregaSelId.Value"
+                       class="btn btn-mgl-amber fw-bold btn-sm shadow-sm" target="_blank">
+                        <i class="bi bi-compass me-1"></i> Abrir Cockpit HUD Waze
+                    </a>
+                }
+                @if (isPesado)
+                {
+                    <span class="badge bg-danger text-white border border-danger-subtle p-2 fs-7 shadow-sm">
+                        <i class="bi bi-truck-front text-white me-1"></i> Perfil: Caminhão / Carga Pesada
+                    </span>
+                }
+                else
+                {
+                    <span class="badge p-2 fs-7 shadow-sm" style="background-color: var(--mgl-teal); color: #0B132B;">
+                        <i class="bi bi-car-front me-1"></i> Perfil: Utilitário / Veículo Leve
+                    </span>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card-mgl p-4 mb-4">
+        <form method="get" class="row g-3 align-items-end" id="rotaForm">
+            <div class="col-md-3">
+                <label class="form-label fs-7 fw-semibold">
+                    <i class="bi bi-sliders me-1"></i> Perfil do Veículo
+                </label>
+                <select name="perfilVeiculo" class="form-select fs-7 fw-bold" onchange="this.form.submit()">
+                    <option value="Pesado" selected="@isPesado">🚛 Caminhão / Carga Pesada</option>
+                    <option value="Leve" selected="@(!isPesado)">🚐 Utilitário / Veículo Leve</option>
+                </select>
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label fs-7 fw-semibold">Entrega Existente</label>
+                <select name="entregaId" class="form-select fs-7" onchange="this.form.submit()">
+                    <option value="">-- Trajeto Padrão (Cajamar ➔ Santos) --</option>
+                    @foreach (var ent in entregas)
+                    {
+                        <option value="@ent.Id" selected="@(ent.Id == entregaSelId)">
+                            @ent.CodigoRastreio — @ent.DestinatarioNome (@ent.CidadeDestino/@ent.EstadoDestino)
+                        </option>
+                    }
+                </select>
+            </div>
+
+            <div class="col-md-2">
+                <label class="form-label fs-7 fw-semibold">
+                    <i class="bi bi-fuel-pump me-1"></i> Preço Combustível
+                </label>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text">R$</span>
+                    <input type="number" step="0.01" name="precoCombustivel"
+                           value="@custo.PrecoLitroCombustivel.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)"
+                           class="form-control" />
+                    <span class="input-group-text">/L</span>
+                </div>
+            </div>
+
+            <div class="col-md-2">
+                <label class="form-label fs-7 fw-semibold">
+                    <i class="bi bi-speedometer2 me-1"></i> Consumo Médio
+                </label>
+                <div class="input-group input-group-sm">
+                    <input type="number" step="0.1" name="consumoKmL"
+                           value="@custo.ConsumoKmL.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)"
+                           class="form-control" />
+                    <span class="input-group-text">km/L</span>
+                </div>
+            </div>
+
+            <div class="col-md-1">
+                <label class="form-label fs-7 fw-semibold">Eixos</label>
+                <input type="number" name="eixos" value="@Model.EixosVeiculo"
+                       class="form-control form-control-sm" @(isPesado ? "" : "readonly") />
+            </div>
+
+            <div class="col-md-1 d-grid">
+                <button type="submit" class="btn btn-mgl-teal btn-sm fw-bold" title="Recalcular Rota & Custos">
+                    <i class="bi bi-arrow-repeat"></i>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Indicadores da Rota & Motor Financeiro -->
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-xl-2">
+            <div class="card-mgl p-3 h-100">
+                <div class="text-muted fs-8 text-uppercase fw-bold">Distância Real</div>
+                <h4 class="fw-bold mb-0" style="color: var(--mgl-dark-primary);">@Model.DistanciaKm.ToString("F1") km</h4>
+                <span class="fs-8" style="color: var(--mgl-green);"><i class="bi bi-check-circle"></i> OSRM Curvo</span>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-2">
+            <div class="card-mgl p-3 h-100">
+                <div class="text-muted fs-8 text-uppercase fw-bold">Tempo Estimado</div>
+                <h4 class="fw-bold mb-0" style="color: var(--mgl-teal);">@(Model.TempoEstimadoMinutos / 60)h @(Model.TempoEstimadoMinutos % 60)m</h4>
+                <span class="fs-8 text-muted">@(isPesado ? "Média ~55 km/h" : "Média 80 km/h")</span>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-2">
+            <div class="card-mgl p-3 h-100">
+                <div class="text-muted fs-8 text-uppercase fw-bold">Combustível</div>
+                <h4 class="fw-bold mb-0" style="color: var(--mgl-amber);">@custo.LitrosCombustivel.ToString("F1") L</h4>
+                <span class="fs-8 text-muted">@custo.TipoCombustivel</span>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-2">
+            <div class="card-mgl p-3 h-100">
+                <div class="text-muted fs-8 text-uppercase fw-bold">Gasto Combustível</div>
+                <h4 class="fw-bold mb-0" style="color: #F87171;">R$ @custo.CustoCombustivel.ToString("N2")</h4>
+                <span class="fs-8 text-muted">R$ @custo.PrecoLitroCombustivel.ToString("F2")/L</span>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-2">
+            <div class="card-mgl p-3 h-100">
+                <div class="text-muted fs-8 text-uppercase fw-bold">Gasto Pedágio</div>
+                <h4 class="fw-bold mb-0" style="color: var(--mgl-amber);">R$ @custo.CustoPedagio.ToString("N2")</h4>
+                <span class="fs-8 text-muted">@custo.QtdEixos eixo(s)</span>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-2">
+            <div class="card-mgl p-3 h-100" style="border-left: 4px solid var(--mgl-teal) !important;">
+                <div class="text-muted fs-8 text-uppercase fw-bold">Custo Total Viagem</div>
+                <h4 class="fw-bold mb-0" style="color: var(--mgl-dark-primary);">R$ @custo.CustoTotalViagem.ToString("N2")</h4>
+                <span class="fs-8 text-muted">Combustível + Pedágios</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mapa Interativo Leaflet e Diagnóstico Operacional -->
+    <div class="row g-4 mb-4">
+        <!-- Coluna Esquerda -->
+        <div class="col-12 col-lg-8">
+            <div class="card-mgl p-3 h-100">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 px-2">
+                    <h6 class="fw-bold mb-0" style="color: var(--mgl-dark-primary);">
+                        <i class="bi bi-map-fill me-1" style="color: var(--mgl-teal);"></i>
+                        Traçado da Malha Rodoviária Real (@(isPesado ? "Via Rodoanel / Imigrantes" : "Via Marginal / Centro / Anchieta"))
+                    </h6>
+                    <span class="badge bg-light fs-8">
+                        @Model.TrajetoCoordenadas.Count pontos GPS • OSRM Routing
+                    </span>
+                </div>
+                <div id="truckMap"></div>
+            </div>
+        </div>
+
+        <!-- Coluna Direita -->
+        <div class="col-12 col-lg-4">
+            <div class="card-mgl p-4 h-100">
+                <h6 class="fw-bold mb-3 border-bottom pb-2" style="color: var(--mgl-dark-primary);">
+                    <i class="bi bi-exclamation-triangle-fill me-2" style="color: var(--mgl-amber);"></i>
+                    Diagnóstico Operacional (@Model.Alertas.Count)
+                </h6>
+
+                <div class="d-flex flex-column gap-3 mb-4">
+                    @foreach (var alert in Model.Alertas)
+                    {
+                        var corBorda = alert.Severidade == "Perigo" ? "rgba(239,68,68,0.9)" : (alert.Severidade == "Atencao" ? "rgba(255,159,28,0.9)" : "rgba(91,192,190,0.9)");
+                        var corIcone = alert.Severidade == "Perigo" ? "text-danger" : (alert.Severidade == "Atencao" ? "text-warning" : "text-info");
+                        var icone = alert.Tipo == "Altura" ? "bi-arrow-down-up" : (alert.Tipo == "Peso" ? "bi-speedometer" : (alert.Tipo == "Carga" ? "bi-shield-exclamation" : "bi-check2-circle"));
+
+                        <div class="route-alert p-3 rounded-3" style="border-left: 4px solid @corBorda !important;">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <i class="bi @icone @corIcone fw-bold"></i>
+                                <strong class="fs-7">@alert.Tipo (@alert.Severidade)</strong>
+                            </div>
+                            <p class="fs-8 text-muted mb-1">@alert.Mensagem</p>
+                            <span class="badge bg-light fs-8">
+                                <i class="bi bi-pin-map me-1"></i> @alert.Localizacao
+                            </span>
+                        </div>
+                    }
+                </div>
+
+                @if (Model.PassosNavegacao.Any())
+                {
+                    <h6 class="fw-bold fs-7 mb-2 border-top pt-3" style="color: var(--mgl-dark-primary);">
+                        <i class="bi bi-sign-turn-right me-1" style="color: var(--mgl-teal);"></i> Próximas Manobras Turn-by-Turn
+                    </h6>
+                    <div class="overflow-auto" style="max-height: 220px;">
+                        <ul class="list-group list-group-flush fs-8">
+                            @foreach (var p in Model.PassosNavegacao.Take(8))
+                            {
+                                <li class="list-group-item px-0 py-2 d-flex align-items-start gap-2">
+                                    <i class="bi @p.IconeBootstrap mt-1" style="color: var(--mgl-teal);"></i>
+                                    <div>
+                                        <div class="fw-semibold">@p.Instrucao</div>
+                                        <span class="text-muted fs-8">@p.NomeVia • @(p.DistanciaMetros >= 1000 ? $"{(p.DistanciaMetros/1000):F1} km" : $"{p.DistanciaMetros:F0} m")</span>
+                                    </div>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                }
+
+                <div class="mt-4 pt-3 border-top">
+                    <h6 class="fw-bold fs-7 mb-2" style="color: var(--mgl-dark-primary);">Resumo Financeiro da Viagem</h6>
+                    <ul class="list-unstyled fs-8 text-muted mb-0">
+                        <li><strong>Combustível:</strong> @custo.LitrosCombustivel.ToString("F1") L (R$ @custo.CustoCombustivel.ToString("N2"))</li>
+                        <li><strong>Pedágio:</strong> R$ @custo.CustoPedagio.ToString("N2")</li>
+                        <li><strong>Custo Total:</strong> <strong style="color: var(--mgl-dark-primary);">R$ @custo.CustoTotalViagem.ToString("N2")</strong></li>
+                        @if (custo.ValorPedido > 0)
+                        {
+                            <li><strong>Valor Frete:</strong> R$ @custo.ValorPedido.ToString("N2")</li>
+                            <li><strong>Margem Líquida:</strong> <strong style="color: var(--mgl-green);">R$ @custo.LucroEstimado.ToString("N2") (@custo.MargemPercentual.ToString("F1")%)</strong></li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const mapElement = document.getElementById('truckMap');
+            if (!window.L) {
+                mapElement.classList.add('map-unavailable');
+                mapElement.textContent = 'Mapa indisponível: a biblioteca Leaflet não carregou. Verifique a conexão e atualize a página.';
+                return;
+            }
+
+            const esriDark = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 19,
+                attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ'
+            });
+
+            const esriImagery = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 19,
+                attribution: 'Tiles &copy; Esri'
+            });
+
+            const osmStandard = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
+            });
+
+            const map = L.map('truckMap', {
+                center: [-23.65, -46.60],
+                zoom: 10,
+                layers: [esriDark]
+            });
+            map.attributionControl.addAttribution('Rotas: <a href="https://project-osrm.org/">OSRM</a> / dados &copy; OpenStreetMap contributors');
+
+            esriDark.on('tileerror', function () {
+                if (map.hasLayer(esriDark)) {
+                    map.removeLayer(esriDark);
+                    osmStandard.addTo(map);
+                }
+            });
+            osmStandard.on('tileerror', function () {
+                map.getContainer().dataset.mapStatus = 'Sem tiles de mapa. Verifique a conexão com a internet.';
+            });
+
+            const baseMaps = {
+                "Waze / HUD Escuro (Esri)": esriDark,
+                "Satélite (Esri)": esriImagery,
+                "OpenStreetMap": osmStandard
+            };
+            L.control.layers(baseMaps).addTo(map);
+
+            const rawCoords = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.TrajetoCoordenadas));
+            const alertas = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Alertas));
+
+            if (rawCoords && rawCoords.length > 0) {
+                const coordinates = rawCoords.map(function (c) {
+                    return [c.Latitude, c.Longitude];
+                });
+
+                const polyOutline = L.polyline(coordinates, {
+                    color: '#0B132B',
+                    weight: 9,
+                    opacity: 0.85,
+                    lineCap: 'round',
+                    lineJoin: 'round'
+                }).addTo(map);
+
+                const polyline = L.polyline(coordinates, {
+                    color: '#5BC0BE',
+                    weight: 5,
+                    opacity: 1,
+                    lineCap: 'round',
+                    lineJoin: 'round'
+                }).addTo(map);
+
+                map.fitBounds(polyline.getBounds(), { padding: [40, 40] });
+
+                map.on('baselayerchange', function () {
+                    polyOutline.bringToFront();
+                    polyline.bringToFront();
+                });
+
+                const pontoOrigem = rawCoords[0];
+                L.circleMarker([pontoOrigem.Latitude, pontoOrigem.Longitude], {
+                    radius: 9,
+                    fillColor: '#10B981',
+                    color: '#FFFFFF',
+                    weight: 3,
+                    opacity: 1,
+                    fillOpacity: 1
+                }).addTo(map).bindPopup(`<b>${pontoOrigem.Nome || 'Origem: CD Logístico Cajamar'}</b><br>Ponto de partida da frota MGL`);
+
+                const pontoDestino = rawCoords[rawCoords.length - 1];
+                L.circleMarker([pontoDestino.Latitude, pontoDestino.Longitude], {
+                    radius: 9,
+                    fillColor: '#FF9F1C',
+                    color: '#FFFFFF',
+                    weight: 3,
+                    opacity: 1,
+                    fillOpacity: 1
+                }).addTo(map).bindPopup(`<b>${pontoDestino.Nome || 'Destino: Santos (SP)'}</b><br>Ponto de entrega final`);
+
+                alertas.forEach(function (a) {
+                    if (a.Latitude && a.Longitude) {
+                        const corAlerta = a.Severidade === 'Perigo' ? '#EF4444' : (a.Severidade === 'Atencao' ? '#F59E0B' : '#5BC0BE');
+                        L.circleMarker([a.Latitude, a.Longitude], {
+                            radius: 8,
+                            fillColor: corAlerta,
+                            color: '#FFFFFF',
+                            weight: 2,
+                            opacity: 1,
+                            fillOpacity: 0.95
+                        }).addTo(map).bindPopup(`<b>Aviso de ${a.Tipo} (${a.Severidade}):</b><br>${a.Mensagem}<br><small class="text-muted">${a.Localizacao}</small>`);
+                    }
+                });
+            }
+        });
+    </script>
+}

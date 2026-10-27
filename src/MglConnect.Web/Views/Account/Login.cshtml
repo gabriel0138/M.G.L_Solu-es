@@ -1,0 +1,80 @@
+@model MglConnect.Web.ViewModels.LoginViewModel
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment HostEnvironment
+@{
+    ViewData["Title"] = "Autenticação Corporativa";
+}
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-5">
+            <div class="card-mgl overflow-hidden">
+                <div class="p-4 text-center text-white" style="background-color: var(--mgl-dark-primary);">
+                    <span class="brand-badge fs-6 mb-2 d-inline-block">
+                        <i class="bi bi-box-seam-fill"></i> M.G.L Connect
+                    </span>
+                    <h5 class="fw-bold mb-0">Portal de Acesso Unificado</h5>
+                    <p class="text-white-50 fs-8 mb-0">Administração • Motoristas • Clientes Corporativos</p>
+                </div>
+
+                <div class="p-4 p-md-5">
+                    @if (!ViewData.ModelState.IsValid)
+                    {
+                        <div class="alert alert-danger py-2 fs-7 mb-3" asp-validation-summary="All"></div>
+                    }
+
+                    <form asp-action="Login" method="post">
+                        <input type="hidden" asp-for="ReturnUrl" />
+
+                        <div class="mb-3">
+                            <label asp-for="Login" class="form-label fs-7 fw-semibold text-secondary">Usuário / Login</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light"><i class="bi bi-person"></i></span>
+                                <input asp-for="Login" class="form-control" placeholder="admin, carlos.motorista ou cliente.demo" required autofocus />
+                            </div>
+                            <span asp-validation-for="Login" class="text-danger fs-8"></span>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="Senha" class="form-label fs-7 fw-semibold text-secondary">Senha de Acesso</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light"><i class="bi bi-key"></i></span>
+                                <input asp-for="Senha" type="password" class="form-control" placeholder="••••••••" required />
+                            </div>
+                            <span asp-validation-for="Senha" class="text-danger fs-8"></span>
+                        </div>
+
+                        <div class="mb-4 form-check">
+                            <input asp-for="LembrarMe" class="form-check-input" />
+                            <label asp-for="LembrarMe" class="form-check-label fs-7 text-muted">Manter conectado</label>
+                        </div>
+
+                        <div class="d-grid mb-3">
+                            <button type="submit" class="btn btn-mgl-teal fw-bold py-2 shadow-sm">
+                                <i class="bi bi-box-arrow-in-right me-1"></i> Acessar Plataforma
+                            </button>
+                        </div>
+                    </form>
+
+                    @if (HostEnvironment.IsDevelopment())
+                    {
+                        <div class="p-3 rounded-3 border fs-8 mt-4" style="background-color: var(--mgl-bg);">
+                            <div class="fw-bold mb-2" style="color: var(--mgl-dark-primary);"><i class="bi bi-info-circle text-primary"></i> Perfis e Credenciais de Demonstração:</div>
+                            <div class="d-flex justify-content-between text-muted mb-1 pb-1 border-bottom">
+                                <span><i class="bi bi-shield-check text-warning me-1"></i> Administrador:</span>
+                                <span class="font-monospace fw-semibold text-dark">admin / admin123</span>
+                            </div>
+                            <div class="d-flex justify-content-between text-muted mb-1 pb-1 border-bottom">
+                                <span><i class="bi bi-truck text-info me-1"></i> Motorista de Frota:</span>
+                                <span class="font-monospace fw-semibold text-dark">carlos.motorista / motorista123</span>
+                            </div>
+                            <div class="d-flex justify-content-between text-muted">
+                                <span><i class="bi bi-building text-success me-1"></i> Cliente Corporativo:</span>
+                                <span class="font-monospace fw-semibold text-dark">cliente.demo / cliente123</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,287 @@
+@model MglConnect.Web.Models.Pedido
+@{
+    ViewData["Title"] = "Detalhes do Pedido " + Model.NumeroPedido;
+    var entrega = Model.Entrega;
+
+    int stepNumber = 1;
+    int progressPercent = 10;
+    if (entrega != null)
+    {
+        var eventos = entrega.EventosRastreio.ToList();
+        var status = entrega.StatusEntrega;
+        if (status == "Entregue")
+        {
+            stepNumber = 5;
+            progressPercent = 100;
+        }
+        else if (eventos.Any(e => e.Titulo.Contains("Saiu para entrega", StringComparison.OrdinalIgnoreCase)))
+        {
+            stepNumber = 4;
+            progressPercent = 75;
+        }
+        else if (status == "Em transporte" || eventos.Count > 1)
+        {
+            stepNumber = 3;
+            progressPercent = 50;
+        }
+        else
+        {
+            stepNumber = 2;
+            progressPercent = 25;
+        }
+    }
+}
+
+<div class="container py-4">
+    <!-- Topbar -->
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+        <div>
+            <div class="d-flex align-items-center gap-2">
+                <h3 class="fw-extrabold mb-0" style="color: var(--mgl-dark-primary);">Pedido @Model.NumeroPedido</h3>
+                @if (entrega != null)
+                {
+                    <span class="signalr-live-badge">
+                        <span class="live-dot"></span> Sincronizado ao Vivo
+                    </span>
+                }
+            </div>
+            <p class="text-muted small mb-0">Emissão: @Model.DataPedido.ToString("dd/MM/yyyy às HH:mm")</p>
+        </div>
+        <div class="d-flex gap-2">
+            @if (entrega != null)
+            {
+                <a asp-controller="Rastreio" asp-action="Index" asp-route-codigo="@entrega.CodigoRastreio" 
+                   class="btn btn-mgl-teal btn-sm fw-bold">
+                    <i class="bi bi-box-arrow-up-right me-1"></i> Rastreio Público ML
+                </a>
+            }
+            <a asp-action="Pedidos" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left me-1"></i> Voltar aos Pedidos
+            </a>
+        </div>
+    </div>
+
+    @if (entrega != null)
+    {
+        <!-- Stepper Visual -->
+        <div class="card-mgl p-4 mb-4">
+            <div class="d-flex flex-wrap justify-content-between align-items-center border-bottom pb-3 mb-3">
+                <div>
+                    <span class="text-muted fs-8 text-uppercase fw-bold">Status Atual do Envio</span>
+                    <h4 class="fw-extrabold mb-0" style="color: var(--mgl-dark-primary);">
+                        @if (entrega.StatusEntrega == "Entregue")
+                        {
+                            <span class="text-success"><i class="bi bi-check-circle-fill me-1"></i> Pacote Entregue com Sucesso</span>
+                        }
+                        else if (entrega.StatusEntrega == "Em transporte")
+                        {
+                            <span style="color: var(--mgl-teal);"><i class="bi bi-truck me-1"></i> Em Transporte Rodoviário</span>
+                        }
+                        else
+                        {
+                            <span style="color: var(--mgl-amber);"><i class="bi bi-box-seam me-1"></i> No Centro Logístico</span>
+                        }
+                    </h4>
+                </div>
+                <div class="text-end">
+                    <span class="text-muted fs-8 text-uppercase fw-bold">Código de Rastreamento</span>
+                    <div class="fs-5 fw-extrabold font-monospace" style="color: var(--mgl-accent-2);">
+                        @entrega.CodigoRastreio
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stepper -->
+            <div class="px-2 px-md-4 py-2">
+                <div class="ml-stepper">
+                    <div class="ml-stepper-progress" style="width: calc(@progressPercent% - 50px);"></div>
+                    
+                    <div class="ml-step-item @(stepNumber >= 1 ? (stepNumber == 1 ? "active" : "completed") : "")">
+                        <div class="ml-step-circle"><i class="bi bi-check-lg"></i></div>
+                        <div class="ml-step-title">Pedido Confirmado</div>
+                        <div class="ml-step-subtitle">@Model.DataPedido.ToString("dd/MM")</div>
+                    </div>
+
+                    <div class="ml-step-item @(stepNumber >= 2 ? (stepNumber == 2 ? "active" : "completed") : "")">
+                        <div class="ml-step-circle"><i class="bi @(stepNumber > 2 ? "bi-check-lg" : "bi-box-seam")"></i></div>
+                        <div class="ml-step-title">No Centro de Cargas</div>
+                        <div class="ml-step-subtitle">Bipado e Triado</div>
+                    </div>
+
+                    <div class="ml-step-item @(stepNumber >= 3 ? (stepNumber == 3 ? "active" : "completed") : "")">
+                        <div class="ml-step-circle"><i class="bi @(stepNumber > 3 ? "bi-check-lg" : "bi-truck")"></i></div>
+                        <div class="ml-step-title">Em Transferência</div>
+                        <div class="ml-step-subtitle">Corredor Rodoviário</div>
+                    </div>
+
+                    <div class="ml-step-item @(stepNumber >= 4 ? (stepNumber == 4 ? "active" : "completed") : "")">
+                        <div class="ml-step-circle"><i class="bi @(stepNumber > 4 ? "bi-check-lg" : "bi-bicycle")"></i></div>
+                        <div class="ml-step-title">Saiu para Entrega</div>
+                        <div class="ml-step-subtitle">Última Milha</div>
+                    </div>
+
+                    <div class="ml-step-item @(stepNumber == 5 ? "completed" : "")">
+                        <div class="ml-step-circle"><i class="bi bi-patch-check-fill"></i></div>
+                        <div class="ml-step-title">Entregue</div>
+                        <div class="ml-step-subtitle">@(entrega.DataEntregaRealizada?.ToString("dd/MM") ?? "Final")</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <!-- Timeline de Checkpoints -->
+            <div class="col-lg-7">
+                <div class="card-mgl p-4">
+                    <h5 class="fw-bold mb-4" style="color: var(--mgl-dark-primary);">
+                        <i class="bi bi-clock-history me-2" style="color: var(--mgl-teal);"></i> Linha do Tempo da Carga
+                    </h5>
+
+                    <div class="tracking-timeline" id="timelineContainer">
+                        @foreach (var ev in entrega.EventosRastreio.OrderByDescending(e => e.DataHora))
+                        {
+                            <div class="timeline-event">
+                                <div class="timeline-icon-box">
+                                    <i class="bi @ev.Icone"></i>
+                                </div>
+                                <div class="timeline-card">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <strong style="color: var(--mgl-dark-primary);">@ev.Titulo</strong>
+                                        <span class="badge bg-light text-secondary border fs-8">
+                                            @ev.DataHora.ToString("dd/MM/yyyy HH:mm")
+                                        </span>
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(ev.Descricao))
+                                    {
+                                        <p class="text-secondary small mb-2">@ev.Descricao</p>
+                                    }
+                                    <div class="text-muted fs-8">
+                                        <i class="bi bi-geo-alt me-1"></i> @ev.Localidade
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dados da Carga, POD e Rota -->
+            <div class="col-lg-5">
+                <!-- COMPROVANTE DIGITAL DE ENTREGA (POD) SE ENTREGUE -->
+                @if (entrega.StatusEntrega == "Entregue" && !string.IsNullOrEmpty(entrega.NomeRecebedor))
+                {
+                    <div class="card-mgl p-4 mb-4 border-success" style="border-width: 2px;">
+                        <div class="d-flex align-items-center gap-2 mb-3">
+                            <i class="bi bi-patch-check-fill fs-3 text-success"></i>
+                            <div>
+                                <h6 class="fw-bold text-success mb-0">Comprovante Digital de Entrega (POD)</h6>
+                                <span class="fs-8 text-muted">Validação Biométrica / Assinatura</span>
+                            </div>
+                        </div>
+                        <ul class="list-unstyled fs-7 mb-3">
+                            <li class="mb-1"><strong>Recebedor:</strong> @entrega.NomeRecebedor</li>
+                            @if (!string.IsNullOrEmpty(entrega.DocumentoRecebedor))
+                            {
+                                <li class="mb-1"><strong>Documento (RG/CPF):</strong> @entrega.DocumentoRecebedor</li>
+                            }
+                            <li class="mb-1"><strong>Data e Hora:</strong> @entrega.DataHoraRecebimento?.ToString("dd/MM/yyyy às HH:mm")</li>
+                        </ul>
+                        @if (!string.IsNullOrEmpty(entrega.AssinaturaDigitalBase64))
+                        {
+                            <div class="p-2 bg-light rounded-3 text-center border">
+                                <div class="text-muted fs-8 mb-1">Assinatura Digital Coletada:</div>
+                                <img src="@entrega.AssinaturaDigitalBase64" alt="Assinatura Digital" style="max-height: 70px; max-width: 100%;" />
+                            </div>
+                        }
+                    </div>
+                }
+
+                <!-- Detalhes do Pedido e Destino -->
+                <div class="card-mgl p-4 mb-4">
+                    <h6 class="fw-bold mb-3" style="color: var(--mgl-dark-primary);">
+                        <i class="bi bi-geo-alt text-primary me-1"></i> Endereço de Destino
+                    </h6>
+                    <div class="fs-7 text-muted">
+                        <strong class="d-block text-dark">@entrega.DestinatarioNome</strong>
+                        @entrega.EnderecoDestino, @entrega.NumeroDestino @(string.IsNullOrEmpty(entrega.ComplementoDestino) ? "" : $"({entrega.ComplementoDestino})")<br />
+                        @entrega.BairroDestino • @entrega.CidadeDestino / @entrega.EstadoDestino<br />
+                        <strong>CEP:</strong> @entrega.CepDestino
+                    </div>
+                </div>
+
+                <!-- Detalhes da Carga e Roteamento Pesado -->
+                <div class="card-mgl p-4">
+                    <h6 class="fw-bold mb-3" style="color: var(--mgl-dark-primary);">
+                        <i class="bi bi-box-seam me-1" style="color: var(--mgl-teal);"></i> Especificações Técnicas de Transporte
+                    </h6>
+                    <ul class="list-unstyled fs-7 mb-0">
+                        <li class="mb-2 pb-2 border-bottom d-flex justify-content-between">
+                            <span class="text-muted">Valor Total da Carga:</span>
+                            <strong style="color: var(--mgl-dark-primary);">R$ @Model.ValorTotal.ToString("N2")</strong>
+                        </li>
+                        <li class="mb-2 pb-2 border-bottom d-flex justify-content-between">
+                            <span class="text-muted">Peso Registrado:</span>
+                            <span>@Model.PesoKg.ToString("F1") kg</span>
+                        </li>
+                        <li class="mb-2 pb-2 border-bottom d-flex justify-content-between">
+                            <span class="text-muted">Veículo Designado:</span>
+                            <span>@(entrega.Veiculo?.Modelo ?? "Caminhão Pesado de Frota")</span>
+                        </li>
+                        <li class="mb-2 pb-2 border-bottom d-flex justify-content-between">
+                            <span class="text-muted">Gabarito de Altura:</span>
+                            <span>@entrega.AlturaMetros.ToString("F2") m</span>
+                        </li>
+                        <li class="d-flex justify-content-between">
+                            <span class="text-muted">Classificação de Carga:</span>
+                            <span class="badge bg-light text-dark border">@entrega.TipoCarga</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    @if (entrega != null)
+    {
+        <script>
+            // Conexão SignalR em Tempo Real
+            const connection = new signalR.HubConnectionBuilder()
+                .withUrl("/trackingHub")
+                .withAutomaticReconnect()
+                .build();
+
+            const joinTrackingGroup = () => connection.invoke("JoinTrackingGroup", "@entrega.CodigoRastreio");
+            connection.onreconnected(joinTrackingGroup);
+            connection.start().then(joinTrackingGroup).then(() => {
+                console.log("Conectado ao grupo SignalR para o código: @entrega.CodigoRastreio");
+            }).catch(err => console.error("Erro SignalR:", err));
+
+            connection.on("ReceiveCheckpointUpdate", (data) => {
+                // Atualização instantânea em tempo real sem refresh
+                const container = document.getElementById("timelineContainer");
+                if (container) {
+                    const newEventHtml = `
+                        <div class="timeline-event latest animate__animated animate__fadeInDown">
+                            <div class="timeline-icon-box">
+                                <i class="bi ${data.icone}"></i>
+                            </div>
+                            <div class="timeline-card" style="border-left: 4px solid var(--mgl-teal);">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <strong style="color: var(--mgl-dark-primary);">${data.titulo}</strong>
+                                    <span class="badge bg-light text-secondary border fs-8">${data.dataHora}</span>
+                                </div>
+                                <p class="text-secondary small mb-2">${data.descricao || ''}</p>
+                                <div class="text-muted fs-8">
+                                    <i class="bi bi-geo-alt me-1"></i> ${data.localidade}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    container.insertAdjacentHTML('afterbegin', newEventHtml);
+                }
+            });
+        </script>
+    }
+}

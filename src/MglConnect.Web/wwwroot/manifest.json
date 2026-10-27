@@ -1,0 +1,30 @@
+{
+  "name": "M.G.L Connect • Plataforma Logística 3PL",
+  "short_name": "MGL Connect",
+  "description": "Navegação GPS de Bordo, Roteamento Pesado Rodoviário e Comprovantes Digitais POD em Tempo Real.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B132B",
+  "theme_color": "#5BC0BE",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

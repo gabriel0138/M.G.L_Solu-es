@@ -1,0 +1,9 @@
+**/bin/
+**/obj/
+**/mglconnect.db*
+**/keys/
+**/uploads/
+.vercel/
+.env
+.env.*
+!.env.example

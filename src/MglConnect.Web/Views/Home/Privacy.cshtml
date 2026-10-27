@@ -1,0 +1,41 @@
+@{
+    ViewData["Title"] = "Privacidade e Conformidade LGPD";
+}
+
+<div class="container py-4">
+    <div class="card border-0 shadow-sm rounded-4 bg-white p-4 p-md-5 max-w-3xl mx-auto">
+        <div class="d-flex align-items-center gap-3 mb-4 border-bottom pb-3">
+            <div class="p-3 bg-primary bg-opacity-10 text-primary rounded-3">
+                <i class="bi bi-shield-check fs-2"></i>
+            </div>
+            <div>
+                <h3 class="fw-bold mb-1">Política de Privacidade e Proteção de Dados</h3>
+                <p class="text-muted small mb-0">Conformidade com a Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018 - LGPD)</p>
+            </div>
+        </div>
+
+        <div class="fs-7 text-secondary lh-lg">
+            <h5 class="fw-bold text-dark mt-3">1. Finalidade do Tratamento</h5>
+            <p>
+                A plataforma <strong>M.G.L Connect</strong> coleta e trata dados estritamente necessários para a operacionalização dos serviços de transporte, expedição e entrega logística prestados aos clientes empresariais.
+            </p>
+
+            <h5 class="fw-bold text-dark mt-3">2. Dados Coletados</h5>
+            <ul>
+                <li><strong>Empresas Clientes:</strong> Razão Social, CNPJ, telefones corporativos e endereços das sedes para faturamento.</li>
+                <li><strong>Destinatários:</strong> Nome, endereço completo de entrega e documento de identificação para conferência no momento da entrega.</li>
+                <li><strong>Colaboradores e Motoristas:</strong> Nome, credenciais seguras (com hash criptográfico SHA-256) e registro de rotas efetuadas.</li>
+            </ul>
+
+            <h5 class="fw-bold text-dark mt-3">3. Segurança e Criptografia</h5>
+            <p>
+                Em observância ao Capítulo 7 do PIM IV, as senhas de acesso não são gravadas em texto simples no banco de dados, utilizando algoritmos de dispersão unidirecional (hash). A comunicação com os endpoints da API REST para o aplicativo Mobile é realizada através de protocolo seguro HTTPS.
+            </p>
+
+            <h5 class="fw-bold text-dark mt-3">4. Direitos do Titular</h5>
+            <p>
+                Os titulares têm direito de consultar os dados mantidos e solicitar retificações a qualquer tempo pelo e-mail de contato corporativo do projeto: <code>dpo@mglconnect.log.br</code>.
+            </p>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,769 @@
+@model MglConnect.Web.Models.Entrega
+@{
+    bool isDriver = ViewBag.IsDriver is true;
+    ViewData["Title"] = isDriver ? "Navegação" : "GPS Cockpit • Navegação de Bordo " + Model.CodigoRastreio;
+    var plano = ViewBag.PlanoRota as MglConnect.Web.Services.TruckRoutePlan ?? new MglConnect.Web.Services.TruckRoutePlan();
+    var custo = ViewBag.CustoViagem as MglConnect.Web.Services.TripCostResult ?? new MglConnect.Web.Services.TripCostResult();
+}
+
+<div class="cockpit-container position-relative min-vh-100 d-flex flex-column" style="background-color: #070D1F;">
+    
+    <!-- TOP FLOATING BANNER (TURN-BY-TURN HUD ESTILO WAZE) -->
+    <div class="position-absolute top-0 start-0 end-0 p-3 z-3" style="pointer-events: none;">
+        <div class="container-fluid" style="max-width: 680px; pointer-events: auto;">
+            <div class="card border-0 shadow-lg text-white rounded-4 overflow-hidden" 
+                 style="background: linear-gradient(135deg, rgba(10, 27, 43, 0.97), rgba(18, 51, 74, 0.95)); backdrop-filter: blur(12px); border-left: 6px solid var(--mgl-teal) !important;">
+                <div class="p-3 d-flex align-items-center gap-3">
+                    <!-- Ícone Dinâmico da Próxima Manobra -->
+                    <div id="maneuverIconBox" class="d-flex align-items-center justify-content-center rounded-3 shadow" 
+                         style="width: 58px; height: 58px; background-color: var(--mgl-teal); color: #0B132B; font-size: 2rem;">
+                        <i id="maneuverIcon" class="bi bi-arrow-up"></i>
+                    </div>
+
+                    <!-- Instrução e Nome da Rodovia / Via -->
+                    <div class="flex-grow-1 overflow-hidden">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <span id="maneuverDist" class="badge text-dark fs-7 fw-extrabold px-2 py-1 mb-1" style="background-color: var(--mgl-amber);">
+                                --
+                            </span>
+                            @if (!isDriver)
+                            {
+                                <span class="fs-8 text-white-50 font-monospace">
+                                    <i class="bi bi-box-seam me-1"></i> @Model.CodigoRastreio
+                                </span>
+                            }
+                        </div>
+                        <h5 id="maneuverRoad" class="fw-extrabold text-white mb-0 text-truncate">
+                            @(plano.PassosNavegacao.FirstOrDefault()?.NomeVia ?? (plano.RotaDisponivel ? "Aguardando posição do motorista" : "Rota indisponível"))
+                        </h5>
+                        <div id="maneuverInstruction" class="text-white-50 fs-8 text-truncate">
+                            @(plano.PassosNavegacao.FirstOrDefault()?.Instrucao ?? "Ative o GPS para visualizar sua posição e continuar.")
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(plano.AvisoRota))
+                        {
+                            <div class="small text-warning fw-semibold mt-1" role="status">
+                                @(isDriver ? "Rota genérica: confirme restrições do caminhão com a operação." : plano.AvisoRota)
+                            </div>
+                        }
+                    </div>
+
+                    <!-- Botão Voltar / Sair do Cockpit -->
+                    <a asp-action="@(isDriver ? "Index" : "Details")" asp-route-id="@(isDriver ? null : Model.Id)" class="btn btn-outline-light btn-sm rounded-circle p-2 text-white-50" title="@(isDriver ? "Voltar às viagens" : "Voltar aos detalhes")">
+                        <i class="bi bi-x-lg"></i>
+                    </a>
+                </div>
+
+                <!-- Barra de Progresso do Trajeto -->
+                <div class="progress" style="height: 4px; background-color: rgba(255,255,255,0.1);">
+                    <div id="tripProgressBar" class="progress-bar" style="width: 5%; background-color: var(--mgl-teal);"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAPA LEAFLET FULL-VIEWPORT (ESRI DARK GRAY WAZE HUD / GOOGLE MAPS / OSM) -->
+    <div id="cockpitMap" class="flex-grow-1 w-100" style="min-height: calc(100vh - 170px); z-index: 1;"></div>
+
+    @if (!isDriver)
+    {
+        <div class="position-absolute top-50 start-0 translate-middle-y ms-3 d-flex flex-column gap-2 z-2" role="group" aria-label="Modo de visualização do mapa">
+            <button id="btnModeOperational" class="btn btn-light btn-sm shadow fw-semibold" type="button">Mapa operacional</button>
+            <button id="btnModeGps" class="btn btn-outline-light btn-sm shadow fw-semibold" type="button">Navegação GPS</button>
+            <button id="btnMode3d" class="btn btn-outline-warning btn-sm shadow fw-semibold" type="button"
+                    title="Requer mapa vetorial; Leaflet e tiles raster não oferecem perspectiva 3D">Visão 3D (indisponível)</button>
+        </div>
+    }
+
+    <!-- CONTROLES FLUTUANTES LATERAIS (GPS, SIMULAÇÃO, DESVIO, CAMADA MAPA) -->
+    <div class="position-absolute end-0 top-50 translate-middle-y me-3 d-flex flex-column gap-2 z-2">
+        <button id="btnToggleGps" class="btn btn-dark border shadow @(isDriver ? "rounded-pill px-3 py-2 d-flex align-items-center gap-2" : "rounded-circle p-3")"
+                title="Ativar Rastreio GPS Real do Celular" style="background-color: rgba(11,19,43,0.9);">
+            <i id="gpsIcon" class="bi bi-geo-alt-fill text-warning fs-5"></i>
+            @if (isDriver)
+            {
+                <span>Ativar GPS</span>
+            }
+        </button>
+        @if (User.IsInRole("Admin"))
+        {
+            <button id="btnSimular" class="btn btn-teal border shadow rounded-circle p-3" title="Simulação administrativa; não representa uma posição real" style="background-color: var(--mgl-teal);">
+                <i id="simIcon" class="bi bi-play-fill text-dark fs-5"></i>
+            </button>
+            <button id="btnSimularDesvio" class="btn btn-warning text-dark border shadow rounded-circle p-3" title="Simulação administrativa de desvio; não representa uma viagem real" style="background-color: #FF9F1C;">
+                <i class="bi bi-sign-turn-right-fill fs-5"></i>
+            </button>
+        }
+        @if (!isDriver)
+        {
+            <button id="btnCamada" class="btn btn-dark border shadow rounded-circle p-3" title="Alternar mapa de ruas, escuro e satélite" style="background-color: rgba(10,27,43,0.94);">
+                <i class="bi bi-layers-fill text-white fs-5"></i>
+            </button>
+        }
+    </div>
+
+    <!-- PAINEL INFERIOR DE BORDO (COCKPIT HUD FLUTUANTE) -->
+    <div class="position-absolute bottom-0 start-0 end-0 p-3 z-3" style="pointer-events: none;">
+        <div class="container-fluid" style="max-width: 680px; pointer-events: auto;">
+            <div class="card border-0 shadow-lg text-white rounded-4 p-3" 
+                 style="background: linear-gradient(135deg, rgba(11, 19, 43, 0.95), rgba(15, 23, 42, 0.95)); backdrop-filter: blur(12px); border-top: 2px solid rgba(255,255,255,0.1);">
+                @if (TempData["MensagemSucesso"] is string sucesso)
+                {
+                    <div class="alert alert-success py-2 mb-2" role="status">@sucesso</div>
+                }
+                @if (TempData["MensagemErro"] is string erro)
+                {
+                    <div class="alert alert-danger py-2 mb-2" role="alert">@erro</div>
+                }
+
+                @if (isDriver)
+                {
+                    <div class="driver-route-summary d-flex align-items-center justify-content-around gap-2 mb-3 text-center">
+                        <div>
+                            <span id="positionSourceBadge" class="badge text-white fw-bold">Aguardando posição</span>
+                            <span id="trafficStatusBadge" class="visually-hidden">Sem dados de trânsito ao vivo</span>
+                            <span id="speedValue" class="visually-hidden">0</span>
+                            <span id="fuelRemaining" class="visually-hidden">0</span>
+                            <div class="small text-white-50 mt-1">GPS do aparelho</div>
+                        </div>
+                        <div class="driver-route-metric">
+                            <span class="fs-8 text-white-50 text-uppercase fw-semibold">Chegada estimada</span>
+                            <h4 id="etaValue" class="fw-extrabold mb-0 text-white font-monospace">--:--</h4>
+                            <span id="etaMinutes" class="fs-8 text-teal">@plano.TempoEstimadoMinutos min</span>
+                        </div>
+                        <div class="driver-route-metric">
+                            <span class="fs-8 text-white-50 text-uppercase fw-semibold">Distância</span>
+                            <h4 id="distanceRemaining" class="fw-extrabold mb-0 text-white font-monospace">@plano.DistanciaKm.ToString("F1") km</h4>
+                            <span class="fs-8 text-white-50">estimativa</span>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                <!-- Telemetria operacional e custos; não é apresentada ao motorista. -->
+                <div class="row align-items-center g-2 mb-3 text-center">
+                    <!-- Velocímetro Digital -->
+                    <div class="col-3 border-end border-secondary">
+                        <div class="d-flex flex-column align-items-center justify-content-center">
+                            <span class="fs-8 text-white-50 text-uppercase fw-semibold">Velocidade</span>
+                            <div class="d-flex align-items-baseline gap-1">
+                                <h2 id="speedValue" class="fw-extrabold mb-0" style="color: var(--mgl-teal); font-family: monospace;">58</h2>
+                                <span class="fs-8 text-white-50">km/h</span>
+                            </div>
+                            <span id="trafficStatusBadge" class="badge text-white fw-bold fs-9 py-0" style="background-color: #64748B;" title="O sistema ainda não tem dados de trânsito ao vivo configurados.">Sem trânsito ao vivo</span>
+                            <span id="positionSourceBadge" class="badge text-white fw-bold fs-9 py-0">Aguardando posição</span>
+                        </div>
+                    </div>
+
+                    <!-- ETA (Previsão de Chegada) -->
+                    <div class="col-3 border-end border-secondary">
+                        <span class="fs-8 text-white-50 text-uppercase fw-semibold">Chegada Prevista</span>
+                        <h4 id="etaValue" class="fw-extrabold mb-0 text-white font-monospace">--:--</h4>
+                        <span id="etaMinutes" class="fs-8 text-teal" style="color: var(--mgl-teal);">@plano.TempoEstimadoMinutos min</span>
+                    </div>
+
+                    <!-- Distância Restante -->
+                    <div class="col-3 border-end border-secondary">
+                        <span class="fs-8 text-white-50 text-uppercase fw-semibold">Distância</span>
+                        <h4 id="distanceRemaining" class="fw-extrabold mb-0 text-white font-monospace">@plano.DistanciaKm.ToString("F1")</h4>
+                        <span class="fs-8 text-white-50">km restantes</span>
+                    </div>
+
+                    <!-- Consumo Estimado -->
+                    <div class="col-3">
+                        <span class="fs-8 text-white-50 text-uppercase fw-semibold">Combustível</span>
+                        <h4 id="fuelRemaining" class="fw-extrabold mb-0 text-warning font-monospace">@custo.LitrosCombustivel.ToString("F1")</h4>
+                        <span class="fs-8 text-white-50">L • R$ @custo.CustoCombustivel.ToString("N0")</span>
+                    </div>
+                </div>
+                }
+
+                <!-- Botão de Ação Amplo (48px+ para toque no painel) -->
+                <div class="d-grid">
+                    @if (Model.StatusEntrega == "Entregue")
+                    {
+                        <div class="alert alert-success d-flex align-items-center justify-content-center gap-2 mb-0 py-2 rounded-3">
+                            <i class="bi bi-patch-check-fill fs-5"></i>
+                            <strong>Esta remessa já foi entregue e homologada com POD.</strong>
+                        </div>
+                    }
+                    else
+                    {
+                        <button type="button" class="btn btn-warning btn-lg fw-extrabold py-3 rounded-3 shadow-lg d-flex align-items-center justify-content-center gap-2 fs-6 text-dark @(isDriver ? "driver-pod-button" : "")"
+                                data-bs-toggle="modal" data-bs-target="#modalPODNavegacao" style="min-height: 52px;">
+                            <i class="bi bi-patch-check-fill fs-5"></i>
+                            <span>CHEGUEI AO DESTINO / COLETAR ASSINATURA (POD)</span>
+                        </button>
+                    }
+                </div>
+                @if (isDriver)
+                {
+                    <button type="button" class="btn btn-danger btn-lg fw-bold mt-2 driver-emergency-button"
+                            data-bs-toggle="modal" data-bs-target="#driverEmergencyModal">
+                        <i class="bi bi-telephone-fill me-2" aria-hidden="true"></i>
+                        Emergência
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (isDriver)
+{
+    <div class="modal fade" id="driverEmergencyModal" tabindex="-1" aria-labelledby="driverEmergencyTitle" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 rounded-4">
+                <div class="modal-header bg-danger text-white">
+                    <h2 class="modal-title h5 fw-bold" id="driverEmergencyTitle">
+                        <i class="bi bi-exclamation-triangle-fill me-2" aria-hidden="true"></i>Ajuda de emergência
+                    </h2>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="fw-semibold">Se estiver em perigo imediato, ligue diretamente para os serviços de emergência.</p>
+                    <p class="small text-muted mb-3">
+                        O alerta do sistema será registrado para consulta pela operação após confirmação do servidor.
+                        Ele não substitui uma ligação e não garante monitoramento ou despacho de socorro.
+                    </p>
+                    <div id="emergencyAlertResult" class="alert alert-info" role="status" aria-live="polite">
+                        Confirme para registrar o alerta operacional.
+                    </div>
+                    <div class="d-grid gap-2">
+                        <form asp-action="CriarAlertaEmergencia" method="post" id="emergencyAlertForm">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="chaveIdempotencia" value="@Guid.NewGuid()" />
+                            <input type="hidden" name="entregaId" value="@Model.Id" />
+                            <input type="hidden" name="latitude" />
+                            <input type="hidden" name="longitude" />
+                            <input type="hidden" name="precisaoMetros" />
+                            <input type="hidden" name="localizacaoCapturadaEmUtc" />
+                            <button id="submitEmergencyAlert" type="submit" class="btn btn-warning btn-lg w-100">
+                                Registrar alerta para a operação
+                            </button>
+                        </form>
+                        <a class="btn btn-danger btn-lg" href="tel:190"><i class="bi bi-telephone-fill me-2" aria-hidden="true"></i>Polícia — 190</a>
+                        <a class="btn btn-outline-danger btn-lg" href="tel:192"><i class="bi bi-telephone-fill me-2" aria-hidden="true"></i>SAMU — 192</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- MODAL POD (PROMPT ASSINATURA DIGITAL EM TELA CHEIA MOBILE) -->
+<div class="modal fade" id="modalPODNavegacao" tabindex="-1" aria-labelledby="modalPODLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header text-white" style="background-color: var(--mgl-dark-primary);">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-patch-check-fill fs-4 text-warning"></i>
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0">Comprovante Digital de Entrega (POD)</h5>
+                        <span class="fs-8 text-white-50">@(isDriver ? "Confirmação de recebimento" : $"Remessa {Model.CodigoRastreio} • Destinatário: {Model.DestinatarioNome}")</span>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+
+            <form asp-action="FinalizarEntregaPOD" method="post" id="formPODNavegacao">
+                <input type="hidden" name="entregaId" value="@Model.Id" />
+                <input type="hidden" name="assinaturaBase64" id="assinaturaBase64Nav" />
+
+                <div class="modal-body p-4">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fs-7 fw-semibold">Nome de Quem Recebeu *</label>
+                            <input type="text" name="nomeRecebedor" id="nomeRecebedorNav" 
+                                   class="form-control form-control-lg fs-7" 
+                                   value="@(isDriver ? "" : Model.DestinatarioNome)" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fs-7 fw-semibold">Documento (RG ou CPF) *</label>
+                            <input type="text" name="documentoRecebedor" class="form-control form-control-lg fs-7" 
+                                   placeholder="000.000.000-00" required />
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fs-7 fw-semibold">Localidade de Confirmação</label>
+                        <input type="text" name="localidade" class="form-control fs-7" 
+                               value="@Model.CidadeDestino - @Model.EstadoDestino" />
+                    </div>
+
+                    <!-- Canvas para Coleta de Assinatura com o Dedo -->
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label fs-7 fw-semibold mb-0">Assinatura Digital do Recebedor *</label>
+                            <button type="button" class="btn btn-link btn-sm text-decoration-none text-danger p-0 fs-8" id="btnClearSigNav">
+                                <i class="bi bi-eraser"></i> Limpar Traço
+                            </button>
+                        </div>
+                        <div class="signature-pad-container border rounded-3 p-1 bg-white shadow-inner text-center">
+                            <canvas id="sigCanvasNav" width="560" height="200" style="touch-action: none; max-width: 100%; border: 1px dashed #CBD5E1; border-radius: 8px;"></canvas>
+                        </div>
+                        <span class="fs-8 text-muted">Solicite que o recebedor assine com o dedo ou caneta touch no quadro acima.</span>
+                    </div>
+                </div>
+
+                <div class="modal-footer border-top">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-mgl-teal fw-bold px-4 py-2" id="btnSubmitPODNav">
+                        <i class="bi bi-check-lg me-1"></i> Confirmar Entrega & Emitir POD
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/tracker.js" asp-append-version="true"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const mapElement = document.getElementById('cockpitMap');
+            if (!window.L) {
+                mapElement.classList.add('map-unavailable');
+                mapElement.textContent = 'Mapa indisponível: a biblioteca Leaflet não carregou. Verifique a conexão e atualize a página.';
+                return;
+            }
+
+            // 1. CARREGAMENTO DOS DADOS GEOGRÁFICOS E PASSOS TURN-BY-TURN
+            const rawCoords = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(plano.TrajetoCoordenadas ?? new List<MglConnect.Web.Services.RouteCoordinate>()));
+            const steps = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(plano.PassosNavegacao ?? new List<MglConnect.Web.Services.RouteStep>()));
+            const isDriver = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(isDriver));
+            const totalDistKm = @plano.DistanciaKm.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            const totalFuelLiters = @(isDriver ? "0" : custo.LitrosCombustivel.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            const tempoBaseMin = @plano.TempoEstimadoMinutos;
+
+            const coordinates = rawCoords.map(c => [c.Latitude, c.Longitude]);
+
+            // Mapa de ruas como padrão para manter nomes de vias visíveis no cockpit.
+            const esriDark = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 19,
+                attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ'
+            });
+
+            // Camadas auxiliares do mapa
+            const esriImagery = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 19,
+                attribution: 'Tiles &copy; Esri'
+            });
+
+            // 3. Camada OpenStreetMap Clássico
+            const osmStandard = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
+            });
+
+            const mapCenter = coordinates.length > 0 ? coordinates[0] : [-23.5505, -46.6333];
+            const map = L.map('cockpitMap', {
+                center: mapCenter,
+                zoom: coordinates.length > 0 ? 11 : 6,
+                layers: [osmStandard],
+                zoomControl: false,
+                attributionControl: true
+            });
+            map.attributionControl.addAttribution('Rotas: <a href="https://project-osrm.org/">OSRM</a> / dados &copy; OpenStreetMap contributors');
+
+            esriDark.on('tileerror', function () {
+                if (map.hasLayer(esriDark)) {
+                    map.removeLayer(esriDark);
+                    osmStandard.addTo(map);
+                }
+            });
+            osmStandard.on('tileerror', function () {
+                map.getContainer().dataset.mapStatus = 'Sem tiles de mapa. Verifique a conexão com a internet.';
+            });
+
+            // Adiciona o Seletor no canto superior direito do mapa
+            const baseMaps = { "OpenStreetMap (ruas)": osmStandard };
+            if (!isDriver) {
+                baseMaps["Mapa escuro (Esri)"] = esriDark;
+                baseMaps["Satélite (Esri)"] = esriImagery;
+                L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
+            }
+
+            if (coordinates.length === 0) {
+                map.getContainer().dataset.mapStatus = 'Rota indisponível. Ative o GPS para visualizar sua posição; confira o endereço antes de sair.';
+            }
+
+            const tracker = new MglCockpitTracker({
+                map: map,
+                entregaId: @Model.Id,
+                codigoRastreio: '@Model.CodigoRastreio',
+                coordinates: coordinates,
+                steps: steps,
+                totalDistKm: totalDistKm,
+                totalFuelLiters: totalFuelLiters,
+                tempoBaseMinutos: tempoBaseMin,
+                baseMaps: baseMaps,
+                activeLayerName: "OpenStreetMap (ruas)"
+            });
+
+            let viewMode = isDriver ? 'gps' : 'operational';
+            const btnModeOperational = document.getElementById('btnModeOperational');
+            const btnModeGps = document.getElementById('btnModeGps');
+            const btnMode3d = document.getElementById('btnMode3d');
+
+            function setMapMode(mode) {
+                if (mode === '3d') {
+                    tracker.showToastAlert(
+                        'Visão 3D indisponível: Leaflet com tiles raster não oferece inclinação nem edifícios vetoriais.',
+                        'bi-exclamation-triangle-fill',
+                        '#FFB020');
+                    return;
+                }
+
+                viewMode = mode;
+                tracker.setFollowVehicle(mode === 'gps');
+                if (!isDriver) {
+                    btnModeOperational.classList.toggle('btn-light', mode === 'operational');
+                    btnModeOperational.classList.toggle('btn-outline-light', mode !== 'operational');
+                    btnModeGps.classList.toggle('btn-light', mode === 'gps');
+                    btnModeGps.classList.toggle('btn-outline-light', mode !== 'gps');
+                }
+
+                if (mode === 'operational' && tracker.routePolyline) {
+                    map.fitBounds(tracker.routePolyline.getBounds(), { padding: [40, 40] });
+                } else if (mode === 'gps' && tracker.currentLatLng) {
+                    map.setView(tracker.currentLatLng, Math.max(map.getZoom(), 15), { animate: true });
+                } else if (mode === 'gps' && coordinates.length > 0) {
+                    map.setView(coordinates[0], 15, { animate: true });
+                    mapElement.dataset.mapStatus = 'Aguardando uma posição GPS válida; a posição simulada não será usada como GPS real.';
+                }
+            }
+
+            if (!isDriver) {
+                btnModeOperational.addEventListener('click', () => setMapMode('operational'));
+                btnModeGps.addEventListener('click', () => setMapMode('gps'));
+                btnMode3d.addEventListener('click', () => setMapMode('3d'));
+            }
+
+            // Alternador rápido de camadas via botão flutuante touch do Cockpit HUD
+                const btnCamada = document.getElementById('btnCamada');
+                if (btnCamada) {
+                    btnCamada.addEventListener('click', function () {
+                        if (tracker) {
+                            tracker.cycleBaseLayer();
+                        }
+                    });
+                }
+
+                // Cálculo do ETA Inicial
+                function calcularEta(minutosRestantes) {
+                    const agora = new Date();
+                    agora.setMinutes(agora.getMinutes() + minutosRestantes);
+                    const h = String(agora.getHours()).padStart(2, '0');
+                    const m = String(agora.getMinutes()).padStart(2, '0');
+                    return `${h}:${m}`;
+                }
+                if (tempoBaseMin > 0) {
+                    document.getElementById('etaValue').textContent = calcularEta(tempoBaseMin);
+                }
+
+                // 4. SIMULAÇÃO AUTOMÁTICA DE DESLOCAMENTO COM SUAVIZAÇÃO & STREAMING SIGNALR
+                let simIdx = 0;
+                let simInterval = null;
+                let isSimulating = false;
+
+                const btnSimular = document.getElementById('btnSimular');
+                const simIcon = document.getElementById('simIcon');
+                const btnSimularDesvio = document.getElementById('btnSimularDesvio');
+                const simulationBadge = document.getElementById('positionSourceBadge');
+                if (btnSimular) btnSimular.disabled = coordinates.length < 2;
+                if (btnSimularDesvio) btnSimularDesvio.disabled = coordinates.length < 2;
+
+                function pararSimulacao() {
+                    if (simInterval) clearInterval(simInterval);
+                    simInterval = null;
+                    isSimulating = false;
+                    if (simIcon) simIcon.className = 'bi bi-play-fill text-dark fs-5';
+                    if (btnSimular) btnSimular.style.backgroundColor = 'var(--mgl-teal)';
+                }
+
+                function calcularBearing(lat1, lon1, lat2, lon2) {
+                    const toRad = (d) => d * Math.PI / 180;
+                    const toDeg = (r) => r * 180 / Math.PI;
+                    const dLon = toRad(lon2 - lon1);
+                    const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+                    const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+                    return (toDeg(Math.atan2(y, x)) + 360) % 360;
+                }
+
+                if (btnSimular) btnSimular.addEventListener('click', function () {
+                    if (isSimulating) {
+                        pararSimulacao();
+                    } else {
+                        isSimulating = true;
+                        simulationBadge.textContent = 'SIMULAÇÃO — POSIÇÃO FICTÍCIA';
+                        simulationBadge.classList.remove('text-success');
+                        simulationBadge.classList.add('text-warning');
+                        simIcon.className = 'bi bi-pause-fill text-white fs-5';
+                        btnSimular.style.backgroundColor = '#EF4444';
+
+                        simInterval = setInterval(function () {
+                            if (simIdx >= coordinates.length - 1) {
+                                pararSimulacao();
+                                document.getElementById('distanceRemaining').textContent = '0.0';
+                                document.getElementById('speedValue').textContent = '0';
+                                document.getElementById('tripProgressBar').style.width = '100%';
+                                
+                                tracker.showToastAlert(
+                                    'Simulação encerrada. Nenhum POD foi registrado; uma entrega real exige confirmação independente.',
+                                    'bi-info-circle-fill',
+                                    '#00C9B7');
+                                return;
+                            }
+
+                            const pAnt = coordinates[simIdx];
+                            simIdx += Math.max(1, Math.floor(coordinates.length / 100));
+                            if (simIdx >= coordinates.length) simIdx = coordinates.length - 1;
+
+                            const currentPos = coordinates[simIdx];
+                            const heading = calcularBearing(pAnt[0], pAnt[1], currentPos[0], currentPos[1]);
+
+                            // Velocidade dinâmica simulada
+                            const pct = (simIdx / (coordinates.length - 1));
+                            const rndSpeed = pct > 0.85 ? Math.floor(35 + Math.random() * 10) : Math.floor(62 + Math.random() * 14);
+
+                            // Atualiza posição suavizada via requestAnimationFrame no tracker
+                            tracker.updateVehiclePosition(currentPos[0], currentPos[1], rndSpeed, heading);
+                            map.panTo(currentPos, { animate: true, duration: 0.4 });
+
+                            // Emite streaming de telemetria SignalR para o backend
+                            tracker.emitTelemetry(currentPos[0], currentPos[1], rndSpeed, heading, null, true);
+
+                            // Atualiza progresso e métricas
+                            document.getElementById('tripProgressBar').style.width = (pct * 100).toFixed(0) + '%';
+                            const distRestante = (totalDistKm * (1 - pct)).toFixed(1);
+                            document.getElementById('distanceRemaining').textContent = distRestante;
+
+                            const fuelRestante = (totalFuelLiters * (1 - pct)).toFixed(1);
+                            document.getElementById('fuelRemaining').textContent = fuelRestante;
+
+                            // Atualiza Manobras Turn-by-Turn
+                            if (steps && steps.length > 0) {
+                                const stepIdx = Math.min(steps.length - 1, Math.floor(pct * steps.length));
+                                const currentStep = steps[stepIdx];
+                                if (currentStep) {
+                                    document.getElementById('maneuverRoad').textContent = currentStep.NomeVia || 'Rodovia em Trânsito';
+                                    document.getElementById('maneuverInstruction').textContent = currentStep.Instrucao || 'Continue no percurso';
+                                    document.getElementById('maneuverIcon').className = `bi ${currentStep.IconeBootstrap || 'bi-arrow-up'}`;
+                                    
+                                    const distStep = currentStep.DistanciaMetros * (1 - (pct * steps.length - stepIdx));
+                                    document.getElementById('maneuverDist').textContent = distStep >= 1000 
+                                        ? `Em ${(distStep/1000).toFixed(1)} km` 
+                                        : `Em ${Math.max(50, Math.round(distStep))} m`;
+                                }
+                            }
+                        }, 600);
+                    }
+                });
+
+                // 5. TESTE DE REROUTING: BOTÃO PARA FORÇAR DESVIO DE 80 METROS (OFF-ROUTE)
+                if (btnSimularDesvio) {
+                    btnSimularDesvio.addEventListener('click', function () {
+                        pararSimulacao();
+                        const curPos = tracker.currentLatLng || L.latLng(coordinates[0][0], coordinates[0][1]);
+                        
+                        // Injeta desvio de ~80 metros a leste da rota atual
+                        const offLat = curPos.lat + 0.00075;
+                        const offLng = curPos.lng + 0.00075;
+                        const offHeading = (tracker.currentHeading + 55) % 360;
+
+                        tracker.updateVehiclePosition(offLat, offLng, 55, offHeading);
+                        map.panTo([offLat, offLng], { animate: true, duration: 0.5 });
+                        tracker.showToastAlert('⚠️ Forçando desvio lateral de ~80m para teste de histerese (3 frames)...');
+
+                        // Envia 3 frames consecutivos ao backend para acionar RouteDeviationEngine
+                        let frameCount = 0;
+                        const frameInterval = setInterval(() => {
+                            frameCount++;
+                            const stepLat = offLat + (frameCount * 0.0001);
+                            const stepLng = offLng + (frameCount * 0.0001);
+                            tracker.updateVehiclePosition(stepLat, stepLng, 58, offHeading);
+                            if (tracker.hubConnection && tracker.hubConnection.state === signalR.HubConnectionState.Connected) {
+                                tracker.hubConnection.invoke(
+                                    'SendVehicleTelemetry',
+                                    '@Model.CodigoRastreio',
+                                    stepLat,
+                                    stepLng,
+                                    58,
+                                    offHeading,
+                                    null,
+                                    true);
+                            }
+                            if (frameCount >= 3) {
+                                clearInterval(frameInterval);
+                                simulationBadge.textContent = 'SIMULAÇÃO — DESVIO FICTÍCIO';
+                                simulationBadge.classList.remove('text-success');
+                                simulationBadge.classList.add('text-warning');
+                            }
+                        }, 500);
+                    });
+                }
+
+                // 6. SUPORTE A GEOLOCATION NATIVA (GPS REAL DO DISPOSITIVO)
+                let watchId = null;
+                let hasGpsFix = false;
+                let emergencyPosition = null;
+                const btnGps = document.getElementById('btnToggleGps');
+                const gpsIcon = document.getElementById('gpsIcon');
+
+                btnGps.addEventListener('click', function () {
+                    if (watchId !== null) {
+                        navigator.geolocation.clearWatch(watchId);
+                        watchId = null;
+                        tracker.setFollowVehicle(false);
+                        gpsIcon.className = 'bi bi-geo-alt text-warning fs-5';
+                        alert('GPS em tempo real desativado.');
+                    } else {
+                        if (!('geolocation' in navigator)) {
+                            alert('Geolocalização não é suportada neste navegador.');
+                            return;
+                        }
+
+                        gpsIcon.className = 'bi bi-broadcast text-success fs-5 animate__animated animate__flash';
+                        watchId = navigator.geolocation.watchPosition(
+                            function (pos) {
+                                if (pos.coords.accuracy > 50) {
+                                    tracker.showToastAlert(
+                                        `Precisão GPS insuficiente (${Math.round(pos.coords.accuracy)}m); posição ignorada.`,
+                                        'bi-geo-alt-fill',
+                                        '#FFB020');
+                                    return;
+                                }
+
+                                const lat = pos.coords.latitude;
+                                const lng = pos.coords.longitude;
+                                const speed = pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0;
+                                const heading = Number.isFinite(pos.coords.heading)
+                                    ? pos.coords.heading
+                                    : tracker.currentHeading;
+                                emergencyPosition = {
+                                    latitude: lat,
+                                    longitude: lng,
+                                    accuracy: pos.coords.accuracy,
+                                    capturedAt: new Date(pos.timestamp).toISOString()
+                                };
+
+                                tracker.updateVehiclePosition(lat, lng, speed, heading, !hasGpsFix);
+                                hasGpsFix = true;
+                                tracker.emitTelemetry(lat, lng, speed, heading, pos.coords.accuracy);
+                                if (viewMode === 'gps') {
+                                    map.setView([lat, lng], Math.max(map.getZoom(), 15), { animate: true });
+                                }
+                            },
+                            function (err) {
+                                console.warn('Erro GPS:', err.message);
+                                gpsIcon.className = 'bi bi-geo-alt text-danger fs-5';
+                                mapElement.dataset.mapStatus = `Não foi possível obter o GPS: ${err.message}`;
+                            },
+                            { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 }
+                        );
+                        setMapMode('gps');
+                    }
+                });
+
+                const emergencyForm = document.getElementById('emergencyAlertForm');
+                if (emergencyForm) {
+                    emergencyForm.addEventListener('submit', async function (event) {
+                        event.preventDefault();
+                        const result = document.getElementById('emergencyAlertResult');
+                        const submitButton = document.getElementById('submitEmergencyAlert');
+                        if (emergencyPosition) {
+                            emergencyForm.elements.latitude.value = emergencyPosition.latitude;
+                            emergencyForm.elements.longitude.value = emergencyPosition.longitude;
+                            emergencyForm.elements.precisaoMetros.value = emergencyPosition.accuracy;
+                            emergencyForm.elements.localizacaoCapturadaEmUtc.value = emergencyPosition.capturedAt;
+                        }
+                        submitButton.disabled = true;
+                        result.className = 'alert alert-info';
+                        result.textContent = 'Enviando solicitação e aguardando confirmação do servidor…';
+                        try {
+                            const response = await fetch(emergencyForm.action, {
+                                method: 'POST',
+                                body: new FormData(emergencyForm),
+                                credentials: 'same-origin',
+                                headers: { 'Accept': 'application/json' }
+                            });
+                            const payload = await response.json();
+                            if (!response.ok || payload.registrado !== true) {
+                                throw new Error(payload.mensagem || 'O servidor não confirmou o registro.');
+                            }
+                            result.className = 'alert alert-success';
+                            result.textContent = `${payload.mensagem} Localização: ${payload.localizacao}. Identificador: ${payload.alertaId}.`;
+                            submitButton.textContent = 'Alerta registrado';
+                        } catch (error) {
+                            result.className = 'alert alert-danger';
+                            result.textContent = `Não foi possível confirmar o registro do alerta. ${error.message || 'Verifique a conexão e reenvie para consultar o mesmo acionamento.'} Se houver perigo imediato, ligue para 190 ou 192.`;
+                            submitButton.disabled = false;
+                        }
+                    });
+                }
+
+            // 7. CANVAS DE ASSINATURA DIGITAL (POD) DO MODAL MOBILE
+            const canvasNav = document.getElementById('sigCanvasNav');
+            if (canvasNav) {
+                const ctx = canvasNav.getContext('2d');
+                let isDrawing = false;
+                let hasSignature = false;
+
+                ctx.strokeStyle = "#0B132B";
+                ctx.lineWidth = 2.5;
+                ctx.lineCap = "round";
+
+                function getPos(e) {
+                    const rect = canvasNav.getBoundingClientRect();
+                    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                    return {
+                        x: (clientX - rect.left) * (canvasNav.width / rect.width),
+                        y: (clientY - rect.top) * (canvasNav.height / rect.height)
+                    };
+                }
+
+                function startDraw(e) {
+                    isDrawing = true;
+                    hasSignature = true;
+                    const pos = getPos(e);
+                    ctx.beginPath();
+                    ctx.moveTo(pos.x, pos.y);
+                    if (e.type === 'touchstart') e.preventDefault();
+                }
+
+                function draw(e) {
+                    if (!isDrawing) return;
+                    const pos = getPos(e);
+                    ctx.lineTo(pos.x, pos.y);
+                    ctx.stroke();
+                    if (e.type === 'touchmove') e.preventDefault();
+                }
+
+                function stopDraw() {
+                    isDrawing = false;
+                }
+
+                canvasNav.addEventListener('mousedown', startDraw);
+                canvasNav.addEventListener('mousemove', draw);
+                canvasNav.addEventListener('mouseup', stopDraw);
+                canvasNav.addEventListener('mouseleave', stopDraw);
+
+                canvasNav.addEventListener('touchstart', startDraw, { passive: false });
+                canvasNav.addEventListener('touchmove', draw, { passive: false });
+                canvasNav.addEventListener('touchend', stopDraw);
+
+                document.getElementById('btnClearSigNav').addEventListener('click', function () {
+                    ctx.clearRect(0, 0, canvasNav.width, canvasNav.height);
+                    hasSignature = false;
+                });
+
+                document.getElementById('formPODNavegacao').addEventListener('submit', function (e) {
+                    if (hasSignature) {
+                        document.getElementById('assinaturaBase64Nav').value = canvasNav.toDataURL('image/png');
+                    }
+                });
+            }
+        });
+    </script>
+}

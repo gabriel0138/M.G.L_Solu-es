@@ -1,0 +1,119 @@
+@{
+    ViewData["Title"] = "M.G.L Connect — Plataforma Logística Integrada 3PL";
+}
+
+<div class="container py-4">
+    <!-- Hero Banner com Rastreador Central -->
+    <div class="hero-mgl p-4 p-md-5 mb-5 overflow-hidden">
+        <div class="row align-items-center">
+            <div class="col-lg-7 mb-4 mb-lg-0">
+                <span class="badge px-3 py-2 rounded-pill fw-bold text-uppercase fs-8 mb-3" style="background-color: var(--mgl-teal); color: var(--mgl-dark-primary);">
+                    <i class="bi bi-shield-check me-1"></i> Logística Integrada 3PL & 4PL
+                </span>
+                <h1 class="display-5 fw-extrabold text-white mb-3 lh-sm">
+                    Gestão de expedição e rastreamento inteligente em tempo real.
+                </h1>
+                <p class="lead text-light opacity-90 mb-4 fs-6">
+                    A plataforma <strong>M.G.L Connect</strong> conecta distribuidoras, frotas pesadas e clientes através de um portal corporativo moderno com SignalR, roteamento com restrição de pontes/túneis e comprovante digital (POD).
+                </p>
+
+                <!-- Campo de Rastreio Rápido -->
+                <form asp-controller="Rastreio" asp-action="Index" method="get" class="mb-3">
+                    <div class="bg-white rounded-pill p-1 ps-3 d-flex align-items-center shadow-lg">
+                        <i class="bi bi-search text-muted fs-5 me-2"></i>
+                        <input type="text" name="codigo" class="form-control border-0 shadow-none fw-semibold" 
+                               placeholder="Digite o código de rastreio (ex: MGL-BR100201)..." 
+                               required />
+                        <button type="submit" class="btn btn-mgl-teal fw-bold px-4 rounded-pill">
+                            <i class="bi bi-geo-alt-fill me-1"></i> Rastrear Carga
+                        </button>
+                    </div>
+                </form>
+
+                <!-- Chips para Teste Rápido -->
+                <div class="d-flex align-items-center gap-2 flex-wrap text-light fs-8">
+                    <span class="text-white-50"><i class="bi bi-lightning-charge-fill" style="color: var(--mgl-amber);"></i> Teste rápido:</span>
+                    <a asp-controller="Rastreio" asp-action="Index" asp-route-codigo="MGL-BR100201" 
+                       class="badge bg-white bg-opacity-20 text-white text-decoration-none px-2 py-1">
+                        MGL-BR100201 (Em Transporte)
+                    </a>
+                    <a asp-controller="Rastreio" asp-action="Index" asp-route-codigo="MGL-BR200302" 
+                       class="badge bg-white bg-opacity-20 text-white text-decoration-none px-2 py-1">
+                        MGL-BR200302 (Entregue c/ POD)
+                    </a>
+                </div>
+            </div>
+
+            <div class="col-lg-5 text-center">
+                <div class="p-4 rounded-4 border border-white border-opacity-20 shadow-lg" style="background-color: rgba(28, 37, 65, 0.6); backdrop-filter: blur(10px);">
+                    <div class="d-inline-flex p-3 rounded-circle mb-3 shadow" style="background-color: var(--mgl-teal); color: var(--mgl-dark-primary);">
+                        <i class="bi bi-truck-front-fill fs-1"></i>
+                    </div>
+                    <h5 class="text-white fw-bold mb-2">Central Logística M.G.L</h5>
+                    <p class="text-white-50 fs-7 mb-3">
+                        Controle total da cadeia de suprimentos: emissão de pedidos, despachos com etiquetas de rastreio, roteamento de caminhões e portal exclusivo do cliente.
+                    </p>
+                    <div class="d-grid gap-2">
+                        <a asp-controller="ClientePortal" asp-action="Index" class="btn btn-mgl-teal fw-bold">
+                            <i class="bi bi-person-workspace me-1"></i> Acessar Portal do Cliente
+                        </a>
+                        <a asp-controller="Roteamento" asp-action="Index" class="btn btn-outline-light btn-sm">
+                            <i class="bi bi-map me-1"></i> Roteamento Pesado (Leaflet)
+                        </a>
+                        <a href="/swagger" target="_blank" class="btn btn-link text-white-50 btn-sm text-decoration-none">
+                            <i class="bi bi-file-earmark-code me-1"></i> Explorar API REST Swagger
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Destaques Operacionais do Projeto -->
+    <div class="row g-4 mb-5">
+        <div class="col-md-3">
+            <div class="card-mgl h-100 p-4">
+                <div class="kpi-icon-box mb-3" style="background-color: rgba(58, 80, 107, 0.15); color: var(--mgl-accent-2);">
+                    <i class="bi bi-diagram-3-fill fs-4"></i>
+                </div>
+                <h6 class="fw-bold" style="color: var(--mgl-dark-primary);">Gestão 3PL & Expedição</h6>
+                <p class="text-muted fs-7 mb-0">
+                    Controle de clientes corporativos, ordens de serviço e despachos centralizados em ASP.NET Core MVC.
+                </p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card-mgl h-100 p-4">
+                <div class="kpi-icon-box mb-3" style="background-color: rgba(91, 192, 190, 0.2); color: #0F766E;">
+                    <i class="bi bi-pin-map-fill fs-4"></i>
+                </div>
+                <h6 class="fw-bold" style="color: var(--mgl-dark-primary);">Rastreio Estilo Mercado Livre</h6>
+                <p class="text-muted fs-7 mb-0">
+                    Stepper de 5 estágios com atualização ao vivo via <strong>SignalR WebSockets</strong> e checkpoints operacionais.
+                </p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card-mgl h-100 p-4">
+                <div class="kpi-icon-box mb-3" style="background-color: rgba(255, 159, 28, 0.2); color: var(--mgl-amber);">
+                    <i class="bi bi-truck-front-fill fs-4"></i>
+                </div>
+                <h6 class="fw-bold" style="color: var(--mgl-dark-primary);">Roteamento de Carga Pesada</h6>
+                <p class="text-muted fs-7 mb-0">
+                    Algoritmo com restrições de altura de viaduto, pesagem por eixo e mapa interativo Leaflet.js.
+                </p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card-mgl h-100 p-4">
+                <div class="kpi-icon-box mb-3" style="background-color: rgba(16, 185, 129, 0.2); color: var(--mgl-emerald);">
+                    <i class="bi bi-patch-check-fill fs-4"></i>
+                </div>
+                <h6 class="fw-bold" style="color: var(--mgl-dark-primary);">Comprovante Digital (POD)</h6>
+                <p class="text-muted fs-7 mb-0">
+                    Coleta de assinatura digital diretamente na tela e registro do recebedor com data/hora certificada.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>

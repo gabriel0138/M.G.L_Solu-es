@@ -1,0 +1,106 @@
+@model MglConnect.Web.Models.Cliente
+@{
+    ViewData["Title"] = "Detalhes do Cliente";
+}
+
+<div class="container py-4">
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <div>
+            <h3 class="fw-bold text-dark mb-1">
+                <i class="bi bi-building text-primary me-2"></i> @Model.RazaoSocial
+            </h3>
+            <p class="text-muted small mb-0">CNPJ: <span class="font-monospace">@Model.Cnpj</span> • Cadastrado em @Model.DataCadastro.ToString("dd/MM/yyyy")</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-pencil me-1"></i> Editar
+            </a>
+            <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left me-1"></i> Voltar
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Dados Cadastrais -->
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm rounded-4 bg-white p-4">
+                <h5 class="fw-bold mb-3 text-dark border-bottom pb-2">Informações da Empresa</h5>
+                <ul class="list-unstyled fs-7 mb-0">
+                    <li class="mb-2"><strong>Nome Fantasia:</strong> @(Model.NomeFantasia ?? "—")</li>
+                    <li class="mb-2"><strong>Telefone:</strong> @Model.Telefone</li>
+                    <li class="mb-2"><strong>E-mail:</strong> @(Model.Email ?? "—")</li>
+                    <li class="mb-2"><strong>Status:</strong> @(Model.Ativo ? "<span class='badge bg-success'>Ativo</span>" : "<span class='badge bg-danger'>Inativo</span>")</li>
+                </ul>
+
+                <h6 class="fw-bold mt-4 mb-2 text-dark border-bottom pb-2">Endereço</h6>
+                <p class="text-muted fs-7 mb-0">
+                    @Model.Logradouro, @Model.Numero @(string.IsNullOrEmpty(Model.Complemento) ? "" : $"({Model.Complemento})")<br />
+                    @Model.Bairro — @Model.Cidade / @Model.Estado<br />
+                    CEP: @Model.Cep
+                </p>
+            </div>
+        </div>
+
+        <!-- Pedidos e Remessas do Cliente -->
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm rounded-4 bg-white p-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="fw-bold mb-0">
+                        <i class="bi bi-receipt text-warning me-2"></i> Pedidos Vinculados (@Model.Pedidos.Count)
+                    </h5>
+                    <a asp-controller="Pedidos" asp-action="Create" class="btn btn-warning btn-sm fw-bold">
+                        <i class="bi bi-plus-lg me-1"></i> Novo Pedido
+                    </a>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light fs-8 text-uppercase">
+                            <tr>
+                                <th>Número</th>
+                                <th>Descrição</th>
+                                <th>Valor</th>
+                                <th>Rastreamento</th>
+                            </tr>
+                        </thead>
+                        <tbody class="fs-7">
+                            @if (!Model.Pedidos.Any())
+                            {
+                                <tr>
+                                    <td colspan="4" class="text-center py-4 text-muted">Nenhum pedido registrado para este cliente.</td>
+                                </tr>
+                            }
+                            @foreach (var ped in Model.Pedidos.OrderByDescending(p => p.DataPedido))
+                            {
+                                <tr>
+                                    <td>
+                                        <a asp-controller="Pedidos" asp-action="Details" asp-route-id="@ped.Id" class="fw-bold font-monospace text-decoration-none">
+                                            @ped.NumeroPedido
+                                        </a>
+                                    </td>
+                                    <td>@ped.Descricao</td>
+                                    <td>R$ @ped.ValorTotal.ToString("N2")</td>
+                                    <td>
+                                        @if (ped.Entrega != null)
+                                        {
+                                            <a asp-controller="Rastreio" asp-action="Index" asp-route-codigo="@ped.Entrega.CodigoRastreio" 
+                                               class="badge bg-primary-subtle text-primary border border-primary-subtle text-decoration-none font-monospace">
+                                                <i class="bi bi-box-seam"></i> @ped.Entrega.CodigoRastreio
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <a asp-controller="Entregas" asp-action="Create" asp-route-pedidoId="@ped.Id" 
+                                               class="btn btn-warning btn-sm fs-8 py-0">Despachar</a>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

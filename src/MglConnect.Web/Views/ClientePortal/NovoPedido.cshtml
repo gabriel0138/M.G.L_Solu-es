@@ -1,0 +1,131 @@
+@model MglConnect.Web.ViewModels.NovoPedidoClienteViewModel
+@{
+    ViewData["Title"] = "Novo pedido";
+}
+
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-9">
+            <div class="card-mgl p-4 p-md-5">
+                <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+                    <div>
+                        <span class="badge rounded-pill mb-2" style="background: var(--mgl-teal); color: var(--mgl-dark-primary);">Solicitação do cliente</span>
+                        <h3 class="fw-bold mb-1">Novo pedido de coleta e entrega</h3>
+                        <p class="text-muted mb-0">O pedido ficará aguardando validação e despacho pela operação.</p>
+                    </div>
+                    <a asp-action="Pedidos" class="btn btn-outline-secondary btn-sm">Voltar</a>
+                </div>
+
+                <form asp-action="NovoPedido" method="post">
+                    <input asp-for="ChaveEnvio" type="hidden" />
+                    <div asp-validation-summary="All" class="alert alert-danger"></div>
+
+                    <h5 class="fw-bold border-bottom pb-2">Carga</h5>
+                    <div class="row g-3 mb-4">
+                        <div class="col-12">
+                            <label asp-for="Descricao" class="form-label"></label>
+                            <textarea asp-for="Descricao" class="form-control" rows="2"></textarea>
+                            <span asp-validation-for="Descricao" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="TipoCarga" class="form-label"></label>
+                            <input asp-for="TipoCarga" class="form-control" />
+                            <span asp-validation-for="TipoCarga" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="PesoKg" class="form-label"></label>
+                            <input asp-for="PesoKg" class="form-control" type="number" step="0.01" />
+                            <span asp-validation-for="PesoKg" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="ValorTotal" class="form-label"></label>
+                            <input asp-for="ValorTotal" class="form-control" type="number" step="0.01" />
+                            <span asp-validation-for="ValorTotal" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="AlturaCargaMetros" class="form-label"></label>
+                            <input asp-for="AlturaCargaMetros" class="form-control" type="number" step="0.01" />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="LarguraCargaMetros" class="form-label"></label>
+                            <input asp-for="LarguraCargaMetros" class="form-control" type="number" step="0.01" />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="ComprimentoCargaMetros" class="form-label"></label>
+                            <input asp-for="ComprimentoCargaMetros" class="form-control" type="number" step="0.01" />
+                        </div>
+                    </div>
+
+                    <h5 class="fw-bold border-bottom pb-2">Endereço de coleta</h5>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-8">
+                            <label asp-for="OrigemEndereco" class="form-label"></label>
+                            <input asp-for="OrigemEndereco" class="form-control" />
+                            <span asp-validation-for="OrigemEndereco" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="OrigemNumero" class="form-label"></label>
+                            <input asp-for="OrigemNumero" class="form-control" />
+                            <span asp-validation-for="OrigemNumero" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="OrigemBairro" class="form-label"></label>
+                            <input asp-for="OrigemBairro" class="form-control" />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="OrigemCidade" class="form-label"></label>
+                            <input asp-for="OrigemCidade" class="form-control" />
+                            <span asp-validation-for="OrigemCidade" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-2">
+                            <label asp-for="OrigemEstado" class="form-label"></label>
+                            <input asp-for="OrigemEstado" class="form-control" maxlength="2" />
+                            <span asp-validation-for="OrigemEstado" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-2">
+                            <label asp-for="OrigemCep" class="form-label"></label>
+                            <input asp-for="OrigemCep" class="form-control" />
+                        </div>
+                    </div>
+
+                    <h5 class="fw-bold border-bottom pb-2">Endereço de destino</h5>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-8">
+                            <label asp-for="DestinoEndereco" class="form-label"></label>
+                            <input asp-for="DestinoEndereco" class="form-control" />
+                            <span asp-validation-for="DestinoEndereco" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="DestinoNumero" class="form-label"></label>
+                            <input asp-for="DestinoNumero" class="form-control" />
+                            <span asp-validation-for="DestinoNumero" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="DestinoBairro" class="form-label"></label>
+                            <input asp-for="DestinoBairro" class="form-control" />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="DestinoCidade" class="form-label"></label>
+                            <input asp-for="DestinoCidade" class="form-control" />
+                            <span asp-validation-for="DestinoCidade" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-2">
+                            <label asp-for="DestinoEstado" class="form-label"></label>
+                            <input asp-for="DestinoEstado" class="form-control" maxlength="2" />
+                            <span asp-validation-for="DestinoEstado" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-2">
+                            <label asp-for="DestinoCep" class="form-label"></label>
+                            <input asp-for="DestinoCep" class="form-control" />
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2">
+                        <a asp-action="Pedidos" class="btn btn-outline-secondary">Cancelar</a>
+                        <button type="submit" class="btn btn-mgl-teal fw-bold">Enviar para validação</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

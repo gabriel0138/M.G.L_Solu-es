@@ -1,0 +1,120 @@
+@model IReadOnlyList<MglConnect.Web.Models.AlertaEmergencia>
+@{
+    ViewData["Title"] = "Alertas de emergência";
+    var audit = ViewBag.Auditoria as IReadOnlyList<MglConnect.Web.Models.AuditoriaOperacional>
+        ?? Array.Empty<MglConnect.Web.Models.AuditoriaOperacional>();
+}
+
+<main class="container py-4">
+    <header class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <h1 class="h3 fw-bold">Alertas de emergência</h1>
+            <p class="text-muted mb-0">Consulta operacional de alertas persistidos. Não representa monitoramento contínuo.</p>
+        </div>
+        <a asp-action="Index" class="btn btn-outline-secondary">Voltar às entregas</a>
+    </header>
+
+    @if (TempData["MensagemSucesso"] is string sucesso)
+    {
+        <div class="alert alert-success" role="status">@sucesso</div>
+    }
+    @if (TempData["MensagemErro"] is string erro)
+    {
+        <div class="alert alert-danger" role="alert">@erro</div>
+    }
+
+    @if (Model.Count == 0)
+    {
+        <div class="alert alert-info">Nenhum alerta registrado.</div>
+    }
+    @foreach (var item in Model)
+    {
+        <article class="card-mgl p-4 mb-3">
+            <div class="d-flex flex-wrap justify-content-between gap-2">
+                <h2 class="h5 fw-bold">Alerta @item.Id.ToString("N")[..12]</h2>
+                <span class="badge text-bg-danger">@item.Status</span>
+            </div>
+            <dl class="row mb-3">
+                <dt class="col-sm-3">Data UTC</dt><dd class="col-sm-9">@item.CriadoEmUtc.ToString("yyyy-MM-dd HH:mm:ss")</dd>
+                <dt class="col-sm-3">Motorista / entrega / veículo</dt><dd class="col-sm-9">@item.MotoristaId / @item.EntregaId / @(item.VeiculoId?.ToString() ?? "não informado")</dd>
+                <dt class="col-sm-3">Localização</dt>
+                <dd class="col-sm-9">
+                    @item.SituacaoLocalizacao
+                    @if (item.Latitude.HasValue && item.Longitude.HasValue)
+                    {
+                        <span> — @item.Latitude.Value.ToString("F6"), @item.Longitude.Value.ToString("F6") (± @(item.PrecisaoMetros?.ToString("F0") ?? "?") m)</span>
+                    }
+                    @if (item.LocalizacaoCapturadaEmUtc.HasValue)
+                    {
+                        <span> · capturada @item.LocalizacaoCapturadaEmUtc.Value.ToString("yyyy-MM-dd HH:mm:ss") UTC</span>
+                    }
+                </dd>
+                @if (item.ReconhecidoEmUtc.HasValue)
+                {
+                    <dt class="col-sm-3">Reconhecido</dt><dd class="col-sm-9">Usuário @item.ReconhecidoPorUsuarioId · @item.ReconhecidoEmUtc.Value.ToString("yyyy-MM-dd HH:mm:ss") UTC</dd>
+                }
+            </dl>
+            <div class="d-flex flex-wrap gap-2">
+                @if (item.Status == "Aberto")
+                {
+                    <form asp-action="ReconhecerAlertaEmergencia" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@item.Id" />
+                        <button class="btn btn-danger btn-sm">Reconhecer alerta</button>
+                    </form>
+                    <form asp-action="AtualizarStatusAlertaEmergencia" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@item.Id" />
+                        <input type="hidden" name="status" value="FalsoAlarme" />
+                        <button class="btn btn-outline-secondary btn-sm">Marcar falso alarme</button>
+                    </form>
+                }
+                else if (item.Status == "Reconhecido")
+                {
+                    <form asp-action="AtualizarStatusAlertaEmergencia" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@item.Id" />
+                        <input type="hidden" name="status" value="EmAtendimento" />
+                        <button class="btn btn-warning btn-sm">Registrar atendimento</button>
+                    </form>
+                }
+                else if (item.Status == "EmAtendimento")
+                {
+                    <form asp-action="AtualizarStatusAlertaEmergencia" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@item.Id" />
+                        <input type="hidden" name="status" value="Resolvido" />
+                        <button class="btn btn-success btn-sm">Registrar resolução</button>
+                    </form>
+                    <form asp-action="AtualizarStatusAlertaEmergencia" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@item.Id" />
+                        <input type="hidden" name="status" value="FalsoAlarme" />
+                        <button class="btn btn-outline-secondary btn-sm">Marcar falso alarme</button>
+                    </form>
+                }
+            </div>
+        </article>
+    }
+
+    <section class="card-mgl p-4 mt-4">
+        <h2 class="h5 fw-bold">Auditoria recente de alertas</h2>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <thead><tr><th>UTC</th><th>Evento</th><th>Alerta</th><th>Ator</th><th>Detalhes</th></tr></thead>
+                <tbody>
+                @foreach (var entry in audit)
+                {
+                    <tr>
+                        <td>@entry.OcorridoEmUtc.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                        <td>@entry.Evento</td>
+                        <td>@entry.IdentificadorEntidade</td>
+                        <td>@entry.AtorUsuarioId</td>
+                        <td>@entry.Detalhes</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </section>
+</main>

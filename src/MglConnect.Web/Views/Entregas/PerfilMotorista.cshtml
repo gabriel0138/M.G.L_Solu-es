@@ -1,0 +1,36 @@
+@model MglConnect.Web.ViewModels.MotoristaPerfilViewModel
+@{
+    ViewData["Title"] = "Meu perfil";
+}
+
+<main class="driver-home container-fluid px-3 px-sm-4 py-4">
+    <header class="driver-home-header d-flex align-items-center justify-content-between gap-3 mb-4">
+        <div>
+            <div class="driver-brand-mark">M.G.L <span>DRIVER</span></div>
+            <h1 class="h4 fw-bold text-white mt-3 mb-1">Meu perfil</h1>
+            <p class="text-white-50 mb-0">Dados pessoais cadastrados pela operação.</p>
+        </div>
+        <a asp-action="Index" class="btn btn-outline-light driver-logout" aria-label="Voltar às viagens">
+            <i class="bi bi-arrow-left me-sm-2"></i><span class="d-none d-sm-inline">Voltar</span>
+        </a>
+    </header>
+
+    <section class="driver-trip-card" aria-label="Dados do motorista">
+        <div class="driver-profile-field">
+            <span class="driver-trip-label">Nome</span>
+            <div class="fw-semibold text-white">@Model.Nome</div>
+        </div>
+        <div class="driver-profile-field">
+            <span class="driver-trip-label">Data de nascimento</span>
+            <div class="fw-semibold text-white">@(Model.DataNascimento?.ToString("dd/MM/yyyy") ?? "Não informada")</div>
+        </div>
+        <div class="driver-profile-field">
+            <span class="driver-trip-label">Telefone</span>
+            <div class="fw-semibold text-white">@(Model.Telefone ?? "Não informado")</div>
+        </div>
+        <div class="driver-profile-field">
+            <span class="driver-trip-label">CPF</span>
+            <div class="fw-semibold text-white">@(Model.CpfMascarado ?? "Não informado")</div>
+        </div>
+    </section>
+</main>

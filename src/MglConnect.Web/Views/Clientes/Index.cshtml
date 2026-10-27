@@ -1,0 +1,97 @@
+@model IEnumerable<MglConnect.Web.Models.Cliente>
+@{
+    ViewData["Title"] = "Gestão de Clientes";
+}
+
+<div class="container py-4">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+        <div>
+            <h3 class="fw-bold text-dark mb-1">
+                <i class="bi bi-buildings text-primary me-2"></i> Clientes Corporativos
+            </h3>
+            <p class="text-muted small mb-0">Indústrias, redes de varejo e comércios eletrônicos parceiros da M.G.L Logística.</p>
+        </div>
+        <div>
+            <a asp-action="Create" class="btn btn-warning fw-bold shadow-sm">
+                <i class="bi bi-person-plus-fill me-1"></i> Cadastrar Novo Cliente
+            </a>
+        </div>
+    </div>
+
+    <!-- Barra de Filtro e Busca -->
+    <div class="card border-0 shadow-sm p-3 mb-4 rounded-4 bg-white">
+        <form method="get" class="row g-2 align-items-center">
+            <div class="col-md-10">
+                <div class="input-group">
+                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-search text-muted"></i></span>
+                    <input type="text" name="termoBusca" value="@ViewBag.TermoBusca" 
+                           class="form-control border-start-0" 
+                           placeholder="Pesquisar por Razão Social, Nome Fantasia, CNPJ ou Cidade..." />
+                </div>
+            </div>
+            <div class="col-md-2 d-grid">
+                <button type="submit" class="btn btn-outline-primary">Filtrar</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Tabela de Clientes -->
+    <div class="card border-0 shadow-sm rounded-4 bg-white p-4">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light fs-8 text-uppercase text-secondary">
+                    <tr>
+                        <th>Razão Social / Fantasia</th>
+                        <th>CNPJ</th>
+                        <th>Contato</th>
+                        <th>Localidade</th>
+                        <th class="text-end">Ações</th>
+                    </tr>
+                </thead>
+                <tbody class="fs-7">
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="5" class="text-center py-4 text-muted">
+                                Nenhum cliente encontrado com os critérios informados.
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var c in Model)
+                    {
+                        <tr>
+                            <td>
+                                <strong class="text-dark d-block">@c.RazaoSocial</strong>
+                                <span class="text-muted fs-8">@(c.NomeFantasia ?? "—")</span>
+                            </td>
+                            <td>
+                                <span class="font-monospace text-secondary">@c.Cnpj</span>
+                            </td>
+                            <td>
+                                <div><i class="bi bi-telephone text-muted me-1"></i> @c.Telefone</div>
+                                @if (!string.IsNullOrEmpty(c.Email))
+                                {
+                                    <div class="fs-8 text-muted"><i class="bi bi-envelope me-1"></i> @c.Email</div>
+                                }
+                            </td>
+                            <td>
+                                <div>@c.Cidade / @c.Estado</div>
+                                <span class="text-muted fs-8">CEP: @c.Cep</span>
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <a asp-action="Details" asp-route-id="@c.Id" class="btn btn-outline-secondary" title="Ver Detalhes">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    <a asp-action="Edit" asp-route-id="@c.Id" class="btn btn-outline-primary" title="Editar">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

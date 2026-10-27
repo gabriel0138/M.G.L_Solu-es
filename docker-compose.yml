@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  mglconnect-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mglconnect_web_app
+    ports:
+      - "5000:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - DatabaseProvider=Sqlite
+      - ConnectionStrings__DefaultConnection=Data Source=/app/data/mglconnect.db
+      - DataProtection__KeysPath=/app/data/keys
+    volumes:
+      - mgl_data:/app/data
+    restart: unless-stopped
+
+volumes:
+  mgl_data:

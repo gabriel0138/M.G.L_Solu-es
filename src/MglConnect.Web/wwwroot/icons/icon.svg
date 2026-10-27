@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="mglGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B132B"/>
+      <stop offset="100%" stop-color="#1C2541"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="100" fill="url(#mglGrad)"/>
+  <rect x="24" y="24" width="464" height="464" rx="80" fill="none" stroke="#5BC0BE" stroke-width="8" opacity="0.6"/>
+  <!-- Ícone estilizado de caminhão e caixa logística -->
+  <g fill="#5BC0BE" transform="translate(96, 116)">
+    <!-- Cabine -->
+    <path d="M 230,120 L 290,120 L 320,180 L 320,240 L 230,240 Z" fill="#5BC0BE"/>
+    <!-- Janela -->
+    <path d="M 240,135 L 280,135 L 305,180 L 240,180 Z" fill="#0B132B"/>
+    <!-- Baú / Container -->
+    <rect x="0" y="50" width="220" height="190" rx="16" fill="#5BC0BE"/>
+    <!-- Linhas do Baú -->
+    <line x1="70" y1="65" x2="70" y2="225" stroke="#0B132B" stroke-width="8"/>
+    <line x1="145" y1="65" x2="145" y2="225" stroke="#0B132B" stroke-width="8"/>
+    <!-- Rodas -->
+    <circle cx="50" cy="245" r="32" fill="#FF9F1C"/>
+    <circle cx="50" cy="245" r="14" fill="#0B132B"/>
+    <circle cx="170" cy="245" r="32" fill="#FF9F1C"/>
+    <circle cx="170" cy="245" r="14" fill="#0B132B"/>
+    <circle cx="275" cy="245" r="32" fill="#FF9F1C"/>
+    <circle cx="275" cy="245" r="14" fill="#0B132B"/>
+  </g>
+  <text x="256" y="445" font-family="'Plus Jakarta Sans', sans-serif" font-weight="800" font-size="44" fill="#FFFFFF" text-anchor="middle" letter-spacing="4">MGL CONNECT</text>
+</svg>
