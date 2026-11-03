@@ -1,21 +1,25 @@
 # Handoff — M.G.L Connect
 
 **Atualizado em:** 2026-11-03
-**Estado:** snapshot de desenvolvimento validado por build/testes iniciais e auditoria final; publicação autorizada, ainda não enviada ao GitHub. Não é homologado nem pronto para produção.
+**Estado:** o snapshot de desenvolvimento está publicado em sua branch remota. A correção P0 está isolada na branch local `diagnostic/mgl-http500-p0` e possui commit local `bbcb189`; aguarda revisão independente do Codex. Não houve push ou merge. Não é homologado nem pronto para produção.
 
 ## Branch e commits
 
 - Branch: `publication/mgl-snapshot-2026-11-public`.
 - Base: `origin/main` no commit `d8a54d3`.
+- Branch local de diagnóstico: `diagnostic/mgl-http500-p0`, criada sobre `5fe505a09a76a42843b181cf972d583d9030013b`; não publicada.
 - A branch foi reconstruída sobre a base pública a partir dos patches revisados, sem alterar branches anteriores. Contatos demonstrativos e caminhos absolutos herdados foram corrigidos antes do primeiro commit novo.
-- Commits locais preparados:
+- Commits já publicados na branch:
   - `1247259` — aplicação, contatos demonstrativos e sanitização de caminhos herdados.
   - `78e296c` — testes de regressão.
   - `043dcff` — script de esquema SQL Server.
   - `d6dcce0` — documentação técnica revisada e sanitizada.
   - `a7783ba` — coordenação de agentes e metodologia de conformidade.
-  - Dois commits adicionais registram as contagens e o resultado final da auditoria documental.
-- Ainda não publicado; o push da branch foi autorizado após aprovação das verificações finais.
+- `32d7282` — registro final da auditoria.
+- `4b5800f` — alinhamento do handoff à auditoria.
+- `5fe505a` — conclusão da auditoria do snapshot sanitizado.
+- Correção local nesta branch: `bbcb189643a134c1a56811a6748077e79af6e3d8` — parsing decimal compatível com cultura e regressões.
+- O snapshot remoto continua em `5fe505a09a76a42843b181cf972d583d9030013b`; o commit de correção e a documentação desta branch não foram publicados.
 
 ## Escopo incluído e excluído
 
@@ -48,8 +52,25 @@ Excluídos: documentação de continuidade acadêmica com identificadores de est
 
 ## Próximos passos
 
-1. Repetir uma última vez Gitleaks e verificação de caminhos/artefatos sobre este registro documental.
-2. Executar somente o push autorizado da branch de publicação; não alterar nem fazer merge em `main`.
-3. Ampliar depois os testes unitários seguros, limitando-os a fixtures locais/InMemory/SQLite e adaptadores simulados.
-4. Fazer revisão técnica cruzada em worktree independente e analisar licenças de terceiros.
-5. Decidir individualmente sobre arquivos de infraestrutura e scripts excluídos.
+1. Solicitar revisão técnica independente do Codex em nova worktree baseada no commit local `bbcb189`.
+2. Corrigir achados apenas após decisão explícita; não alterar a branch publicada nem fazer merge em `main`.
+3. Após revisão, decidir separadamente sobre publicação da branch de correção; nenhum push está autorizado por este handoff.
+4. Executar posteriormente as suítes PostgreSQL/SQL Server apenas em bancos descartáveis e autorizados.
+5. Analisar licenças de terceiros e decidir individualmente sobre infraestrutura e scripts excluídos.
+
+## Diagnóstico P0 — branch local
+
+- Worktree/branch: worktree independente `diagnostic/mgl-http500-p0`, baseada no commit publicado `5fe505a09a76a42843b181cf972d583d9030013b`. A correção tem o commit local `bbcb189643a134c1a56811a6748077e79af6e3d8`; documentação de handoff será registrada em commit separado.
+- Causa dos 13 HTTP 500: `RangeAttribute.SetupConversion` convertia limites decimais escritos com ponto usando a cultura corrente `pt-BR`, gerando `ArgumentException` interna com `FormatException` antes da action, tanto na validação MVC quanto na geração dos validadores Razor.
+- Correção: limites `RangeAttribute` decimal de frota e perfil de viagem usam `ParseLimitsInInvariantCulture=true`. Os formulários HTML afetados usam `HtmlDecimalModelBinder`, que interpreta o ponto de `type=number` como separador decimal invariável e mantém entradas com vírgula na cultura corrente. A autorização e o escopo por tenant não foram modificados.
+- Regressões: teste de cultura `pt-BR` cobre conversão dos limites e valores `18.60`/`18,60`; os testes HTTP verificam o valor decimal persistido de frota e perfil.
+- Validação no worktree de diagnóstico: restore aprovado; build Debug com 0 warnings/erros; C# 481 total (472 aprovados, 0 falhos, 9 ignorados); JavaScript 107/107 aprovados. Os nove ignorados são PostgreSQL/SQL Server sem conexões configuradas. Gitleaks não encontrou ocorrências na árvore nem nos oito commits do snapshot desde `origin/main`.
+- A revisão independente pelo Codex é pendente. A correção foi commitada localmente em `bbcb189`; nenhuma publicação, integração ou alteração da `main` ocorreu.
+
+## Solicitação pronta para revisão independente pelo Codex
+
+> Faça uma revisão independente, somente de leitura, da correção P0 no commit `bbcb189643a134c1a56811a6748077e79af6e3d8`. Crie uma branch e worktree próprias a partir desse commit (por exemplo, `review/mgl-http500-p0-codex` e `$HOME/projetos/mgl-codex-review-p0`), após confirmar que ambas não existem. Não use nem altere o checkout do Copilot, a branch `diagnostic/mgl-http500-p0`, a branch publicada `publication/mgl-snapshot-2026-11-public` ou `main`; não faça commit, push, merge, rebase ou alterações de código.
+>
+> Avalie com evidências concretas: (1) a causa original dos 13 HTTP 500 em `RangeAttribute`/`SetupConversion`; (2) `ParseLimitsInInvariantCulture` e os limites decimais em `FleetManagementViewModels.cs` e `RouteAssessmentViewModel.cs`; (3) `HtmlDecimalModelBinder`, incluindo `decimal` e `decimal?`, `ModelState`, Razor/MVC, entradas com ponto/vírgula, negativos, limites, vazio e formatos inválidos; (4) ambiguidade e risco de separadores de milhar serem aceitos como decimal, inclusive valores como `1.234`, `1,234`, `1,234.56` e formatos malformados; (5) precisão e integridade dos valores persistidos; (6) regressões nos fluxos de frota, perfis de viagem e avaliação de rotas; (7) eventual impacto em autorização de administradores/motoristas, isolamento entre tenants, respostas 404 e validação de entrada.
+>
+> Confira os testes de regressão e, se necessário, execute somente testes locais com fixtures isoladas, sem bancos operacionais, PostgreSQL, SQL Server, Docker, serviços externos ou browser tests. Não enfraqueça assertions. Entregue achados ordenados por severidade, cada um com arquivo e linha exatos, severidade, evidência reproduzível/impacto e sugestão mínima de correção. Se não houver achados, declare o escopo efetivamente revisado, os comandos/testes executados e limitações; não use aprovação genérica sem evidências.
