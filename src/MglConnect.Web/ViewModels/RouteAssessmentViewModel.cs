@@ -1,17 +1,26 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Mvc;
+using MglConnect.Web.ModelBinding;
 using MglConnect.Web.Models;
 using MglConnect.Web.Services.RouteTrust;
 namespace MglConnect.Web.ViewModels;
 public sealed class TruckProfileForm
 {
     public int Revision {get;set;}
-    [Range(typeof(decimal),"0.01","1000000")]public decimal? Height {get;set;}
-    [Range(typeof(decimal),"0.01","1000000")]public decimal? Width {get;set;}
-    [Range(typeof(decimal),"0.01","1000000")]public decimal? Length {get;set;}
-    [Range(typeof(decimal),"0.01","1000000")]public decimal? Tare {get;set;}
-    [Range(typeof(decimal),"0.01","1000000")]public decimal? Pbt {get;set;}
-    [Range(typeof(decimal),"0.01","1000000")]public decimal? Pbtc {get;set;}
-    [Range(typeof(decimal),"0","1000000")]public decimal? Payload {get;set;}
+    [ModelBinder(BinderType=typeof(HtmlDecimalModelBinder))]
+    [Range(typeof(decimal),"0.01","1000000",ParseLimitsInInvariantCulture=true)]public decimal? Height {get;set;}
+    [ModelBinder(BinderType=typeof(HtmlDecimalModelBinder))]
+    [Range(typeof(decimal),"0.01","1000000",ParseLimitsInInvariantCulture=true)]public decimal? Width {get;set;}
+    [ModelBinder(BinderType=typeof(HtmlDecimalModelBinder))]
+    [Range(typeof(decimal),"0.01","1000000",ParseLimitsInInvariantCulture=true)]public decimal? Length {get;set;}
+    [ModelBinder(BinderType=typeof(HtmlDecimalModelBinder))]
+    [Range(typeof(decimal),"0.01","1000000",ParseLimitsInInvariantCulture=true)]public decimal? Tare {get;set;}
+    [ModelBinder(BinderType=typeof(HtmlDecimalModelBinder))]
+    [Range(typeof(decimal),"0.01","1000000",ParseLimitsInInvariantCulture=true)]public decimal? Pbt {get;set;}
+    [ModelBinder(BinderType=typeof(HtmlDecimalModelBinder))]
+    [Range(typeof(decimal),"0.01","1000000",ParseLimitsInInvariantCulture=true)]public decimal? Pbtc {get;set;}
+    [ModelBinder(BinderType=typeof(HtmlDecimalModelBinder))]
+    [Range(typeof(decimal),"0","1000000",ParseLimitsInInvariantCulture=true)]public decimal? Payload {get;set;}
     [Range(1,30)]public int? Axles {get;set;}
     [StringLength(200)]public string? Category {get;set;}
     [StringLength(200)]public string? Composition {get;set;}

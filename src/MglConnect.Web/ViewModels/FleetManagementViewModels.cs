@@ -1,4 +1,6 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Mvc;
+using MglConnect.Web.ModelBinding;
 
 namespace MglConnect.Web.ViewModels;
 
@@ -8,11 +10,16 @@ public sealed class FleetVehicleForm : IValidatableObject
     public string? Selo { get; set; }
     [Required, StringLength(80)] public string Modelo { get; set; } = "";
     [Required, StringLength(10)] public string Placa { get; set; } = "";
-    [Range(typeof(decimal), "0", "99999999.99")] public decimal CapacidadeCargaKg { get; set; }
-    [Range(typeof(decimal), "0", "999.99")] public decimal AlturaMetros { get; set; }
-    [Range(typeof(decimal), "0", "999.99")] public decimal LarguraMetros { get; set; }
-    [Range(typeof(decimal), "0", "999.99")] public decimal ComprimentoMetros { get; set; }
-    [Range(typeof(decimal), "0", "9999.99")] public decimal PesoToneladas { get; set; }
+    [ModelBinder(BinderType = typeof(HtmlDecimalModelBinder))]
+    [Range(typeof(decimal), "0", "99999999.99", ParseLimitsInInvariantCulture = true)] public decimal CapacidadeCargaKg { get; set; }
+    [ModelBinder(BinderType = typeof(HtmlDecimalModelBinder))]
+    [Range(typeof(decimal), "0", "999.99", ParseLimitsInInvariantCulture = true)] public decimal AlturaMetros { get; set; }
+    [ModelBinder(BinderType = typeof(HtmlDecimalModelBinder))]
+    [Range(typeof(decimal), "0", "999.99", ParseLimitsInInvariantCulture = true)] public decimal LarguraMetros { get; set; }
+    [ModelBinder(BinderType = typeof(HtmlDecimalModelBinder))]
+    [Range(typeof(decimal), "0", "999.99", ParseLimitsInInvariantCulture = true)] public decimal ComprimentoMetros { get; set; }
+    [ModelBinder(BinderType = typeof(HtmlDecimalModelBinder))]
+    [Range(typeof(decimal), "0", "9999.99", ParseLimitsInInvariantCulture = true)] public decimal PesoToneladas { get; set; }
     [Range(1, 20)] public int QtdEixos { get; set; }
     [Required, StringLength(50)] public string TipoCarga { get; set; } = "";
 
