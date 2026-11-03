@@ -34,7 +34,7 @@ Excluídos: documentação de continuidade acadêmica com identificadores de est
 - Swagger e política de privacidade usam endereços `.invalid`, reservados para demonstrações e não destinados a entrega real de mensagens.
 - `appsettings*.json` não foram modificados em relação à base pública; a connection string é SQLite relativa e não contém usuário/senha.
 - O dado de cobertura derivado de OSM contém origem e atribuição ODbL. Não foi encontrado arquivo LICENSE de nível raiz; revisar as licenças de terceiros antes de redistribuição, sem confundir essa pendência com segredo ou afirmar licença própria.
-- Gitleaks não encontrou segredos nas verificações da árvore e do histórico dos cinco commits da branch. O diff contém 222 arquivos (163 adicionados, 59 modificados), sem PDFs/DOCX/ZIP, bancos, backups, chaves ou binários privados.
+- Gitleaks não encontrou segredos nas verificações da árvore e do histórico até o commit anterior; a auditoria final incluirá este registro documental. O diff contém 222 arquivos (163 adicionados, 59 modificados), sem PDFs/DOCX/ZIP, bancos, backups, chaves ou binários privados.
 
 ## Validação desta árvore
 
