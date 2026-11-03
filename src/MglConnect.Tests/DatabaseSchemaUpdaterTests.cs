@@ -70,14 +70,9 @@ public class DatabaseSchemaUpdaterTests
             .UseSqlite(connection)
             .Options;
         await using var context = new MglDbContext(options);
+        await SchemaFixture.CreateLegacyAsync(context);
         await context.Database.ExecuteSqlRawAsync(
-            "CREATE TABLE \"Pedidos\" (\"Id\" INTEGER PRIMARY KEY, \"Status\" TEXT NOT NULL);");
-        await context.Database.ExecuteSqlRawAsync(
-            "CREATE TABLE \"Entregas\" (\"Id\" INTEGER PRIMARY KEY, \"StatusEntrega\" TEXT NOT NULL, \"MotoristaId\" INTEGER NULL, \"VeiculoId\" INTEGER NULL);");
-        await context.Database.ExecuteSqlRawAsync(
-            "INSERT INTO \"Pedidos\" (\"Id\", \"Status\") VALUES (1, 'ComEntregaAtribuida');");
-        await context.Database.ExecuteSqlRawAsync(
-            "INSERT INTO \"Entregas\" (\"Id\", \"StatusEntrega\", \"MotoristaId\", \"VeiculoId\") VALUES (1, 'Pendente', 8, 3);");
+            "INSERT INTO Entregas (Id, PedidoId, TenantId, StatusEntrega, MotoristaId, VeiculoId) VALUES (1, 1, '00000000-0000-0000-0000-000000000000', 'Pendente', 1, 1);");
 
         await DatabaseSchemaUpdater.EnsureOperationalSecuritySchemaAsync(context);
         await DatabaseSchemaUpdater.EnsureOperationalSecuritySchemaAsync(context);

@@ -122,6 +122,52 @@ public class DispatchValidationTests
         Assert.Equal("ComEntregaAtribuida", fixture.Pedido.Status);
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task PartialDispatchDoesNotActivateAssignment(bool hasDriver, bool hasVehicle)
+    {
+        await using var fixture = await CreateFixtureAsync();
+        var model = CreateValidDispatch(fixture);
+        model.MotoristaId = hasDriver ? fixture.Motorista.Id : null;
+        model.VeiculoId = hasVehicle ? fixture.Veiculo.Id : null;
+        Assert.IsType<RedirectToActionResult>(await fixture.Controller.Create(model));
+        Assert.False((await fixture.Context.Entregas.SingleAsync()).AtribuicaoAtiva);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RemovingAssignmentComponentDeactivatesIt(bool removeDriver)
+    {
+        await using var fixture = await CreateFixtureAsync();
+        await fixture.Controller.Create(CreateValidDispatch(fixture));
+        var delivery = await fixture.Context.Entregas.SingleAsync();
+        Assert.True(delivery.AtribuicaoAtiva);
+        if (removeDriver)
+            await fixture.Controller.AtribuirMotorista(delivery.Id, null);
+        else
+            await fixture.Controller.AtribuirVeiculo(delivery.Id, null);
+        Assert.False(delivery.AtribuicaoAtiva);
+        Assert.Equal("Pendente", delivery.StatusEntrega);
+    }
+
+    [Fact]
+    public async Task ReassigningCompleteDeliveryKeepsItActive()
+    {
+        await using var fixture = await CreateFixtureAsync();
+        await fixture.Controller.Create(CreateValidDispatch(fixture));
+        var delivery = await fixture.Context.Entregas.SingleAsync();
+        var replacement = new Usuario { Nome = "Substituto", Login = "replacement", SenhaHash = "test", Perfil = "Motorista" };
+        fixture.Context.Add(replacement);
+        await fixture.Context.SaveChangesAsync();
+        await fixture.Controller.AtribuirMotorista(delivery.Id, replacement.Id);
+        Assert.True(delivery.AtribuicaoAtiva);
+        Assert.Equal(replacement.Id, delivery.MotoristaId);
+        Assert.Equal("Pendente", delivery.StatusEntrega);
+    }
+
     private static async Task<Fixture> CreateFixtureAsync()
     {
         var options = new DbContextOptionsBuilder<MglDbContext>()
@@ -178,7 +224,7 @@ public class DispatchValidationTests
         var httpContext = new DefaultHttpContext
         {
             User = new ClaimsPrincipal(new ClaimsIdentity(
-                [new Claim(ClaimTypes.Role, "Admin")],
+                [new Claim(ClaimTypes.Role, "Admin"), new Claim(ClaimTypes.NameIdentifier, "1")],
                 "test"))
         };
         var tempDataProvider = new Mock<ITempDataProvider>();

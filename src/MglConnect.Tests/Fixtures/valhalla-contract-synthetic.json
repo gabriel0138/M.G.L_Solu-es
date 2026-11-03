@@ -1,0 +1,16 @@
+{
+  "trip": {
+    "status": 0,
+    "status_message": "Found route between points (SYNTHETIC CONTRACT FIXTURE; NOT A LIVE VALHALLA RESPONSE)",
+    "units": "kilometers",
+    "summary": {
+      "length": 4.962,
+      "time": 600
+    },
+    "legs": [
+      {
+        "shape": "xla}k@nss~wAt~@x`@tc@zOvXrG~_AfVjPdD~NjD|HdDfHdDvHxFpExDtLdMxSbStFnFqCfDwj@hq@sCjDoCsC}c@yd@cDiDuBwB}m@oo@kDoDiGqGsf@sg@oAqAaCeCwCaDgj@_l@oCgCuBqBuBsBaNdQsUtYyDkEgNwOq@iB_@iB?sEh@mLJk@\\q@n@aAj@kAN_AOiBc@{As@yAu@mAg@kAq@kBNsFPgGYkKmAsC}AgBgEcCgG{B_HmBiPqEwLsDoHaC_EqAqG_BaN}@qK_AuCkBoBoAwRsLc@WmOuI{FgEeAwG}LaVmLiWiOq\\s]kt@eCiF_^_s@mE}F_DyBsCwCs@o@gB}A_B_AEs@Y_CKm@Qk@u@{B}AyC}@oAcAgAiAcAmA{@sAs@uAm@mA_@_Dk@oCE_CmC}MoQoLwMiGcFoFoDqCaB{h@eW}oAek@fLw[fB_FoC{AcDkCoAsAgAwAu@}@c^_c@}NuVkB{DqC{HiAiDcIcXW_A}Qgm@}@uCmOuf@y@_DoAaE_Qgk@aCyHoFcQ{@yCoBqG`CeBp@{@xEwLv@sBPe@pIyUhQof@|ByGnC_ItBcGvAaEbIqU~Rai@~\\a~@dC}GpB{F^aDGk@kBaKwD_TyAqIqJ_g@cEmQoHcYmAqIiBaM{@iIa@oExL}_@pAwDv@kClEmNtAoE|AeFpCmJfHeVnA}Jf@gF_IyCyYgLuFyBuAi@mAg@qFuByJ{D_W{JwQmHgC}@yKiE}F{@{FCqUrCuV~EsDr@PrCvCrg@td@|B"
+      }
+    ]
+  }
+}

@@ -203,6 +203,29 @@ public class DriverRoutingTests
         factory.Verify(item => item.CreateClient(It.IsAny<string>()), Times.Never);
     }
 
+
+    [Theory]
+    [InlineData("network",false)][InlineData("timeout",false)][InlineData("json",false)][InlineData("503",false)]
+    [InlineData("network",true)][InlineData("timeout",true)][InlineData("json",true)][InlineData("503",true)]
+    public async Task ProviderFailureNeverCreatesFabricatedCoordinatesDistanceOrEta(string failure,bool geocoding)
+    {
+        var handler=new StubHttpMessageHandler(request=>
+        {
+            if(request.RequestUri!.Host.Contains("google")&&!geocoding)
+                return JsonResponse("{\"status\":\"OK\",\"results\":[{\"geometry\":{\"location\":{\"lat\":-23.55,\"lng\":-46.63}}}]}");
+            if(failure=="network")throw new HttpRequestException("Synthetic outage");
+            if(failure=="timeout")throw new TaskCanceledException("Synthetic timeout");
+            return failure=="503"?new HttpResponseMessage(System.Net.HttpStatusCode.ServiceUnavailable):JsonResponse("invalid-json");
+        });
+        var factory=new Mock<IHttpClientFactory>();factory.Setup(f=>f.CreateClient(It.IsAny<string>())).Returns(()=>new HttpClient(handler,false));
+        using var db=new MglDbContext(new DbContextOptionsBuilder<MglDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+        using var cache=new MemoryCache(new MemoryCacheOptions());
+        var config=new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?>{{"GoogleMaps:GeocodingApiKey","SYNTHETIC-ONLY"},{"Routing:OsrmBaseUrl","https://routing.invalid"}}).Build();
+        var service=new TruckRoutingService(db,factory.Object,cache,config,Mock.Of<ILogger<TruckRoutingService>>(),Mock.Of<IRouteDeviationEngine>());
+        var route=await service.CalcularRotaPesadaAsync("CD MGL Cajamar","Synthetic destination",4.2m,30m,2.6m,6,"Synthetic cargo");
+        Assert.False(route.RotaDisponivel);Assert.False(route.RotaHomologadaParaVeiculo);Assert.False(route.RotaAprovada);
+        Assert.Empty(route.TrajetoCoordenadas);Assert.Equal(0,route.DistanciaKm);Assert.Equal(0,route.TempoEstimadoMinutos);
+    }
     private static HttpResponseMessage JsonResponse(string json) =>
         new(HttpStatusCode.OK)
         {
