@@ -1,0 +1,33 @@
+@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
+@{
+    ViewData["Title"] = "Mapa operacional";
+    var tileUrl = Configuration["Maps:TileUrl"] ?? "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+    var attribution = Configuration["Maps:Attribution"] ?? "© OpenStreetMap contributors";
+}
+<section class="cc-dashboard" aria-labelledby="fleetHeading">
+    <header class="cc-section-heading">
+        <div><span class="cc-eyebrow">COMMAND CENTER / OPERAÇÕES</span><h1 id="fleetHeading">A operação no mapa</h1><p>Últimas posições GPS informadas para as viagens ativas da sua organização.</p></div>
+        <div class="cc-quick-actions"><a asp-controller="Entregas" asp-action="Index" class="btn btn-outline-secondary">Ver viagens</a><a asp-controller="Entregas" asp-action="Create" class="btn btn-mgl-primary">Despachar carga</a></div>
+    </header>
+    <div class="cc-fleet-toolbar">
+        <div><label for="fleetSearch" class="form-label">Encontrar viagem</label><input id="fleetSearch" type="search" class="form-control" placeholder="Código, motorista, placa ou cidade" autocomplete="off" /></div>
+        <div><label for="fleetStatusFilter" class="form-label">Estado operacional</label><select id="fleetStatusFilter" class="form-select"><option value="all">Todas as viagens ativas</option><option value="Pendente">Aguardando turno</option><option value="Em transporte">Em transporte</option></select></div>
+        <label class="cc-fleet-follow"><input type="checkbox" id="fleetFollow" class="form-check-input" /> Acompanhar viagem selecionada</label>
+    </div>
+    <p id="fleetMapStatus" class="cc-refresh-status" role="status">Consultando posições autorizadas…</p>
+    <div class="cc-fleet-layout">
+        <div class="cc-panel">
+            <div id="fleetMap" class="cc-fleet-map cc-map" role="region" aria-label="Mapa de posições GPS informadas"
+                 data-endpoint="@Url.Action("Posicoes")" data-tile-url="@tileUrl" data-attribution="@attribution">
+                <div class="cc-fleet-empty"><i class="bi bi-geo-alt" aria-hidden="true"></i><strong>Aguardando informações de GPS</strong><p>O mapa só posiciona veículos quando há uma coordenada recebida. A cidade de destino não substitui o GPS.</p></div>
+            </div>
+            <div class="cc-fleet-legend"><span data-state="fresh">Sinal recente</span><span data-state="stale">Última posição desatualizada</span><span data-state="waiting">Sem GPS informado</span><span data-state="unknown">Captura sem horário informado</span></div>
+            <div id="fleetSelectionDetails" class="cc-fleet-detail">Selecione uma viagem para consultar seu último sinal e abrir o cockpit.</div>
+        </div>
+        <section class="cc-panel" aria-labelledby="fleetListHeading"><header class="cc-panel-header"><h2 id="fleetListHeading">Viagens ativas</h2><span id="fleetSummary" class="cc-fleet-summary"></span></header><div id="fleetTripList" class="cc-fleet-list"></div></section>
+    </div>
+    <aside class="cc-data-note"><i class="bi bi-info-circle" aria-hidden="true"></i><p>A idade do sinal usa a captura informada. Na telemetria legada, o recebimento é identificado sem inventar o horário da captura. Simulações não substituem o GPS gravado. Consulte as posições confirmadas em Histórico GPS. O mapa não certifica restrições para caminhões.</p></aside>
+</section>
+@section Scripts {
+    <script src="~/js/fleet-map.js" asp-append-version="true"></script>
+}

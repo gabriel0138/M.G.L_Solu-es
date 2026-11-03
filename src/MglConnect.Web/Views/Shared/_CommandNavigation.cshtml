@@ -1,0 +1,46 @@
+@{
+    var currentController = ViewContext.RouteData.Values["controller"]?.ToString();
+    var currentAction = ViewContext.RouteData.Values["action"]?.ToString();
+    var admin = User.IsInRole("Admin");
+    string? Selected(string controller, string? action = null) => currentController == controller && (action == null || currentAction == action) ? "page" : null;
+}
+<aside id="commandSidebar" class="cc-sidebar" aria-label="Navegação principal">
+    <div class="cc-sidebar-brand">
+        <a href="/" class="cc-brand" aria-label="M.G.L Connect — página inicial">
+            <span class="cc-brand-symbol" aria-hidden="true"><i class="bi bi-box-seam"></i></span>
+            <span><strong>M.G.L CONNECT</strong><small>Command Center</small></span>
+        </a>
+        <button class="cc-icon-button cc-mobile-menu" type="button" data-sidebar-close aria-label="Fechar navegação"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+    </div>
+    <nav class="cc-nav" aria-label="@(admin ? "Gestão logística" : "Portal do cliente")">
+        <span class="cc-nav-label">@(admin ? "OPERAÇÃO" : "SEU PORTAL")</span>
+        @if (admin)
+        {
+            <a class="cc-nav-link" asp-controller="Dashboard" asp-action="Index" aria-current="@Selected("Dashboard")"><i class="bi bi-grid-1x2" aria-hidden="true"></i><span>Visão geral</span></a>
+            <a class="cc-nav-link" asp-controller="Operacoes" asp-action="Index" aria-current="@Selected("Operacoes")"><i class="bi bi-map" aria-hidden="true"></i><span>Mapa operacional</span></a>
+            <a class="cc-nav-link" asp-controller="GpsHistorico" asp-action="Index" aria-current="@Selected("GpsHistorico")"><i class="bi bi-clock-history" aria-hidden="true"></i><span>Histórico GPS</span></a>
+            <a class="cc-nav-link" asp-controller="Pedidos" asp-action="Index" aria-current="@Selected("Pedidos")"><i class="bi bi-box-seam" aria-hidden="true"></i><span>Pedidos</span></a>
+            <a class="cc-nav-link" asp-controller="Entregas" asp-action="Index" aria-current="@Selected("Entregas", "Index")"><i class="bi bi-truck" aria-hidden="true"></i><span>Viagens e despacho</span></a>
+            <a class="cc-nav-link" asp-controller="Frota" asp-action="Index" aria-current="@Selected("Frota")"><i class="bi bi-person-badge" aria-hidden="true"></i><span>Frota e motoristas</span></a>
+            <a class="cc-nav-link" asp-controller="Entregas" asp-action="AlertasEmergencia" aria-current="@Selected("Entregas", "AlertasEmergencia")"><i class="bi bi-shield-exclamation" aria-hidden="true"></i><span>Ocorrências</span></a>
+            <a class="cc-nav-link" asp-controller="Roteamento" asp-action="Index" aria-current="@Selected("Roteamento")"><i class="bi bi-signpost-split" aria-hidden="true"></i><span>Rotas e estimativas</span></a>
+            <span class="cc-nav-label">RELACIONAMENTO</span>
+            <a class="cc-nav-link" asp-controller="Clientes" asp-action="Index" aria-current="@Selected("Clientes")"><i class="bi bi-buildings" aria-hidden="true"></i><span>Clientes</span></a>
+        }
+        else
+        {
+            <a class="cc-nav-link" asp-controller="ClientePortal" asp-action="Index" aria-current="@Selected("ClientePortal", "Index")"><i class="bi bi-grid-1x2" aria-hidden="true"></i><span>Visão geral</span></a>
+            <a class="cc-nav-link" asp-controller="ClientePortal" asp-action="Pedidos" aria-current="@Selected("ClientePortal", "Pedidos")"><i class="bi bi-box-seam" aria-hidden="true"></i><span>Meus pedidos</span></a>
+            <a class="cc-nav-link" asp-controller="ClientePortal" asp-action="NovoPedido" aria-current="@Selected("ClientePortal", "NovoPedido")"><i class="bi bi-plus-square" aria-hidden="true"></i><span>Novo pedido</span></a>
+            <a class="cc-nav-link" asp-controller="ClientePortal" asp-action="Pedidos" asp-route-status="Entregue"><i class="bi bi-patch-check" aria-hidden="true"></i><span>Entregas concluídas</span></a>
+        }
+        <span class="cc-nav-label">ACOMPANHAMENTO</span>
+        <a class="cc-nav-link" asp-controller="Rastreio" asp-action="Index" aria-current="@Selected("Rastreio")"><i class="bi bi-geo-alt" aria-hidden="true"></i><span>Rastreamento público</span></a>
+        @if (admin)
+        {
+            <a class="cc-nav-link" href="/swagger"><i class="bi bi-braces" aria-hidden="true"></i><span>API e integrações</span></a>
+        }
+    </nav>
+    <div class="cc-nav-footer"><i class="bi bi-shield-check" aria-hidden="true"></i><span>Acesso por perfil<small>Dados da sua organização</small></span></div>
+</aside>
+<button type="button" class="cc-sidebar-backdrop" data-sidebar-close aria-label="Fechar navegação" hidden></button>

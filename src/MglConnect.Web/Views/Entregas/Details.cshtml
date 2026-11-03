@@ -2,38 +2,30 @@
 @{
     ViewData["Title"] = "Gerenciar Entrega " + Model.CodigoRastreio;
     var motoristas = ViewBag.Motoristas as List<MglConnect.Web.Models.Usuario> ?? new List<MglConnect.Web.Models.Usuario>();
+    var terminal = Model.StatusEntrega is "Entregue" or "Cancelada";
+    var canAssign = User.IsInRole("Admin") && !terminal && ViewBag.HasActiveShift is not true;
     var veiculos = ViewBag.Veiculos as List<MglConnect.Web.Models.Veiculo> ?? new List<MglConnect.Web.Models.Veiculo>();
 }
 
-<div class="container py-4">
+<p id="operationalRefreshStatus" class="cc-refresh-status" role="status" aria-live="polite">Conectando atualizações da entrega…</p>
+<div id="operationalPanel" data-refresh-url="@Url.Action("Details", new { id = Model.Id })" data-fragment-id="adminDeliveryDetails">
+<div class="container py-4" id="adminDeliveryDetails" data-delivery-status="@Model.StatusEntrega">
     <!-- Barra Superior -->
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
         <div>
-            <div class="d-flex align-items-center gap-2">
-                <span class="fs-4 fw-extrabold font-monospace" style="color: var(--mgl-dark-primary);">@Model.CodigoRastreio</span>
-                @if (Model.StatusEntrega == "Entregue")
-                {
-                    <span class="badge badge-mgl-delivered"><i class="bi bi-check-circle-fill me-1"></i> Entregue (POD Confirmado)</span>
-                }
-                else if (Model.StatusEntrega == "Em transporte")
-                {
-                    <span class="badge badge-mgl-transit"><i class="bi bi-truck me-1"></i> Em Transporte</span>
-                }
-                else
-                {
-                    <span class="badge badge-mgl-pending"><i class="bi bi-hourglass-split me-1"></i> Pendente</span>
-                }
-                <span class="signalr-live-badge"><span class="live-dot"></span> SignalR Ativo</span>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <span class="fs-4 fw-extrabold font-monospace cc-reference-code" style="color: var(--mgl-dark-primary);">@Model.CodigoRastreio</span>
+                <partial name="_CommandStatus" model="Model.StatusEntrega" />
             </div>
-            <p class="text-muted small mb-0">Criado em @Model.DataCriacao.ToString("dd/MM/yyyy às HH:mm")</p>
+            <p class="text-muted small mb-0">Criado em @Model.DataCriacao.ToString("dd/MM/yyyy às HH:mm") UTC</p>
         </div>
 
-        <div class="d-flex gap-2">
+        <div class="d-flex flex-wrap gap-2 cc-delivery-actions">
             <a asp-action="Navegar" asp-route-id="@Model.Id" 
                class="btn btn-warning text-dark btn-sm fw-bold shadow-sm">
-                <i class="bi bi-compass me-1"></i> Cockpit GPS Waze
+                <i class="bi bi-compass me-1"></i> Abrir cockpit
             </a>
-            @if (Model.StatusEntrega != "Entregue")
+            @if (Model.StatusEntrega == "Em transporte")
             {
                 <button type="button" class="btn btn-mgl-amber btn-sm fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#modalPOD">
                     <i class="bi bi-patch-check-fill me-1"></i> Finalizar com Assinatura (POD)
@@ -43,12 +35,12 @@
             {
                 <a asp-controller="Roteamento" asp-action="Index" asp-route-entregaId="@Model.Id"
                    class="btn btn-mgl-primary btn-sm fw-semibold shadow-sm">
-                    <i class="bi bi-map-fill me-1"></i> Rota de Caminhão
+                    <i class="bi bi-map-fill me-1"></i> Rota e estimativa
                 </a>
             }
             <a asp-controller="Rastreio" asp-action="Index" asp-route-codigo="@Model.CodigoRastreio" 
                class="btn btn-mgl-teal btn-sm fw-bold shadow-sm">
-                <i class="bi bi-eye-fill me-1"></i> Rastreio ML
+                <i class="bi bi-eye-fill me-1"></i> Consulta pública
             </a>
             <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
                 <i class="bi bi-arrow-left me-1"></i> Voltar
@@ -76,13 +68,13 @@
                         {
                             <li class="mb-1"><strong>Documento (RG/CPF):</strong> @Model.DocumentoRecebedor</li>
                         }
-                        <li class="mb-1"><strong>Data e Hora:</strong> @Model.DataHoraRecebimento?.ToString("dd/MM/yyyy às HH:mm")</li>
+                        <li class="mb-1"><strong>Data e hora (UTC):</strong> @(Model.DataHoraRecebimento?.ToString("dd/MM/yyyy HH:mm") ?? "Não informado")</li>
                     </ul>
                     @if (!string.IsNullOrEmpty(Model.AssinaturaDigitalBase64))
                     {
                         <div class="p-2 bg-light rounded-3 text-center border">
                             <div class="text-muted fs-8 mb-1">Assinatura Digital Coletada:</div>
-                            <img src="@Model.AssinaturaDigitalBase64" alt="Assinatura Digital" style="max-height: 80px; max-width: 100%;" />
+                            <img src="@Model.AssinaturaDigitalBase64" class="cc-signature-preview" alt="Assinatura Digital" style="max-height: 80px; max-width: 100%;" />
                         </div>
                     }
                 </div>
@@ -115,6 +107,7 @@
                 }
             </div>
 
+            <a class="btn btn-outline-secondary mb-3" href="/Rotas/Entrega/@Model.Id">Avaliar restrições e perfil operacional</a>
             <!-- Veículo Pesado e Restrições de Rota -->
             <div class="card-mgl p-4 mb-4">
                 <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
@@ -129,7 +122,9 @@
                     }
                 </div>
 
-                @if (User.IsInRole("Admin"))
+                <p class="small"><strong>Veículo atribuído:</strong> @(Model.Veiculo == null ? "Não atribuído" : $"{Model.Veiculo.Modelo} · {Model.Veiculo.Placa}")</p>
+                <p class="small"><strong>Motorista atribuído:</strong> @(Model.Motorista?.Nome ?? "Não atribuído")</p>
+                @if (canAssign)
                 {
                     <form asp-action="AtribuirVeiculo" method="post" class="mb-3">
                         <input type="hidden" name="entregaId" value="@Model.Id" />
@@ -152,13 +147,13 @@
                 <ul class="list-unstyled fs-8 text-muted mb-0">
                     <li><strong>Gabarito Altura:</strong> @Model.AlturaMetros.ToString("F2") m</li>
                     <li><strong>Largura:</strong> @Model.LarguraMetros.ToString("F2") m</li>
-                    <li><strong>Peso Bruto (PBT):</strong> @Model.PesoToneladas.ToString("F1") toneladas (@Model.QtdEixos eixos)</li>
+                    <li><strong>Massa declarada no cadastro (sem classificação PBT/PBTC):</strong> @Model.PesoToneladas.ToString("F1") toneladas (@Model.QtdEixos eixos)</li>
                     <li><strong>Classificação:</strong> @Model.TipoCarga</li>
                 </ul>
             </div>
 
             <!-- Atribuição de Motorista -->
-            @if (User.IsInRole("Admin"))
+            @if (canAssign)
             {
                 <div class="card-mgl p-4 mb-4">
                     <h5 class="fw-bold border-bottom pb-2 mb-3" style="color: var(--mgl-dark-primary);">
@@ -181,7 +176,7 @@
                             <i class="bi bi-arrow-repeat me-1"></i> Salvar Atribuição de Motorista
                         </button>
                     </form>
-                    @if (Model.MotoristaId.HasValue && Model.VeiculoId.HasValue && Model.StatusEntrega is "Pendente" or "Em transporte")
+                    @if (Model.Motorista is { Ativo: true, Perfil: "Motorista" } && Model.Veiculo is { Ativo: true } && Model.StatusEntrega is "Pendente" or "Em transporte")
                     {
                         <div class="border-top mt-3 pt-3">
                             <p class="small text-muted">Código único, válido por 15 minutos. Entregue diretamente ao motorista.</p>
@@ -205,6 +200,8 @@
 
         <!-- Coluna Direita: Checkpoints de Rastreamento & Adicionar Novo Checkpoint -->
         <div class="col-lg-7">
+            @if (!terminal)
+            {
             <!-- Formulário para Inserir Novo Checkpoint Operacional -->
             <div class="card-mgl p-4 mb-4">
                 <h5 class="fw-bold border-bottom pb-2 mb-3 d-flex align-items-center gap-2" style="color: var(--mgl-dark-primary);">
@@ -221,14 +218,9 @@
                                    placeholder="Ex: Chegou ao Hub de Distribuição Santos" required />
                         </div>
                         <div class="col-md-5">
-                            <label class="form-label fs-7 fw-semibold">Novo Status</label>
-                            <select name="StatusAssociado" class="form-select">
-                                <option value="Em transporte">Em transporte</option>
-                                @if (User.IsInRole("Admin"))
-                                {
-                                    <option value="Pendente">Pendente (No CD)</option>
-                                }
-                            </select>
+                            <span class="form-label fs-7 fw-semibold d-block">Estado registrado</span>
+                            <input type="hidden" name="StatusAssociado" value="@Model.StatusEntrega" />
+                            <partial name="_CommandStatus" model="Model.StatusEntrega" />
                         </div>
                     </div>
 
@@ -264,6 +256,8 @@
                 </form>
             </div>
 
+            }
+
             <!-- Linha do Tempo Atual -->
             <div class="card-mgl p-4">
                 <h5 class="fw-bold border-bottom pb-2 mb-4 d-flex align-items-center gap-2" style="color: var(--mgl-dark-primary);">
@@ -281,7 +275,7 @@
                                 <div class="d-flex justify-content-between align-items-center mb-1">
                                     <strong style="color: var(--mgl-dark-primary);">@ev.Titulo</strong>
                                     <span class="badge bg-light text-secondary border fs-8">
-                                        @ev.DataHora.ToString("dd/MM/yyyy HH:mm")
+                                        @ev.DataHora.ToString("dd/MM/yyyy HH:mm") UTC
                                     </span>
                                 </div>
                                 @if (!string.IsNullOrEmpty(ev.Descricao))
@@ -299,6 +293,7 @@
             </div>
         </div>
     </div>
+</div>
 </div>
 
 <!-- MODAL PARA REGISTRO DE PROOF OF DELIVERY (POD) COM CANVAS DE ASSINATURA -->
@@ -318,7 +313,7 @@
 
                     <div class="mb-3">
                         <label class="form-label fs-7 fw-semibold">Nome Completo de Quem Recebeu *</label>
-                        <input type="text" name="nomeRecebedor" class="form-control" placeholder="Ex: Maria Oliveira Santos" required />
+                        <input type="text" name="nomeRecebedor" class="form-control" placeholder="Ex: Recebedor de demonstração" required />
                     </div>
 
                     <div class="mb-3">
@@ -356,7 +351,10 @@
     </div>
 </div>
 
+<partial name="_GpsHistory" model="Model.Id" />
+
 @section Scripts {
+    <script src="~/js/operational-dashboard.js" asp-append-version="true"></script>
     <script>
         // Setup do Canvas de Assinatura Digital (POD)
         document.addEventListener('DOMContentLoaded', function () {
@@ -422,40 +420,27 @@
                 });
             }
 
-            // Conexão SignalR para atualizações em tempo real
-            const connection = new signalR.HubConnectionBuilder()
-                .withUrl("/trackingHub")
-                .withAutomaticReconnect()
-                .build();
-
-            const joinTrackingGroup = () => connection.invoke("JoinTrackingGroup", "@Model.CodigoRastreio");
-            connection.onreconnected(joinTrackingGroup);
-            connection.start().then(joinTrackingGroup).catch(err => console.error("SignalR Admin:", err));
-
-            connection.on("ReceiveCheckpointUpdate", (data) => {
-                const container = document.getElementById("adminTimelineContainer");
-                if (container) {
-                    const html = `
-                        <div class="timeline-event latest animate__animated animate__fadeInDown">
-                            <div class="timeline-icon-box">
-                                <i class="bi ${data.icone}"></i>
-                            </div>
-                            <div class="timeline-card" style="border-left: 4px solid var(--mgl-teal);">
-                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <strong style="color: var(--mgl-dark-primary);">${data.titulo}</strong>
-                                    <span class="badge bg-light text-secondary border fs-8">${data.dataHora}</span>
-                                </div>
-                                <p class="text-secondary small mb-2">${data.descricao || ''}</p>
-                                <div class="d-flex justify-content-between text-muted fs-8">
-                                    <span><i class="bi bi-geo-alt me-1"></i> ${data.localidade}</span>
-                                    <span class="badge bg-light text-dark border">Status: ${data.status}</span>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                    container.insertAdjacentHTML('afterbegin', html);
-                }
+            // Public notifications are signals to re-query the private Razor view.
+            // Never insert a public DTO as private history or confirmed POD data.
+            const panel = document.getElementById('operationalPanel');
+            const status = document.getElementById('operationalRefreshStatus');
+            const trackingCode = @Json.Serialize(Model.CodigoRastreio);
+            if (typeof signalR === 'undefined') {
+                status.textContent = 'Tempo real indisponível. Consultas automáticas continuam a cada 20 segundos.';
+                return;
+            }
+            const connection = new signalR.HubConnectionBuilder().withUrl('/trackingHub').withAutomaticReconnect().build();
+            const refresh = () => panel.dispatchEvent(new Event('mgl:operation-changed'));
+            const join = () => connection.invoke('JoinTrackingGroup', trackingCode);
+            connection.onreconnecting(() => { status.textContent = 'Reconectando. Dados da última consulta confirmada.'; });
+            connection.onclose(() => { status.textContent = 'Tempo real desconectado. Consultas automáticas continuam.'; });
+            connection.onreconnected(() => join().then(refresh).catch(() => { status.textContent = 'Não foi possível reconectar. Consultas automáticas continuam.'; }));
+            connection.on('ReceiveCheckpointUpdate', data => {
+                if (typeof data?.codigoRastreio === 'string' && data.codigoRastreio.trim().toUpperCase() === trackingCode.trim().toUpperCase()) refresh();
             });
+            connection.start().then(join).then(() => { status.textContent = 'Atualizações conectadas. Alterações serão confirmadas pelo servidor.'; })
+                .catch(() => { status.textContent = 'Tempo real indisponível. Consultas automáticas continuam.'; });
+            window.addEventListener('pagehide', () => connection.stop().catch(() => {}), { once: true });
         });
     </script>
 }

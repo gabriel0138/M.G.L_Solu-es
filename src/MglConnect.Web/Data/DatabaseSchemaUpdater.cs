@@ -1,4 +1,5 @@
 using System.Data;
+using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace MglConnect.Web.Data;
@@ -105,24 +106,41 @@ public static class DatabaseSchemaUpdater
                 await connection.OpenAsync();
             }
 
+            await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.Serializable);
             try
             {
-                await EnsureOperationalTablesAsync(connection, provider);
-                await EnsureColumnAsync(connection, provider, "Pedidos", "ChaveIdempotencia", "string:36");
-                await EnsureColumnAsync(connection, provider, "Pedidos", "Versao", "integer");
-                await EnsureColumnAsync(connection, provider, "Entregas", "AtribuicaoAtiva", "boolean");
-                await EnsureColumnAsync(connection, provider, "Entregas", "Versao", "integer");
-                await ExecuteSqlAsync(connection, provider switch
+                await EnsureOperationalTablesAsync(connection, provider, transaction);
+                await EnsureColumnAsync(connection, provider, "Pedidos", "ChaveIdempotencia", "string:36", nullable: true, transaction: transaction);
+                await EnsureColumnAsync(connection, provider, "Pedidos", "Versao", "integer", transaction: transaction);
+                var assignmentColumnAdded = await EnsureColumnAsync(connection, provider, "Entregas", "AtribuicaoAtiva", "boolean", transaction: transaction);
+                await EnsureColumnAsync(connection, provider, "Entregas", "Versao", "integer", transaction: transaction);
+                foreach (var column in new[] { "UltimaLatitudeGps", "UltimaLongitudeGps", "UltimaPrecisaoGps", "UltimaVelocidadeGps", "UltimaDirecaoGps" })
+                {
+                    await EnsureColumnAsync(connection, provider, "Entregas", column, "double", nullable: true, transaction: transaction);
+                }
+                await EnsureColumnAsync(connection, provider, "Entregas", "UltimoGpsRecebidoEmUtc", "datetime", nullable: true, transaction: transaction);
+                await EnsureColumnAsync(connection, provider, "Entregas", "UltimoGpsCapturadoEmUtc", "datetime", nullable: true, transaction: transaction);
+                await GpsHistorySchemaUpdater.EnsureAsync(connection, provider, transaction);
+                await GpsArchiveSchemaUpdater.EnsureAsync(connection, provider, transaction);
+                await RouteTrustSchemaUpdater.EnsureAsync(connection,provider,transaction);
+                // Only infer old assignments when the flag is first introduced. A later
+                // startup must never reactivate an explicitly deactivated assignment.
+                if (assignmentColumnAdded)
+                {
+                    await ExecuteSqlAsync(connection, provider switch
                 {
                     var name when name.Contains("Sqlite", StringComparison.Ordinal) =>
-                        "UPDATE \"Entregas\" SET \"AtribuicaoAtiva\" = 1 WHERE \"AtribuicaoAtiva\" = 0 AND \"StatusEntrega\" IN ('Pendente', 'Em transporte');",
+                        "UPDATE \"Entregas\" SET \"AtribuicaoAtiva\" = 1 WHERE \"AtribuicaoAtiva\" = 0 AND \"MotoristaId\" IS NOT NULL AND \"VeiculoId\" IS NOT NULL AND \"StatusEntrega\" IN ('Pendente', 'Em transporte');",
                     var name when name.Contains("Npgsql", StringComparison.Ordinal) =>
-                        "UPDATE \"Entregas\" SET \"AtribuicaoAtiva\" = TRUE WHERE \"AtribuicaoAtiva\" = FALSE AND \"StatusEntrega\" IN ('Pendente', 'Em transporte');",
+                        "UPDATE \"Entregas\" SET \"AtribuicaoAtiva\" = TRUE WHERE \"AtribuicaoAtiva\" = FALSE AND \"MotoristaId\" IS NOT NULL AND \"VeiculoId\" IS NOT NULL AND \"StatusEntrega\" IN ('Pendente', 'Em transporte');",
                     var name when name.Contains("SqlServer", StringComparison.Ordinal) =>
-                        "UPDATE [Entregas] SET [AtribuicaoAtiva] = 1 WHERE [AtribuicaoAtiva] = 0 AND [StatusEntrega] IN (N'Pendente', N'Em transporte');",
+                        "UPDATE [Entregas] SET [AtribuicaoAtiva] = 1 WHERE [AtribuicaoAtiva] = 0 AND [MotoristaId] IS NOT NULL AND [VeiculoId] IS NOT NULL AND [StatusEntrega] IN (N'Pendente', N'Em transporte');",
                     _ => throw new InvalidOperationException($"Provedor de banco não suportado para atualização de esquema: {provider}.")
-                });
-                await EnsureOperationalIndexesAsync(connection, provider);
+                }, transaction);
+                }
+                await EnsureOperationalIndexesAsync(connection, provider, transaction);
+                await RelationalIntegrityUpdater.EnsureAsync(context, transaction);
+                await transaction.CommitAsync();
             }
             finally
             {
@@ -135,7 +153,8 @@ public static class DatabaseSchemaUpdater
 
         private static async Task EnsureOperationalTablesAsync(
             System.Data.Common.DbConnection connection,
-            string provider)
+            string provider,
+            DbTransaction transaction)
         {
             var (guid, dateTime, boolean, identity, createPrefix, floating) = provider switch
             {
@@ -197,17 +216,18 @@ public static class DatabaseSchemaUpdater
                         : "CodigosTurnoMotorista";
                     sql = tableSql.Replace("IF OBJECT_ID('{0}', 'U') IS NULL", $"IF OBJECT_ID(N'{tableName}', N'U') IS NULL", StringComparison.Ordinal);
                 }
-                await ExecuteSqlAsync(connection, sql);
+                await ExecuteSqlAsync(connection, sql, transaction);
             }
         }
 
-        private static async Task EnsureColumnAsync(
+        internal static async Task<bool> EnsureColumnAsync(
             System.Data.Common.DbConnection connection,
             string provider,
             string table,
             string column,
             string type,
-            bool nullable = false)
+            bool nullable = false,
+            DbTransaction? transaction = null)
         {
             var closeAfterUpdate = connection.State != ConnectionState.Open;
             if (closeAfterUpdate)
@@ -217,10 +237,9 @@ public static class DatabaseSchemaUpdater
 
             try
             {
-                if (provider.Contains("Sqlite", StringComparison.Ordinal)
-                    && (await ReadSqliteColumnsAsync(connection, table)).Contains(column))
+                if (await ColumnExistsAsync(connection, provider, table, column, transaction))
                 {
-                    return;
+                    return false;
                 }
 
                 var nullSql = nullable ? "NULL" : "NOT NULL";
@@ -236,7 +255,8 @@ public static class DatabaseSchemaUpdater
                             : $"IF COL_LENGTH('{table}', '{column}') IS NULL ALTER TABLE [{table}] ADD [{column}] {GetSqlServerType(type)} NOT NULL CONSTRAINT [DF_{table}_{column}] DEFAULT 0;",
                     _ => throw new InvalidOperationException($"Provedor de banco não suportado para atualização de esquema: {provider}.")
                 };
-                await ExecuteSqlAsync(connection, sql);
+                await ExecuteSqlAsync(connection, sql, transaction);
+                return true;
             }
             finally
             {
@@ -249,13 +269,15 @@ public static class DatabaseSchemaUpdater
 
         private static async Task EnsureOperationalIndexesAsync(
             System.Data.Common.DbConnection connection,
-            string provider)
+            string provider,
+            DbTransaction transaction)
         {
             var statements = provider switch
             {
                 var name when name.Contains("Sqlite", StringComparison.Ordinal) =>
                     new[]
                     {
+                        "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Entregas_PedidoId\" ON \"Entregas\" (\"PedidoId\");",
                         "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_TurnosMotorista_Ativo_MotoristaId\" ON \"TurnosMotorista\" (\"MotoristaId\") WHERE \"Ativo\" = 1;",
                         "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_TurnosMotorista_Ativo_EntregaId\" ON \"TurnosMotorista\" (\"EntregaId\") WHERE \"Ativo\" = 1;",
                         "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_CodigosTurnoMotorista_Ativo_EntregaId\" ON \"CodigosTurnoMotorista\" (\"EntregaId\") WHERE \"UsadoEmUtc\" IS NULL AND \"CanceladoEmUtc\" IS NULL;",
@@ -267,6 +289,7 @@ public static class DatabaseSchemaUpdater
                 var name when name.Contains("Npgsql", StringComparison.Ordinal) =>
                     new[]
                     {
+                        "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Entregas_PedidoId\" ON \"Entregas\" (\"PedidoId\");",
                         "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_TurnosMotorista_Ativo_MotoristaId\" ON \"TurnosMotorista\" (\"MotoristaId\") WHERE \"Ativo\" = TRUE;",
                         "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_TurnosMotorista_Ativo_EntregaId\" ON \"TurnosMotorista\" (\"EntregaId\") WHERE \"Ativo\" = TRUE;",
                         "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_CodigosTurnoMotorista_Ativo_EntregaId\" ON \"CodigosTurnoMotorista\" (\"EntregaId\") WHERE \"UsadoEmUtc\" IS NULL AND \"CanceladoEmUtc\" IS NULL;",
@@ -278,6 +301,7 @@ public static class DatabaseSchemaUpdater
                 var name when name.Contains("SqlServer", StringComparison.Ordinal) =>
                     new[]
                     {
+                        "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Entregas_PedidoId' AND object_id = OBJECT_ID('Entregas')) CREATE UNIQUE INDEX [IX_Entregas_PedidoId] ON [Entregas] ([PedidoId]);",
                         "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_TurnosMotorista_Ativo_MotoristaId') CREATE UNIQUE INDEX [IX_TurnosMotorista_Ativo_MotoristaId] ON [TurnosMotorista] ([MotoristaId]) WHERE [Ativo] = 1;",
                         "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_TurnosMotorista_Ativo_EntregaId') CREATE UNIQUE INDEX [IX_TurnosMotorista_Ativo_EntregaId] ON [TurnosMotorista] ([EntregaId]) WHERE [Ativo] = 1;",
                         "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CodigosTurnoMotorista_Ativo_EntregaId') CREATE UNIQUE INDEX [IX_CodigosTurnoMotorista_Ativo_EntregaId] ON [CodigosTurnoMotorista] ([EntregaId]) WHERE [UsadoEmUtc] IS NULL AND [CanceladoEmUtc] IS NULL;",
@@ -295,7 +319,7 @@ public static class DatabaseSchemaUpdater
                     ? statement.Replace("\"Ativo\" = 1", "\"Ativo\" = TRUE", StringComparison.Ordinal)
                         .Replace("\"AtribuicaoAtiva\" = 1", "\"AtribuicaoAtiva\" = TRUE", StringComparison.Ordinal)
                     : statement;
-                await ExecuteSqlAsync(connection, sql);
+                await ExecuteSqlAsync(connection, sql, transaction);
             }
         }
 
@@ -319,9 +343,11 @@ public static class DatabaseSchemaUpdater
 
     private static async Task<HashSet<string>> ReadSqliteColumnsAsync(
         System.Data.Common.DbConnection connection,
-        string table = "Pedidos")
+        string table = "Pedidos",
+        DbTransaction? transaction = null)
     {
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = $"PRAGMA table_info('{table}');";
         await using var reader = await command.ExecuteReaderAsync();
         var columns = new HashSet<string>(StringComparer.Ordinal);
@@ -353,33 +379,68 @@ public static class DatabaseSchemaUpdater
 
     private static async Task ExecuteSqlAsync(
         System.Data.Common.DbConnection connection,
-        string sql)
+        string sql,
+        DbTransaction? transaction = null)
     {
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = sql;
         await command.ExecuteNonQueryAsync();
     }
 
+    private static async Task<bool> ColumnExistsAsync(DbConnection connection, string provider,
+        string table, string column, DbTransaction? transaction)
+    {
+        if (provider.Contains("Sqlite", StringComparison.Ordinal))
+            return (await ReadSqliteColumnsAsync(connection, table, transaction)).Contains(column);
+
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = provider.Contains("SqlServer", StringComparison.Ordinal)
+            ? "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(@table) AND name = @column"
+            : "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = @table AND column_name = @column";
+        foreach (var (name, value) in new[] { ("@table", table), ("@column", column) })
+        {
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = name;
+            parameter.Value = value;
+            command.Parameters.Add(parameter);
+        }
+        return Convert.ToInt32(await command.ExecuteScalarAsync()) > 0;
+    }
+
     private static string GetSqliteType(string type) =>
         type.StartsWith("string:", StringComparison.Ordinal) ? "TEXT"
+        : type == "guid" ? "TEXT"
+        : type == "text" ? "TEXT"
         : type == "boolean" ? "INTEGER"
         : type == "integer" ? "INTEGER"
         : type == "date" ? "DATE"
+        : type == "double" ? "REAL"
+        : type == "datetime" ? "TEXT"
         : "NUMERIC";
 
     private static string GetPostgresType(string type) =>
         type.StartsWith("string:", StringComparison.Ordinal)
             ? $"character varying({type["string:".Length..]})"
+            : type == "guid" ? "uuid"
+            : type == "text" ? "text"
             : type == "boolean" ? "boolean"
             : type == "integer" ? "integer"
             : type == "date" ? "date"
+            : type == "double" ? "DOUBLE PRECISION"
+            : type == "datetime" ? "timestamp with time zone"
             : "numeric(5,2)";
 
     private static string GetSqlServerType(string type) =>
         type.StartsWith("string:", StringComparison.Ordinal)
             ? $"nvarchar({type["string:".Length..]})"
+            : type == "guid" ? "uniqueidentifier"
+            : type == "text" ? "nvarchar(max)"
             : type == "boolean" ? "bit"
             : type == "integer" ? "int"
             : type == "date" ? "date"
+            : type == "double" ? "float"
+            : type == "datetime" ? "datetime2"
             : "decimal(5,2)";
 }

@@ -43,7 +43,9 @@ public sealed class DriverShiftService : IDriverShiftService
         if (delivery?.MotoristaId is not int driverId
             || delivery.VeiculoId is not int vehicleId
             || !delivery.AtribuicaoAtiva
-            || delivery.StatusEntrega is "Entregue" or "Cancelada")
+            || delivery.StatusEntrega is "Entregue" or "Cancelada"
+            || !await _context.Usuarios.AnyAsync(user => user.Id == driverId && user.Ativo && user.Perfil == "Motorista", cancellationToken)
+            || !await _context.Veiculos.AnyAsync(vehicle => vehicle.Id == vehicleId && vehicle.Ativo, cancellationToken))
         {
             return new(false, null, null, "A entrega precisa ter motorista e veículo ativos atribuídos.");
         }
@@ -149,7 +151,8 @@ public sealed class DriverShiftService : IDriverShiftService
             if (delivery == null
                 || !delivery.AtribuicaoAtiva
                 || delivery.VeiculoId == null
-                || delivery.StatusEntrega is "Entregue" or "Cancelada")
+                || delivery.StatusEntrega is "Entregue" or "Cancelada"
+                || !await _context.Veiculos.AnyAsync(vehicle => vehicle.Id == delivery.VeiculoId && vehicle.Ativo, cancellationToken))
             {
                 return new(DriverShiftStartStatus.AssignmentUnavailable);
             }
@@ -250,7 +253,7 @@ public sealed class DriverShiftService : IDriverShiftService
                 DataHora = now,
                 Titulo = "Turno iniciado pelo motorista",
                 Descricao = "Início de operação autenticado e auditado.",
-                Localidade = $"{delivery.CidadeDestino} - {delivery.EstadoDestino}",
+                Localidade = "Localização não informada no início do turno",
                 StatusAssociado = "Em transporte",
                 Icone = "bi-truck"
             });

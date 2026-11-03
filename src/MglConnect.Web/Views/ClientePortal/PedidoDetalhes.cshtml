@@ -1,287 +1,313 @@
 @model MglConnect.Web.Models.Pedido
 @{
-    ViewData["Title"] = "Detalhes do Pedido " + Model.NumeroPedido;
+    ViewData["Title"] = "Pedido " + Model.NumeroPedido;
+    var br = System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
     var entrega = Model.Entrega;
-
-    int stepNumber = 1;
-    int progressPercent = 10;
-    if (entrega != null)
+    var estado = Model.Status == "Cancelado" ? Model.Status : entrega?.StatusEntrega ?? Model.Status;
+    var eventos = entrega?.EventosRastreio.OrderByDescending(ev => ev.DataHora).ToList() ?? new List<MglConnect.Web.Models.EventoRastreio>();
+    var temPod = entrega is { StatusEntrega: "Entregue" } && !string.IsNullOrWhiteSpace(entrega.NomeRecebedor);
+    var descricaoEstado = estado switch
     {
-        var eventos = entrega.EventosRastreio.ToList();
-        var status = entrega.StatusEntrega;
-        if (status == "Entregue")
-        {
-            stepNumber = 5;
-            progressPercent = 100;
-        }
-        else if (eventos.Any(e => e.Titulo.Contains("Saiu para entrega", StringComparison.OrdinalIgnoreCase)))
-        {
-            stepNumber = 4;
-            progressPercent = 75;
-        }
-        else if (status == "Em transporte" || eventos.Count > 1)
-        {
-            stepNumber = 3;
-            progressPercent = 50;
-        }
-        else
-        {
-            stepNumber = 2;
-            progressPercent = 25;
-        }
-    }
+        "Cancelado" => "Este pedido foi cancelado. O histórico registrado permanece disponível para consulta.",
+        "Cancelada" => "A entrega foi cancelada. O histórico registrado permanece disponível para consulta.",
+        "Entregue" => "A entrega foi concluída. Os dados de recebimento aparecem quando registrados pela operação.",
+        "Em transporte" => "Sua carga está em transporte. Consulte as movimentações registradas pela operação.",
+        "Pendente" => "A entrega está pendente e aguarda o início do transporte.",
+        "EmProcessamento" => "Sua solicitação está em processamento pela operação.",
+        "ComEntregaAtribuida" => "O pedido está vinculado a uma entrega para despacho.",
+        "Concluido" => "Este pedido está concluído.",
+        "Registrado" => "Sua solicitação foi registrada e aguarda validação operacional.",
+        _ => "Consulte o estado e o histórico disponíveis para esta operação."
+    };
 }
 
-<div class="container py-4">
-    <!-- Topbar -->
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
-        <div>
-            <div class="d-flex align-items-center gap-2">
-                <h3 class="fw-extrabold mb-0" style="color: var(--mgl-dark-primary);">Pedido @Model.NumeroPedido</h3>
+<div class="cc-dashboard cc-portal">
+    <p id="clientOrderConnectionStatus" class="cc-refresh-status" role="status" aria-live="polite">Dados da última consulta. Atualização automática a cada 20 segundos enquanto esta tela estiver visível.</p>
+    <div id="clientOrderDetails" data-tracking-code="@entrega?.CodigoRastreio" data-has-delivery="@(entrega != null ? "true" : "false")">
+        <header class="cc-section-heading cc-page-heading">
+            <div>
+                <span class="cc-eyebrow">COMMAND CENTER / SEU PEDIDO</span>
+                <h1 id="clientOrderDetailsHeading" class="cc-portal-detail-title">Pedido @Model.NumeroPedido</h1>
+                <p>Registrado em <time datetime="@Model.DataPedido.ToString("yyyy-MM-ddTHH:mm:ssZ")">@Model.DataPedido.ToString("dd/MM/yyyy HH:mm") UTC</time></p>
+            </div>
+            <div class="cc-quick-actions">
+                <a asp-action="Pedidos" class="btn btn-outline-secondary"><i class="bi bi-arrow-left" aria-hidden="true"></i> Meus pedidos</a>
                 @if (entrega != null)
                 {
-                    <span class="signalr-live-badge">
-                        <span class="live-dot"></span> Sincronizado ao Vivo
-                    </span>
+                    <a asp-controller="Rastreio" asp-action="Index" asp-route-codigo="@entrega.CodigoRastreio" class="btn btn-mgl-primary"><i class="bi bi-geo-alt" aria-hidden="true"></i> Abrir rastreamento</a>
                 }
             </div>
-            <p class="text-muted small mb-0">Emissão: @Model.DataPedido.ToString("dd/MM/yyyy às HH:mm")</p>
-        </div>
-        <div class="d-flex gap-2">
+        </header>
+
+        <section class="cc-panel cc-portal-order-overview" aria-labelledby="clientOrderStateHeading">
+            <div class="cc-portal-order-state">
+                <span class="cc-trip-icon"><i class="bi bi-box-seam" aria-hidden="true"></i></span>
+                <div>
+                    <h2 id="clientOrderStateHeading">@(estado == "Entregue" ? "Pacote Entregue com Sucesso" : entrega != null ? "Estado atual do envio" : "Estado atual do pedido")</h2>
+                    <partial name="_CommandStatus" model="estado" />
+                    <p>@descricaoEstado</p>
+                </div>
+            </div>
             @if (entrega != null)
             {
-                <a asp-controller="Rastreio" asp-action="Index" asp-route-codigo="@entrega.CodigoRastreio" 
-                   class="btn btn-mgl-teal btn-sm fw-bold">
-                    <i class="bi bi-box-arrow-up-right me-1"></i> Rastreio Público ML
-                </a>
+                <div class="cc-portal-order-reference">
+                    <span class="cc-portal-detail-label">Código de rastreamento</span>
+                    <div class="cc-portal-tracking">
+                        <strong class="font-monospace">@entrega.CodigoRastreio</strong>
+                        <button type="button" class="btn btn-outline-secondary btn-sm cc-portal-copy" data-tracking-code="@entrega.CodigoRastreio" onclick="copiarCodigoRastreio(this.dataset.trackingCode, this)" aria-label="Copiar código de rastreamento" title="Copiar código de rastreamento"><i class="bi bi-clipboard" aria-hidden="true"></i></button>
+                    </div>
+                    <small>Entrega #@entrega.Id</small>
+                </div>
             }
-            <a asp-action="Pedidos" class="btn btn-outline-secondary btn-sm">
-                <i class="bi bi-arrow-left me-1"></i> Voltar aos Pedidos
-            </a>
-        </div>
-    </div>
+            else
+            {
+                <div class="cc-portal-order-reference"><span class="cc-portal-detail-label">Rastreamento</span><strong>@(Model.Status is "Cancelado" or "Concluido" ? "Sem entrega vinculada" : "Aguardando despacho")</strong><small>Nenhuma entrega vinculada a este pedido.</small></div>
+            }
+        </section>
 
-    @if (entrega != null)
-    {
-        <!-- Stepper Visual -->
-        <div class="card-mgl p-4 mb-4">
-            <div class="d-flex flex-wrap justify-content-between align-items-center border-bottom pb-3 mb-3">
-                <div>
-                    <span class="text-muted fs-8 text-uppercase fw-bold">Status Atual do Envio</span>
-                    <h4 class="fw-extrabold mb-0" style="color: var(--mgl-dark-primary);">
-                        @if (entrega.StatusEntrega == "Entregue")
-                        {
-                            <span class="text-success"><i class="bi bi-check-circle-fill me-1"></i> Pacote Entregue com Sucesso</span>
-                        }
-                        else if (entrega.StatusEntrega == "Em transporte")
-                        {
-                            <span style="color: var(--mgl-teal);"><i class="bi bi-truck me-1"></i> Em Transporte Rodoviário</span>
-                        }
-                        else
-                        {
-                            <span style="color: var(--mgl-amber);"><i class="bi bi-box-seam me-1"></i> No Centro Logístico</span>
-                        }
-                    </h4>
-                </div>
-                <div class="text-end">
-                    <span class="text-muted fs-8 text-uppercase fw-bold">Código de Rastreamento</span>
-                    <div class="fs-5 fw-extrabold font-monospace" style="color: var(--mgl-accent-2);">
-                        @entrega.CodigoRastreio
-                    </div>
-                </div>
-            </div>
-
-            <!-- Stepper -->
-            <div class="px-2 px-md-4 py-2">
-                <div class="ml-stepper">
-                    <div class="ml-stepper-progress" style="width: calc(@progressPercent% - 50px);"></div>
-                    
-                    <div class="ml-step-item @(stepNumber >= 1 ? (stepNumber == 1 ? "active" : "completed") : "")">
-                        <div class="ml-step-circle"><i class="bi bi-check-lg"></i></div>
-                        <div class="ml-step-title">Pedido Confirmado</div>
-                        <div class="ml-step-subtitle">@Model.DataPedido.ToString("dd/MM")</div>
-                    </div>
-
-                    <div class="ml-step-item @(stepNumber >= 2 ? (stepNumber == 2 ? "active" : "completed") : "")">
-                        <div class="ml-step-circle"><i class="bi @(stepNumber > 2 ? "bi-check-lg" : "bi-box-seam")"></i></div>
-                        <div class="ml-step-title">No Centro de Cargas</div>
-                        <div class="ml-step-subtitle">Bipado e Triado</div>
-                    </div>
-
-                    <div class="ml-step-item @(stepNumber >= 3 ? (stepNumber == 3 ? "active" : "completed") : "")">
-                        <div class="ml-step-circle"><i class="bi @(stepNumber > 3 ? "bi-check-lg" : "bi-truck")"></i></div>
-                        <div class="ml-step-title">Em Transferência</div>
-                        <div class="ml-step-subtitle">Corredor Rodoviário</div>
-                    </div>
-
-                    <div class="ml-step-item @(stepNumber >= 4 ? (stepNumber == 4 ? "active" : "completed") : "")">
-                        <div class="ml-step-circle"><i class="bi @(stepNumber > 4 ? "bi-check-lg" : "bi-bicycle")"></i></div>
-                        <div class="ml-step-title">Saiu para Entrega</div>
-                        <div class="ml-step-subtitle">Última Milha</div>
-                    </div>
-
-                    <div class="ml-step-item @(stepNumber == 5 ? "completed" : "")">
-                        <div class="ml-step-circle"><i class="bi bi-patch-check-fill"></i></div>
-                        <div class="ml-step-title">Entregue</div>
-                        <div class="ml-step-subtitle">@(entrega.DataEntregaRealizada?.ToString("dd/MM") ?? "Final")</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="row g-4">
-            <!-- Timeline de Checkpoints -->
-            <div class="col-lg-7">
-                <div class="card-mgl p-4">
-                    <h5 class="fw-bold mb-4" style="color: var(--mgl-dark-primary);">
-                        <i class="bi bi-clock-history me-2" style="color: var(--mgl-teal);"></i> Linha do Tempo da Carga
-                    </h5>
-
-                    <div class="tracking-timeline" id="timelineContainer">
-                        @foreach (var ev in entrega.EventosRastreio.OrderByDescending(e => e.DataHora))
-                        {
-                            <div class="timeline-event">
-                                <div class="timeline-icon-box">
-                                    <i class="bi @ev.Icone"></i>
-                                </div>
-                                <div class="timeline-card">
-                                    <div class="d-flex justify-content-between align-items-center mb-1">
-                                        <strong style="color: var(--mgl-dark-primary);">@ev.Titulo</strong>
-                                        <span class="badge bg-light text-secondary border fs-8">
-                                            @ev.DataHora.ToString("dd/MM/yyyy HH:mm")
-                                        </span>
-                                    </div>
-                                    @if (!string.IsNullOrEmpty(ev.Descricao))
-                                    {
-                                        <p class="text-secondary small mb-2">@ev.Descricao</p>
-                                    }
-                                    <div class="text-muted fs-8">
-                                        <i class="bi bi-geo-alt me-1"></i> @ev.Localidade
-                                    </div>
-                                </div>
-                            </div>
-                        }
-                    </div>
-                </div>
-            </div>
-
-            <!-- Dados da Carga, POD e Rota -->
-            <div class="col-lg-5">
-                <!-- COMPROVANTE DIGITAL DE ENTREGA (POD) SE ENTREGUE -->
-                @if (entrega.StatusEntrega == "Entregue" && !string.IsNullOrEmpty(entrega.NomeRecebedor))
-                {
-                    <div class="card-mgl p-4 mb-4 border-success" style="border-width: 2px;">
-                        <div class="d-flex align-items-center gap-2 mb-3">
-                            <i class="bi bi-patch-check-fill fs-3 text-success"></i>
-                            <div>
-                                <h6 class="fw-bold text-success mb-0">Comprovante Digital de Entrega (POD)</h6>
-                                <span class="fs-8 text-muted">Validação Biométrica / Assinatura</span>
-                            </div>
-                        </div>
-                        <ul class="list-unstyled fs-7 mb-3">
-                            <li class="mb-1"><strong>Recebedor:</strong> @entrega.NomeRecebedor</li>
-                            @if (!string.IsNullOrEmpty(entrega.DocumentoRecebedor))
+        <div class="cc-portal-detail-grid">
+            <div class="cc-portal-detail-stack">
+                <section class="cc-panel" aria-labelledby="clientOrderCargoHeading">
+                    <header class="cc-panel-header"><h2 id="clientOrderCargoHeading">Sua carga</h2></header>
+                    <div class="cc-panel-body">
+                        <p class="cc-portal-cargo-description">@Model.Descricao</p>
+                        <dl class="cc-portal-detail-data">
+                            <div><dt>Valor declarado da mercadoria</dt><dd>@Model.ValorTotal.ToString("C", br)</dd></div>
+                            <div><dt>Peso da carga</dt><dd>@Model.PesoKg.ToString("N1", br) kg</dd></div>
+                            <div><dt>Tipo de carga</dt><dd>@Model.TipoCarga</dd></div>
+                            <div><dt>Veículo atribuído</dt><dd>@(entrega?.Veiculo?.Modelo ?? "Não atribuído")</dd></div>
+                            @if (Model.AlturaCargaMetros.HasValue)
                             {
-                                <li class="mb-1"><strong>Documento (RG/CPF):</strong> @entrega.DocumentoRecebedor</li>
+                                <div><dt>Altura da carga</dt><dd>@Model.AlturaCargaMetros.Value.ToString("N2", br) m</dd></div>
                             }
-                            <li class="mb-1"><strong>Data e Hora:</strong> @entrega.DataHoraRecebimento?.ToString("dd/MM/yyyy às HH:mm")</li>
-                        </ul>
-                        @if (!string.IsNullOrEmpty(entrega.AssinaturaDigitalBase64))
-                        {
-                            <div class="p-2 bg-light rounded-3 text-center border">
-                                <div class="text-muted fs-8 mb-1">Assinatura Digital Coletada:</div>
-                                <img src="@entrega.AssinaturaDigitalBase64" alt="Assinatura Digital" style="max-height: 70px; max-width: 100%;" />
+                            @if (Model.LarguraCargaMetros.HasValue)
+                            {
+                                <div><dt>Largura da carga</dt><dd>@Model.LarguraCargaMetros.Value.ToString("N2", br) m</dd></div>
+                            }
+                            @if (Model.ComprimentoCargaMetros.HasValue)
+                            {
+                                <div><dt>Comprimento da carga</dt><dd>@Model.ComprimentoCargaMetros.Value.ToString("N2", br) m</dd></div>
+                            }
+                        </dl>
+                    </div>
+                </section>
+
+                <section class="cc-panel" aria-labelledby="clientOrderRouteHeading">
+                    <header class="cc-panel-header"><div><h2 id="clientOrderRouteHeading">Coleta e destino</h2><p>Endereços informados para esta operação.</p></div></header>
+                    <div class="cc-panel-body cc-portal-addresses">
+                        <section aria-labelledby="clientOrderPickupHeading">
+                            <span class="cc-trip-icon"><i class="bi bi-geo" aria-hidden="true"></i></span>
+                            <div>
+                                <h3 id="clientOrderPickupHeading">Coleta</h3>
+                                <address>
+                                    @if (!string.IsNullOrWhiteSpace(Model.OrigemEndereco))
+                                    {
+                                        <span>@Model.OrigemEndereco, @Model.OrigemNumero</span>
+                                        @if (!string.IsNullOrWhiteSpace(Model.OrigemBairro)) { <span>@Model.OrigemBairro</span> }
+                                        <span>@Model.OrigemCidade / @Model.OrigemEstado</span>
+                                        @if (!string.IsNullOrWhiteSpace(Model.OrigemCep)) { <span>CEP: @Model.OrigemCep</span> }
+                                    }
+                                    else
+                                    {
+                                        <span>Endereço de coleta não informado.</span>
+                                    }
+                                </address>
                             </div>
-                        }
+                        </section>
+                        <section aria-labelledby="clientOrderDestinationHeading">
+                            <span class="cc-trip-icon"><i class="bi bi-geo-alt" aria-hidden="true"></i></span>
+                            <div>
+                                <h3 id="clientOrderDestinationHeading">Destino</h3>
+                                <address>
+                                    @if (entrega != null)
+                                    {
+                                        <strong>@entrega.DestinatarioNome</strong>
+                                        <span>@entrega.EnderecoDestino, @entrega.NumeroDestino @entrega.ComplementoDestino</span>
+                                        @if (!string.IsNullOrWhiteSpace(entrega.BairroDestino)) { <span>@entrega.BairroDestino</span> }
+                                        <span>@entrega.CidadeDestino / @entrega.EstadoDestino</span>
+                                        <span>CEP: @entrega.CepDestino</span>
+                                    }
+                                    else if (!string.IsNullOrWhiteSpace(Model.DestinoEndereco))
+                                    {
+                                        <span>@Model.DestinoEndereco, @Model.DestinoNumero</span>
+                                        @if (!string.IsNullOrWhiteSpace(Model.DestinoBairro)) { <span>@Model.DestinoBairro</span> }
+                                        <span>@Model.DestinoCidade / @Model.DestinoEstado</span>
+                                        @if (!string.IsNullOrWhiteSpace(Model.DestinoCep)) { <span>CEP: @Model.DestinoCep</span> }
+                                    }
+                                    else
+                                    {
+                                        <span>Endereço de destino não informado.</span>
+                                    }
+                                </address>
+                            </div>
+                        </section>
                     </div>
+                </section>
+
+                @if (temPod && entrega != null)
+                {
+                    <section class="cc-panel cc-portal-pod" aria-labelledby="clientOrderPodHeading">
+                        <header class="cc-panel-header"><div><h2 id="clientOrderPodHeading"><i class="bi bi-patch-check" aria-hidden="true"></i> Comprovante de entrega</h2><p>Recebimento registrado nesta operação.</p></div><a asp-action="Comprovante" asp-route-id="@Model.Id">Baixar PDF <i class="bi bi-download" aria-hidden="true"></i></a></header>
+                        <div class="cc-panel-body">
+                            <dl class="cc-portal-detail-data">
+                                <div><dt>Recebedor</dt><dd>@entrega.NomeRecebedor</dd></div>
+                                @if (!string.IsNullOrWhiteSpace(entrega.DocumentoRecebedor))
+                                {
+                                    <div><dt>Documento do recebedor</dt><dd>@entrega.DocumentoRecebedor</dd></div>
+                                }
+                                @if (entrega.DataHoraRecebimento.HasValue)
+                                {
+                                    <div><dt>Recebido em (UTC)</dt><dd>@entrega.DataHoraRecebimento.Value.ToString("dd/MM/yyyy HH:mm")</dd></div>
+                                }
+                            </dl>
+                            @if (!string.IsNullOrWhiteSpace(entrega.AssinaturaDigitalBase64))
+                            {
+                                <figure class="cc-portal-signature"><figcaption>Assinatura coletada no recebimento</figcaption><img src="@entrega.AssinaturaDigitalBase64" alt="Assinatura registrada no comprovante de entrega" /></figure>
+                            }
+                        </div>
+                    </section>
                 }
-
-                <!-- Detalhes do Pedido e Destino -->
-                <div class="card-mgl p-4 mb-4">
-                    <h6 class="fw-bold mb-3" style="color: var(--mgl-dark-primary);">
-                        <i class="bi bi-geo-alt text-primary me-1"></i> Endereço de Destino
-                    </h6>
-                    <div class="fs-7 text-muted">
-                        <strong class="d-block text-dark">@entrega.DestinatarioNome</strong>
-                        @entrega.EnderecoDestino, @entrega.NumeroDestino @(string.IsNullOrEmpty(entrega.ComplementoDestino) ? "" : $"({entrega.ComplementoDestino})")<br />
-                        @entrega.BairroDestino • @entrega.CidadeDestino / @entrega.EstadoDestino<br />
-                        <strong>CEP:</strong> @entrega.CepDestino
-                    </div>
-                </div>
-
-                <!-- Detalhes da Carga e Roteamento Pesado -->
-                <div class="card-mgl p-4">
-                    <h6 class="fw-bold mb-3" style="color: var(--mgl-dark-primary);">
-                        <i class="bi bi-box-seam me-1" style="color: var(--mgl-teal);"></i> Especificações Técnicas de Transporte
-                    </h6>
-                    <ul class="list-unstyled fs-7 mb-0">
-                        <li class="mb-2 pb-2 border-bottom d-flex justify-content-between">
-                            <span class="text-muted">Valor Total da Carga:</span>
-                            <strong style="color: var(--mgl-dark-primary);">R$ @Model.ValorTotal.ToString("N2")</strong>
-                        </li>
-                        <li class="mb-2 pb-2 border-bottom d-flex justify-content-between">
-                            <span class="text-muted">Peso Registrado:</span>
-                            <span>@Model.PesoKg.ToString("F1") kg</span>
-                        </li>
-                        <li class="mb-2 pb-2 border-bottom d-flex justify-content-between">
-                            <span class="text-muted">Veículo Designado:</span>
-                            <span>@(entrega.Veiculo?.Modelo ?? "Caminhão Pesado de Frota")</span>
-                        </li>
-                        <li class="mb-2 pb-2 border-bottom d-flex justify-content-between">
-                            <span class="text-muted">Gabarito de Altura:</span>
-                            <span>@entrega.AlturaMetros.ToString("F2") m</span>
-                        </li>
-                        <li class="d-flex justify-content-between">
-                            <span class="text-muted">Classificação de Carga:</span>
-                            <span class="badge bg-light text-dark border">@entrega.TipoCarga</span>
-                        </li>
-                    </ul>
-                </div>
+                else if (entrega?.StatusEntrega == "Entregue")
+                {
+                    <div class="cc-data-note"><i class="bi bi-info-circle" aria-hidden="true"></i><p>A entrega está concluída, mas os dados de recebimento ainda não estão disponíveis neste pedido.</p></div>
+                }
             </div>
+
+            <section class="cc-panel" aria-labelledby="clientOrderTimelineHeading">
+                <header class="cc-panel-header"><div><h2 id="clientOrderTimelineHeading">Histórico de movimentações</h2><p>Registros da operação · Horários em UTC</p></div></header>
+                <div class="cc-panel-body">
+                    <ol class="cc-timeline cc-portal-order-timeline" id="timelineContainer">
+                        @foreach (var ev in eventos)
+                        {
+                            <li>
+                                <time datetime="@ev.DataHora.ToString("yyyy-MM-ddTHH:mm:ssZ")">@ev.DataHora.ToString("dd/MM/yyyy HH:mm")</time>
+                                <strong>@ev.Titulo</strong>
+                                @if (!string.IsNullOrWhiteSpace(ev.Descricao)) { <p>@ev.Descricao</p> }
+                                @if (!string.IsNullOrWhiteSpace(ev.Localidade)) { <small><i class="bi bi-geo-alt" aria-hidden="true"></i> @ev.Localidade</small> }
+                            </li>
+                        }
+                        <li><time datetime="@Model.DataPedido.ToString("yyyy-MM-ddTHH:mm:ssZ")">@Model.DataPedido.ToString("dd/MM/yyyy HH:mm")</time><strong>Pedido registrado</strong><p>Solicitação criada para análise operacional.</p></li>
+                    </ol>
+                    @if (eventos.Count == 0)
+                    {
+                        <p class="cc-portal-form-hint cc-portal-timeline-note">As próximas movimentações aparecerão quando forem registradas pela operação.</p>
+                    }
+                </div>
+            </section>
         </div>
-    }
+    @if (entrega != null) { <partial name="_GpsHistory" model="entrega.Id" /> }
+</div>
 </div>
 
+
 @section Scripts {
-    @if (entrega != null)
-    {
-        <script>
-            // Conexão SignalR em Tempo Real
-            const connection = new signalR.HubConnectionBuilder()
-                .withUrl("/trackingHub")
-                .withAutomaticReconnect()
-                .build();
-
-            const joinTrackingGroup = () => connection.invoke("JoinTrackingGroup", "@entrega.CodigoRastreio");
-            connection.onreconnected(joinTrackingGroup);
-            connection.start().then(joinTrackingGroup).then(() => {
-                console.log("Conectado ao grupo SignalR para o código: @entrega.CodigoRastreio");
-            }).catch(err => console.error("Erro SignalR:", err));
-
-            connection.on("ReceiveCheckpointUpdate", (data) => {
-                // Atualização instantânea em tempo real sem refresh
-                const container = document.getElementById("timelineContainer");
-                if (container) {
-                    const newEventHtml = `
-                        <div class="timeline-event latest animate__animated animate__fadeInDown">
-                            <div class="timeline-icon-box">
-                                <i class="bi ${data.icone}"></i>
-                            </div>
-                            <div class="timeline-card" style="border-left: 4px solid var(--mgl-teal);">
-                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <strong style="color: var(--mgl-dark-primary);">${data.titulo}</strong>
-                                    <span class="badge bg-light text-secondary border fs-8">${data.dataHora}</span>
-                                </div>
-                                <p class="text-secondary small mb-2">${data.descricao || ''}</p>
-                                <div class="text-muted fs-8">
-                                    <i class="bi bi-geo-alt me-1"></i> ${data.localidade}
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                    container.insertAdjacentHTML('afterbegin', newEventHtml);
+    <script>
+        (() => {
+            const panel = document.getElementById('clientOrderDetails');
+            const status = document.getElementById('clientOrderConnectionStatus');
+            if (!panel || !status) return;
+            let running = false;
+            let stopped = false;
+            let connecting = false;
+            let connection;
+            let joinedCode = '';
+            let timer;
+            const showStatus = (message, error = false) => {
+                status.textContent = message;
+                status.dataset.state = error ? 'error' : 'ready';
+            };
+            const connectLive = async () => {
+                const code = panel.dataset.trackingCode;
+                if (stopped || connecting || !code || !window.signalR) return;
+                if (!connection) {
+                    connection = new signalR.HubConnectionBuilder().withUrl('/trackingHub').withAutomaticReconnect().build();
+                    connection.on('ReceiveCheckpointUpdate', () => refresh());
+                    connection.onreconnecting(() => {
+                        if (!stopped) showStatus('Reconectando as atualizações. Os dados exibem a última consulta.', true);
+                    });
+                    connection.onreconnected(async () => {
+                        joinedCode = '';
+                        await connectLive();
+                        await refresh();
+                    });
+                    connection.onclose(() => {
+                        if (!stopped) showStatus('Conexão em tempo real indisponível. As consultas automáticas continuam.', true);
+                    });
                 }
+                connecting = true;
+                try {
+                    if (connection.state === signalR.HubConnectionState.Disconnected) await connection.start();
+                    if (connection.state === signalR.HubConnectionState.Connected && joinedCode !== code) {
+                        if (joinedCode) {
+                            await connection.invoke('LeaveTrackingGroup', joinedCode);
+                            joinedCode = '';
+                        }
+                        await connection.invoke('JoinTrackingGroup', code);
+                        joinedCode = code;
+                        showStatus('Atualizações conectadas. Alterações serão confirmadas na sua conta.');
+                    }
+                } catch {
+                    if (!stopped) showStatus('Atualização em tempo real indisponível. As consultas automáticas continuam.', true);
+                } finally { connecting = false; }
+            };
+            async function refresh() {
+                if (running || stopped || document.hidden || !navigator.onLine) return;
+                running = true;
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 10000);
+                try {
+                    const response = await fetch(location.pathname, { credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
+                    if (response.redirected || response.status === 401 || response.status === 403 || response.status === 404) {
+                        stopped = true;
+                        clearInterval(timer);
+                        panel.replaceChildren();
+                        showStatus('Sua sessão perdeu acesso a este pedido. Entre novamente para consultar suas operações.', true);
+                        if (connection) await connection.stop();
+                        return;
+                    }
+                    if (!response.ok) throw new Error('Refresh failed');
+                    const parsed = new DOMParser().parseFromString(await response.text(), 'text/html');
+                    const updated = parsed.getElementById('clientOrderDetails');
+                    if (!updated) {
+                        stopped = true;
+                        clearInterval(timer);
+                        panel.replaceChildren();
+                        showStatus('O acesso a este pedido não pôde ser confirmado. Entre novamente para consultar suas operações.', true);
+                        if (connection) await connection.stop();
+                        return;
+                    }
+                    if (panel.contains(document.activeElement)) {
+                        showStatus('Dados consultados. A exibição será renovada ao sair da seleção atual.');
+                        return;
+                    }
+                    panel.dataset.trackingCode = updated.dataset.trackingCode;
+                    panel.dataset.hasDelivery = updated.dataset.hasDelivery;
+                    const previousGps = panel.querySelector('[data-gps-history]');
+                    const nextGps = updated.querySelector('[data-gps-history]');
+                    if (previousGps && nextGps && previousGps.dataset.delivery === nextGps.dataset.delivery)
+                        nextGps.replaceWith(previousGps);
+                    panel.replaceChildren(...updated.childNodes);
+                    showStatus('Dados atualizados na sua conta. A próxima consulta será automática.');
+                    await connectLive();
+                } catch {
+                    if (!stopped) showStatus('Não foi possível atualizar. Os dados exibem a última consulta confirmada.', true);
+                } finally {
+                    clearTimeout(timeout);
+                    running = false;
+                }
+            }
+            timer = setInterval(refresh, 20000);
+            document.addEventListener('visibilitychange', refresh);
+            window.addEventListener('online', refresh);
+            window.addEventListener('offline', () => {
+                if (!stopped) showStatus('Sem conexão. Os dados exibem a última consulta confirmada.', true);
             });
-        </script>
-    }
+            window.addEventListener('pagehide', () => {
+                stopped = true;
+                clearInterval(timer);
+                if (connection) connection.stop().catch(() => {});
+            });
+            connectLive();
+        })();
+    </script>
 }

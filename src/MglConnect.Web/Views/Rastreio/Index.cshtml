@@ -1,386 +1,319 @@
 @model MglConnect.Web.ViewModels.RastreioViewModel
 @{
-    ViewData["Title"] = "Rastreamento de Encomenda - Estilo Mercado Livre";
-
-    int stepNumber = 1;
-    int progressPercent = 10;
-
-    if (Model.Entrega != null)
+    ViewData["Title"] = "Rastreamento";
+    var entrega = Model.Entrega;
+    var status = entrega?.StatusEntrega ?? "Em atualização";
+    var statusTone = status switch
     {
-        var eventos = Model.Entrega.EventosRastreio.ToList();
-        var status = Model.Entrega.StatusEntrega;
-
-        if (status == "Entregue")
-        {
-            stepNumber = 5;
-            progressPercent = 100;
-        }
-        else if (eventos.Any(e => e.Titulo.Contains("Saiu para entrega", StringComparison.OrdinalIgnoreCase)))
-        {
-            stepNumber = 4;
-            progressPercent = 75;
-        }
-        else if (status == "Em transporte" || eventos.Count > 1)
-        {
-            stepNumber = 3;
-            progressPercent = 50;
-        }
-        else
-        {
-            stepNumber = 2;
-            progressPercent = 25;
-        }
-    }
+        "Entregue" => "delivered",
+        "Em transporte" => "transit",
+        "Pendente" => "pending",
+        "Cancelada" => "cancelled",
+        _ => "neutral"
+    };
+    var statusTitle = status switch
+    {
+        "Entregue" => "Entrega concluída",
+        "Em transporte" => "A caminho do destino",
+        "Pendente" => "Preparando sua entrega",
+        "Cancelada" => "Entrega cancelada",
+        _ => "Atualização operacional"
+    };
+    var statusDetail = status switch
+    {
+        "Entregue" when entrega?.DataEntregaRealizada is DateTime data => $"Conclusão confirmada em {data:dd/MM/yyyy 'às' HH:mm} UTC.",
+        "Entregue" => "A operação confirmou a conclusão desta entrega.",
+        "Em transporte" => "Acompanhe as atualizações operacionais ao longo da viagem.",
+        "Pendente" => "Acompanhe aqui a próxima atualização da operação.",
+        "Cancelada" => "Consulte sua conta para obter mais informações sobre esta entrega.",
+        _ => "Consulte novamente para acompanhar o estado da entrega."
+    };
+    var etapa = status switch { "Pendente" => 1, "Em transporte" => 2, "Entregue" => 3, _ => 0 };
 }
 
-<div class="container py-4">
-    <!-- Barra Superior de Consulta -->
-    <div class="card-mgl p-4 mb-4">
-        <div class="row align-items-center">
-            <div class="col-lg-5 mb-3 mb-lg-0">
-                <h4 class="fw-bold mb-1 d-flex align-items-center gap-2" style="color: var(--mgl-dark-primary);">
-                    <i class="bi bi-geo-alt-fill text-warning"></i> Rastreamento de Encomendas
-                </h4>
-                <p class="text-muted small mb-0">Consulte o status operacional detalhado e a timeline em tempo real.</p>
-            </div>
-            <div class="col-lg-7">
-                <form asp-controller="Rastreio" asp-action="Index" method="get">
-                    <div class="input-group">
-                        <input type="text" name="codigo" value="@Model.CodigoBuscado" 
-                               class="form-control form-control-lg fs-6" 
-                               placeholder="Exemplo: MGL-BR100201..." required />
-                        <button class="btn btn-mgl-teal fw-bold px-4" type="submit">
-                            <i class="bi bi-search me-1"></i> Consultar Carga
-                        </button>
-                    </div>
-                </form>
-            </div>
+@section Styles {
+    <link rel="stylesheet" href="~/css/command-tracking.css" asp-append-version="true" />
+}
+
+<section class="cc-tracking" aria-labelledby="trackingPageTitle">
+    <header class="cc-section-heading cc-tracking-page-heading">
+        <div>
+            <span class="cc-eyebrow"><i class="bi bi-radar" aria-hidden="true"></i> Acompanhamento de entregas</span>
+            <h1 id="trackingPageTitle">Cada etapa, conectada.</h1>
+            <p>Consulte o status da sua entrega e acompanhe as atualizações compartilhadas pela operação.</p>
         </div>
-    </div>
+        <span class="cc-tracking-public-label"><i class="bi bi-shield-check" aria-hidden="true"></i> Consulta pública protegida</span>
+    </header>
+
+    <section class="cc-panel cc-tracking-search" aria-labelledby="trackingSearchTitle">
+        <div class="cc-tracking-search-copy">
+            <span class="cc-tracking-surface-icon"><i class="bi bi-box-seam" aria-hidden="true"></i></span>
+            <div><h2 id="trackingSearchTitle">Rastrear uma entrega</h2><p>Use o código informado no seu pedido.</p></div>
+        </div>
+        <form action="@Url.Content("~/Rastreio")" method="get" role="search">
+            <label for="trackingCode" class="form-label">Código de rastreamento</label>
+            <div class="cc-tracking-query">
+                <input id="trackingCode" type="text" name="codigo" value="@Model.CodigoBuscado" class="form-control"
+                       maxlength="64" autocomplete="off" autocapitalize="characters" spellcheck="false"
+                       placeholder="Digite o código da entrega" required />
+                <button class="btn btn-primary" type="submit"><i class="bi bi-search" aria-hidden="true"></i> Consultar entrega</button>
+            </div>
+        </form>
+    </section>
 
     @if (!Model.Pesquisado)
     {
-        <!-- Estado inicial: Nenhuma busca feita -->
-        <div class="text-center py-5">
-            <div class="display-1 text-muted opacity-25 mb-3">
-                <i class="bi bi-box-seam"></i>
+        <section class="cc-panel cc-tracking-empty" aria-labelledby="trackingEmptyTitle">
+            <span class="cc-tracking-empty-icon"><i class="bi bi-geo-alt" aria-hidden="true"></i></span>
+            <span class="cc-eyebrow">Do início à conclusão</span>
+            <h2 id="trackingEmptyTitle">Sua entrega tem uma história.</h2>
+            <p>Informe o código para consultar o estado atual, a previsão disponível e a linha do tempo da sua entrega.</p>
+            <div class="cc-tracking-empty-features">
+                <span><i class="bi bi-clock-history" aria-hidden="true"></i> Histórico operacional</span>
+                <span><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Atualizações conectadas</span>
+                <span><i class="bi bi-shield-lock" aria-hidden="true"></i> Dados pessoais protegidos</span>
             </div>
-            <h5 class="fw-bold text-secondary">Acompanhe seu pacote passo a passo</h5>
-            <p class="text-muted small max-w-md mx-auto">
-                Insira o código de rastreamento fornecido pela M.G.L Logística para acompanhar a linha do tempo e a rota de entrega.
-            </p>
-            <div class="mt-4">
-                <span class="text-muted small me-2">Dica: teste um dos códigos cadastrados:</span>
-                <a asp-action="Index" asp-route-codigo="MGL-BR100201" class="btn btn-outline-primary btn-sm me-2">MGL-BR100201 (Em Rota)</a>
-                <a asp-action="Index" asp-route-codigo="MGL-BR200302" class="btn btn-outline-success btn-sm">MGL-BR200302 (Entregue c/ POD)</a>
-            </div>
-        </div>
+        </section>
     }
-    else if (Model.Entrega == null)
+    else if (entrega == null)
     {
-        <!-- Pacote Não Encontrado -->
-        <div class="card-mgl p-5 text-center">
-            <div class="text-warning mb-3 display-4">
-                <i class="bi bi-exclamation-triangle"></i>
-            </div>
-            <h4 class="fw-bold text-dark">Código de Rastreio Não Localizado</h4>
-            <p class="text-muted small mb-4">@Model.MensagemErro</p>
-            <div>
-                <a asp-action="Index" class="btn btn-outline-secondary btn-sm px-4">Tentar novamente</a>
-            </div>
-        </div>
+        <section class="cc-panel cc-tracking-empty cc-tracking-error" aria-labelledby="trackingErrorTitle">
+            <span class="cc-tracking-empty-icon"><i class="bi bi-search" aria-hidden="true"></i></span>
+            <h2 id="trackingErrorTitle">Não foi possível consultar a entrega</h2>
+            <p role="status">@Model.MensagemErro</p>
+            <a href="@Url.Content("~/Rastreio")" class="btn btn-outline-secondary"><i class="bi bi-arrow-left" aria-hidden="true"></i> Fazer nova consulta</a>
+        </section>
     }
     else
     {
-        <!-- VISUALIZAÇÃO ESTILO MERCADO LIVRE -->
-        <div class="card-mgl p-4 p-md-5 mb-4">
-            
-            <!-- Cabeçalho do Rastreio -->
-            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 border-bottom pb-4 mb-4">
-                <div>
-                    @if (Model.Entrega.StatusEntrega == "Entregue")
-                    {
-                        <span class="badge badge-mgl-delivered px-3 py-2 rounded-pill fw-bold fs-7 mb-2 d-inline-block">
-                            <i class="bi bi-patch-check-fill me-1"></i> Pacote Entregue com Sucesso (POD Arquivado)
-                        </span>
-                        <h2 class="fw-extrabold text-success mb-1">
-                            Entregue em @Model.Entrega.DataEntregaRealizada?.ToString("dd/MM/yyyy às HH:mm")
-                        </h2>
-                    }
-                    else if (Model.Entrega.StatusEntrega == "Em transporte")
-                    {
-                        <span class="badge badge-mgl-transit px-3 py-2 rounded-pill fw-bold fs-7 mb-2 d-inline-block">
-                            <i class="bi bi-truck me-1"></i> Carga em Trânsito
-                        </span>
-                        <h2 class="fw-extrabold mb-1" style="color: var(--mgl-dark-primary);">
-                            Previsão de entrega: @(Model.Entrega.DataPrevisaoEntrega?.ToString("dd 'de' MMMM") ?? "Em breve")
-                        </h2>
-                    }
-                    else
-                    {
-                        <span class="badge badge-mgl-pending px-3 py-2 rounded-pill fw-bold fs-7 mb-2 d-inline-block">
-                            <i class="bi bi-hourglass-split me-1"></i> Em Preparação no Centro Logístico
-                        </span>
-                        <h2 class="fw-extrabold mb-1" style="color: var(--mgl-dark-primary);">
-                            Aguardando despacho rodoviário
-                        </h2>
-                    }
-
-                    <div class="text-muted fs-7 d-flex align-items-center gap-2 flex-wrap">
-                        <span>Destino: <strong class="text-dark">@Model.Entrega.CidadeDestino/@Model.Entrega.EstadoDestino</strong></span> • 
-                        <span>Destinatário: <span class="text-dark">@Model.Entrega.DestinatarioNome</span></span>
-                        <span class="signalr-live-badge"><span class="live-dot"></span> WebSocket Conectado</span>
-                    </div>
+        <section class="cc-panel cc-tracking-result" aria-labelledby="publicTrackingHeadline">
+            <div class="cc-tracking-result-header">
+                <div class="cc-tracking-result-intro">
+                    <span id="publicDeliveryStatus" class="cc-status" data-status="@statusTone">@status</span>
+                    <h2 id="publicTrackingHeadline">@statusTitle</h2>
+                    <p id="publicTrackingDetail">@statusDetail</p>
+                    <span id="trackingConnectionStatus" class="cc-tracking-connection" role="status" aria-live="polite" data-state="connecting">Conectando atualizações…</span>
                 </div>
-
-                <!-- Card de Código e Botão Copiar -->
-                <div class="p-3 rounded-4 border text-end" style="background-color: var(--mgl-bg);">
-                    <div class="text-muted fs-8 text-uppercase fw-bold mb-1">Código de Rastreamento</div>
-                    <div class="d-flex align-items-center gap-2">
-                        <span class="fs-5 fw-extrabold tracking-wider font-monospace" style="color: var(--mgl-accent-2);">@Model.Entrega.CodigoRastreio</span>
-                        <button type="button" class="btn btn-outline-primary btn-sm" 
-                                onclick="copiarCodigoRastreio('@Model.Entrega.CodigoRastreio', this)" title="Copiar código">
-                            <i class="bi bi-clipboard"></i>
-                        </button>
-                    </div>
+                <div class="cc-tracking-code-card">
+                    <span class="cc-tracking-label">Código de rastreamento</span>
+                    <div><strong>@entrega.CodigoRastreio</strong><button id="copyTrackingCode" type="button" class="cc-icon-button" data-tracking-code="@entrega.CodigoRastreio" aria-label="Copiar código de rastreamento" title="Copiar código"><i class="bi bi-clipboard" aria-hidden="true"></i></button></div>
                 </div>
             </div>
 
-            <!-- STEPPER HORIZONTAL ESTILO MERCADO LIVRE -->
-            <div class="px-2 px-md-4 py-2">
-                <div class="ml-stepper">
-                    <div class="ml-stepper-progress" style="width: calc(@progressPercent% - 50px);"></div>
-                    
-                    <div class="ml-step-item @(stepNumber >= 1 ? (stepNumber == 1 ? "active" : "completed") : "")">
-                        <div class="ml-step-circle">
-                            <i class="bi @(stepNumber > 1 ? "bi-check-lg" : "bi-file-earmark-check")"></i>
-                        </div>
-                        <div class="ml-step-title">Pedido Confirmado</div>
-                        <div class="ml-step-subtitle">@Model.Entrega.DataCriacao.ToString("dd/MM")</div>
-                    </div>
+            <ol id="publicTrackingStages" class="cc-tracking-stages" aria-label="Etapas da entrega" hidden="@(etapa == 0)">
+                <li data-stage="1" data-stage-state="@(etapa > 1 ? "completed" : etapa == 1 ? "current" : "upcoming")" aria-current="@(etapa == 1 ? "step" : null)">
+                    <span class="cc-tracking-stage-icon"><i class="bi bi-box-seam" aria-hidden="true"></i></span><div><strong>Em preparação</strong><small>Estado operacional</small></div>
+                </li>
+                <li data-stage="2" data-stage-state="@(etapa > 2 ? "completed" : etapa == 2 ? "current" : "upcoming")" aria-current="@(etapa == 2 ? "step" : null)">
+                    <span class="cc-tracking-stage-icon"><i class="bi bi-truck" aria-hidden="true"></i></span><div><strong>Em transporte</strong><small>A caminho do destino</small></div>
+                </li>
+                <li data-stage="3" data-stage-state="@(etapa == 3 ? "current" : "upcoming")" aria-current="@(etapa == 3 ? "step" : null)">
+                    <span class="cc-tracking-stage-icon"><i class="bi bi-check2-circle" aria-hidden="true"></i></span><div><strong>Entrega concluída</strong><small>Confirmação da operação</small></div>
+                </li>
+            </ol>
+            <p id="publicTrackingStagesNote" class="cc-tracking-stages-note" hidden="@(etapa == 0)">As etapas representam o status da entrega, sem estimar distância percorrida.</p>
+        </section>
 
-                    <div class="ml-step-item @(stepNumber >= 2 ? (stepNumber == 2 ? "active" : "completed") : "")">
-                        <div class="ml-step-circle">
-                            <i class="bi @(stepNumber > 2 ? "bi-check-lg" : "bi-box-seam")"></i>
-                        </div>
-                        <div class="ml-step-title">No Centro Logístico</div>
-                        <div class="ml-step-subtitle">Bipado & Conferido</div>
-                    </div>
-
-                    <div class="ml-step-item @(stepNumber >= 3 ? (stepNumber == 3 ? "active" : "completed") : "")">
-                        <div class="ml-step-circle">
-                            <i class="bi @(stepNumber > 3 ? "bi-check-lg" : "bi-truck")"></i>
-                        </div>
-                        <div class="ml-step-title">A Caminho</div>
-                        <div class="ml-step-subtitle">Corredor Rodoviário</div>
-                    </div>
-
-                    <div class="ml-step-item @(stepNumber >= 4 ? (stepNumber == 4 ? "active" : "completed") : "")">
-                        <div class="ml-step-circle">
-                            <i class="bi @(stepNumber > 4 ? "bi-check-lg" : "bi-bicycle")"></i>
-                        </div>
-                        <div class="ml-step-title">Saiu para Entrega</div>
-                        <div class="ml-step-subtitle">Com o motorista</div>
-                    </div>
-
-                    <div class="ml-step-item @(stepNumber == 5 ? "completed" : "")">
-                        <div class="ml-step-circle">
-                            <i class="bi bi-patch-check-fill"></i>
-                        </div>
-                        <div class="ml-step-title">Entregue</div>
-                        <div class="ml-step-subtitle">@(Model.Entrega.DataEntregaRealizada?.ToString("dd/MM") ?? "Destino final")</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- CONTEÚDO PRINCIPAL: TIMELINE + DETALHES -->
-        <div class="row g-4">
-            <!-- Coluna Esquerda: Linha do Tempo de Checkpoints (Mercado Livre Timeline) -->
-            <div class="col-lg-8">
-                <div class="card-mgl p-4">
-                    <h5 class="fw-bold mb-4 d-flex align-items-center gap-2" style="color: var(--mgl-dark-primary);">
-                        <i class="bi bi-clock-history text-primary"></i> Histórico de Movimentações em Tempo Real
-                    </h5>
-
-                    <div class="tracking-timeline" id="publicTimeline">
+        <div class="cc-tracking-content">
+            <section class="cc-panel" aria-labelledby="trackingTimelineTitle">
+                <header class="cc-panel-header"><div><h2 id="trackingTimelineTitle"><i class="bi bi-clock-history" aria-hidden="true"></i> Linha do tempo</h2><p>Eventos operacionais compartilhados para esta entrega.</p></div><span class="cc-tracking-label">Mais recentes primeiro</span></header>
+                <div class="cc-panel-body">
+                    <div class="tracking-timeline cc-tracking-timeline" id="publicTimeline" role="list" aria-label="Histórico da entrega" aria-live="polite" aria-relevant="additions">
                         @{
-                            var eventosOrdenados = Model.Entrega.EventosRastreio.OrderByDescending(e => e.DataHora).ToList();
+                            var eventosOrdenados = entrega.EventosRastreio.OrderByDescending(e => e.DataHora).ToList();
                             bool isFirst = true;
                         }
-
+                        @if (eventosOrdenados.Count == 0)
+                        {
+                            <p id="publicTimelineEmpty" class="cc-tracking-timeline-empty">Nenhum evento compartilhado até o momento. Novas atualizações aparecerão aqui.</p>
+                        }
                         @foreach (var ev in eventosOrdenados)
                         {
-                            var classeDestaque = isFirst 
-                                ? (Model.Entrega.StatusEntrega == "Entregue" ? "delivered" : "latest") 
-                                : "";
-                            
-                            <div class="timeline-event @classeDestaque">
-                                <div class="timeline-icon-box">
-                                    <i class="bi @ev.Icone"></i>
-                                </div>
+                            <article class="timeline-event cc-tracking-event @(isFirst ? "latest" : "")" role="listitem" data-event-time="@DateTime.SpecifyKind(ev.DataHora, DateTimeKind.Utc).ToString("O")" data-event-status="@ev.StatusAssociado">
+                                <span class="timeline-icon-box"><i class="bi @ev.Icone" aria-hidden="true"></i></span>
                                 <div class="timeline-card">
-                                    <div class="d-flex flex-wrap justify-content-between align-items-center mb-1">
-                                        <h6 class="fw-bold mb-0" style="color: var(--mgl-dark-primary);">@ev.Titulo</h6>
-                                        <span class="badge bg-light text-secondary border fs-8">
-                                            @ev.DataHora.ToString("dd/MM/yyyy HH:mm")
-                                        </span>
-                                    </div>
+                                    <div class="cc-tracking-event-heading"><h3>@ev.Titulo</h3><time datetime="@DateTime.SpecifyKind(ev.DataHora, DateTimeKind.Utc).ToString("O")">@ev.DataHora.ToString("dd/MM/yyyy HH:mm") UTC</time></div>
                                     @if (!string.IsNullOrWhiteSpace(ev.Descricao))
                                     {
-                                        <p class="text-secondary small mb-2">@ev.Descricao</p>
+                                        <p>@ev.Descricao</p>
                                     }
-                                    <div class="d-flex align-items-center gap-2 text-muted fs-8">
-                                        <i class="bi bi-geo-alt"></i>
-                                        <span>@ev.Localidade</span>
-                                    </div>
+                                    <span class="cc-tracking-event-location"><i class="bi bi-geo-alt" aria-hidden="true"></i> @ev.Localidade</span>
                                 </div>
-                            </div>
-
+                            </article>
                             isFirst = false;
                         }
                     </div>
                 </div>
-            </div>
+            </section>
 
-            <!-- Coluna Direita: Informações do Pacote, POD e Destino -->
-            <div class="col-lg-4">
-                <!-- Comprovante Digital de Entrega (POD) -->
-                @if (Model.Entrega.StatusEntrega == "Entregue" && !string.IsNullOrEmpty(Model.Entrega.NomeRecebedor))
-                {
-                    <div class="card-mgl p-4 mb-4 border-success" style="border-width: 2px;">
-                        <h6 class="fw-bold text-success mb-3 d-flex align-items-center gap-2">
-                            <i class="bi bi-patch-check-fill fs-5"></i> Comprovante de Entrega (POD)
-                        </h6>
-                        <ul class="list-unstyled fs-7 mb-3">
-                            <li class="mb-1"><strong>Recebido por:</strong> @Model.Entrega.NomeRecebedor</li>
-                            @if (!string.IsNullOrEmpty(Model.Entrega.DocumentoRecebedor))
+            <aside class="cc-tracking-aside" aria-label="Informações públicas da entrega">
+                <section class="cc-panel" aria-labelledby="trackingSummaryTitle">
+                    <header class="cc-panel-header"><h2 id="trackingSummaryTitle">Resumo da entrega</h2><i class="bi bi-box-seam" aria-hidden="true"></i></header>
+                    <div class="cc-panel-body">
+                        <div class="cc-tracking-route-summary" aria-label="Localidades da entrega">
+                            @if (!string.IsNullOrWhiteSpace(entrega.CidadeOrigem))
                             {
-                                <li class="mb-1"><strong>Documento:</strong> @Model.Entrega.DocumentoRecebedor</li>
+                                <div><span class="cc-tracking-route-point" aria-hidden="true"></span><div><span class="cc-tracking-label">Origem</span><strong>@entrega.CidadeOrigem / @entrega.EstadoOrigem</strong></div></div>
                             }
-                            <li class="mb-1"><strong>Data e Hora:</strong> @Model.Entrega.DataHoraRecebimento?.ToString("dd/MM/yyyy HH:mm")</li>
-                        </ul>
-                        @if (!string.IsNullOrEmpty(Model.Entrega.AssinaturaDigitalBase64))
-                        {
-                            <div class="p-2 bg-light rounded-3 text-center border">
-                                <div class="text-muted fs-8 mb-1">Assinatura Digital Coletada:</div>
-                                <img src="@Model.Entrega.AssinaturaDigitalBase64" alt="Assinatura Digital" style="max-height: 70px; max-width: 100%;" />
-                            </div>
-                        }
+                            <div><span class="cc-tracking-route-point is-destination" aria-hidden="true"></span><div><span class="cc-tracking-label">Destino</span><strong>@entrega.CidadeDestino / @entrega.EstadoDestino</strong></div></div>
+                        </div>
+                        <dl class="cc-tracking-details">
+                            <div><dt>Destinatário</dt><dd>@entrega.DestinatarioNome</dd></div>
+                            <div><dt>Registro da entrega</dt><dd>@entrega.DataCriacao.ToString("dd/MM/yyyy")</dd></div>
+                            <div><dt>Previsão de entrega</dt><dd>@(entrega.DataPrevisaoEntrega?.ToString("dd/MM/yyyy") ?? "Ainda não informada")</dd></div>
+                        </dl>
                     </div>
-                }
-
-                <!-- Card de Destino -->
-                <div class="card-mgl p-4 mb-4">
-                    <h6 class="fw-bold mb-3 d-flex align-items-center gap-2" style="color: var(--mgl-dark-primary);">
-                        <i class="bi bi-house-door text-warning"></i> Endereço de Entrega
-                    </h6>
-                    <div class="fs-7 mb-2">
-                        <strong class="d-block text-dark">@Model.Entrega.DestinatarioNome</strong>
-                        @if (!string.IsNullOrEmpty(Model.Entrega.DestinatarioDocumento))
-                        {
-                            <span class="text-muted fs-8">Doc: @Model.Entrega.DestinatarioDocumento</span>
-                        }
-                    </div>
-                    <div class="text-muted fs-7">
-                        @Model.Entrega.EnderecoDestino, @Model.Entrega.NumeroDestino 
-                        @if (!string.IsNullOrEmpty(Model.Entrega.ComplementoDestino))
-                        {
-                            <span>- @Model.Entrega.ComplementoDestino</span>
-                        }
-                        <br />
-                        @Model.Entrega.BairroDestino • @Model.Entrega.CidadeDestino / @Model.Entrega.EstadoDestino
-                        <br />
-                        <span class="font-monospace">CEP: @Model.Entrega.CepDestino</span>
-                    </div>
-                </div>
-
-                <!-- Card da Operação / Pedido -->
-                <div class="card-mgl p-4">
-                    <h6 class="fw-bold mb-3 d-flex align-items-center gap-2" style="color: var(--mgl-dark-primary);">
-                        <i class="bi bi-info-circle text-primary"></i> Detalhes da Operação
-                    </h6>
-                    <ul class="list-unstyled fs-7 mb-0">
-                        <li class="mb-2 pb-2 border-bottom d-flex justify-content-between">
-                            <span class="text-muted">Transportadora:</span>
-                            <strong style="color: var(--mgl-dark-primary);">M.G.L Logística S.A.</strong>
-                        </li>
-                        @if (Model.Entrega.Pedido != null)
-                        {
-                            <li class="mb-2 pb-2 border-bottom d-flex justify-content-between">
-                                <span class="text-muted">Número do Pedido:</span>
-                                <strong style="color: var(--mgl-dark-primary);">@Model.Entrega.Pedido.NumeroPedido</strong>
-                            </li>
-                            <li class="mb-2 pb-2 border-bottom d-flex justify-content-between">
-                                <span class="text-muted">Peso do Pacote:</span>
-                                <span>@Model.Entrega.Pedido.PesoKg.ToString("F1") kg</span>
-                            </li>
-                        }
-                        @if (Model.Entrega.Motorista != null)
-                        {
-                            <li class="mb-2 pb-2 border-bottom d-flex justify-content-between">
-                                <span class="text-muted">Motorista:</span>
-                                <span>@Model.Entrega.Motorista.Nome</span>
-                            </li>
-                        }
-                        @if (Model.Entrega.Veiculo != null)
-                        {
-                            <li class="mb-2 pb-2 border-bottom d-flex justify-content-between">
-                                <span class="text-muted">Veículo Frota:</span>
-                                <span>@Model.Entrega.Veiculo.Modelo</span>
-                            </li>
-                        }
-                        <li class="d-flex justify-content-between">
-                            <span class="text-muted">Data de Postagem:</span>
-                            <span>@Model.Entrega.DataCriacao.ToString("dd/MM/yyyy")</span>
-                        </li>
-                    </ul>
-                </div>
-            </div>
+                </section>
+                <section class="cc-panel cc-tracking-privacy" aria-labelledby="trackingPrivacyTitle">
+                    <span class="cc-tracking-surface-icon"><i class="bi bi-shield-lock" aria-hidden="true"></i></span>
+                    <h2 id="trackingPrivacyTitle">Mais detalhes, na sua conta.</h2>
+                    <p>Endereço completo e comprovante de entrega estão disponíveis na área autenticada, conforme seu perfil de acesso.</p>
+                    <a asp-controller="Account" asp-action="Login" class="btn btn-outline-secondary"><i class="bi bi-person-circle" aria-hidden="true"></i> Acessar minha conta</a>
+                </section>
+            </aside>
         </div>
     }
-</div>
+</section>
 
 @section Scripts {
     @if (Model.Entrega != null)
     {
         <script>
-            // Escuta WebSocket SignalR para Atualização ao Vivo
-            const connection = new signalR.HubConnectionBuilder()
-                .withUrl("/trackingHub")
-                .withAutomaticReconnect()
-                .build();
-
-            const joinTrackingGroup = () => connection.invoke("JoinTrackingGroup", "@Model.Entrega.CodigoRastreio");
-            connection.onreconnected(joinTrackingGroup);
-            connection.on("ReceiveCheckpointUpdate", (data) => {
+            const trackingCode = @Json.Serialize(Model.Entrega.CodigoRastreio);
+            const normalizedTrackingCode = trackingCode.trim().toUpperCase();
+            const copyButton = document.getElementById("copyTrackingCode");
+            copyButton?.addEventListener("click", () => copiarCodigoRastreio(trackingCode, copyButton));
+            const connectionStatus = document.getElementById("trackingConnectionStatus");
+            const showConnectionStatus = (text, state) => {
+                if (!connectionStatus) return;
+                connectionStatus.textContent = text;
+                connectionStatus.dataset.state = state;
+            };
+            const statusConfig = {
+                "Pendente": { tone: "pending", title: "Preparando sua entrega", detail: "Acompanhe aqui a próxima atualização da operação.", stage: 1, icon: "bi-box-seam" },
+                "Em transporte": { tone: "transit", title: "A caminho do destino", detail: "Acompanhe as atualizações operacionais ao longo da viagem.", stage: 2, icon: "bi-truck" },
+                "Entregue": { tone: "delivered", title: "Entrega concluída", detail: "A operação confirmou a conclusão desta entrega.", stage: 3, icon: "bi-patch-check-fill" },
+                "Cancelada": { tone: "cancelled", title: "Entrega cancelada", detail: "Consulte sua conta para obter mais informações sobre esta entrega.", stage: 0, icon: "bi-x-circle" },
+                "Em atualização": { tone: "neutral", title: "Atualização operacional", detail: "Consulte novamente para acompanhar o estado da entrega.", stage: 0, icon: "bi-info-circle" }
+            };
+            const safeStatus = status => Object.hasOwn(statusConfig, status) ? status : "Em atualização";
+            const matchesTrackingCode = code => typeof code === "string" && code.trim().toUpperCase() === normalizedTrackingCode;
+            // SQLite returns UTC DateTime values without a Kind suffix. Treat the
+            // established public contract as UTC consistently in DOM/API/hub data.
+            const publicTimestamp = value => {
+                if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,7})?(?:Z|[+-]\d{2}:\d{2})?$/i.test(value)) return NaN;
+                return Date.parse(/(?:Z|[+-]\d{2}:\d{2})$/i.test(value) ? value : value + "Z");
+            };
+            const applyPublicStatus = status => {
+                const currentStatus = safeStatus(status);
+                const config = statusConfig[currentStatus];
+                const badge = document.getElementById("publicDeliveryStatus");
+                badge.textContent = currentStatus;
+                badge.dataset.status = config.tone;
+                document.getElementById("publicTrackingHeadline").textContent = config.title;
+                document.getElementById("publicTrackingDetail").textContent = config.detail;
+                const stages = document.getElementById("publicTrackingStages");
+                stages.hidden = config.stage === 0;
+                document.getElementById("publicTrackingStagesNote").hidden = config.stage === 0;
+                stages.querySelectorAll("[data-stage]").forEach(item => {
+                    const stage = Number(item.dataset.stage);
+                    item.dataset.stageState = stage < config.stage ? "completed" : stage === config.stage ? "current" : "upcoming";
+                    if (stage === config.stage) item.setAttribute("aria-current", "step");
+                    else item.removeAttribute("aria-current");
+                });
+            };
+            let liveVersion = 0;
+            const upsertCheckpoint = (data, updateStatus = true) => {
                 const container = document.getElementById("publicTimeline");
-                if (container) {
-                    const newEventHtml = `
-                        <div class="timeline-event latest animate__animated animate__fadeInDown">
-                            <div class="timeline-icon-box">
-                                <i class="bi ${data.icone}"></i>
-                            </div>
-                            <div class="timeline-card" style="border-left: 4px solid var(--mgl-teal);">
-                                <div class="d-flex flex-wrap justify-content-between align-items-center mb-1">
-                                    <h6 class="fw-bold mb-0" style="color: var(--mgl-dark-primary);">${data.titulo}</h6>
-                                    <span class="badge bg-light text-secondary border fs-8">${data.dataHora}</span>
-                                </div>
-                                <p class="text-secondary small mb-2">${data.descricao || ''}</p>
-                                <div class="d-flex align-items-center gap-2 text-muted fs-8">
-                                    <i class="bi bi-geo-alt"></i>
-                                    <span>${data.localidade}</span>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                    container.insertAdjacentHTML('afterbegin', newEventHtml);
-                }
-            });
+                const eventDate = publicTimestamp(data?.dataHora);
+                if (!container || !matchesTrackingCode(data?.codigoRastreio) || !Number.isFinite(eventDate)) return false;
+                const status = safeStatus(data.status);
+                const entries = Array.from(container.querySelectorAll("[data-event-time]"));
+                if (entries.some(entry => publicTimestamp(entry.dataset.eventTime) === eventDate && entry.dataset.eventStatus === status)) return false;
+                const latestTime = Math.max(0, ...entries.map(entry => publicTimestamp(entry.dataset.eventTime)).filter(Number.isFinite));
+                const event = document.createElement("article");
+                event.className = "timeline-event cc-tracking-event";
+                event.setAttribute("role", "listitem");
+                event.dataset.eventTime = new Date(eventDate).toISOString();
+                event.dataset.eventStatus = status;
+                const iconBox = document.createElement("span");
+                iconBox.className = "timeline-icon-box";
+                const icon = document.createElement("i");
+                icon.className = `bi ${statusConfig[status].icon}`;
+                icon.setAttribute("aria-hidden", "true");
+                iconBox.append(icon);
+                const card = document.createElement("div");
+                card.className = "timeline-card";
+                const heading = document.createElement("div");
+                heading.className = "cc-tracking-event-heading";
+                const title = document.createElement("h3");
+                title.textContent = typeof data.titulo === "string" ? data.titulo : "Atualização operacional";
+                const date = document.createElement("time");
+                date.dateTime = new Date(eventDate).toISOString();
+                date.textContent = new Date(eventDate).toLocaleString('pt-BR', { timeZone: 'UTC' }) + ' UTC';
+                heading.append(title, date);
+                const description = document.createElement("p");
+                description.textContent = typeof data.descricao === "string" ? data.descricao : "";
+                const location = document.createElement("span");
+                location.className = "cc-tracking-event-location";
+                location.textContent = typeof data.localidade === "string" ? data.localidade : "Atualização operacional";
+                card.append(heading, description, location);
+                event.append(iconBox, card);
+                document.getElementById("publicTimelineEmpty")?.remove();
+                const before = entries.find(entry => publicTimestamp(entry.dataset.eventTime) < eventDate);
+                if (before) container.insertBefore(event, before);
+                else container.append(event);
+                container.querySelectorAll(".latest").forEach(entry => entry.classList.remove("latest"));
+                container.querySelector(".cc-tracking-event")?.classList.add("latest");
+                if (updateStatus && eventDate >= latestTime) applyPublicStatus(status);
+                return true;
+            };
+            let recoveryPromise = null;
+            const recoverMissedCheckpoints = () => {
+                if (recoveryPromise) return recoveryPromise;
+                const versionAtStart = liveVersion;
+                recoveryPromise = (async () => {
+                    try {
+                        const response = await fetch('/api/rastreio/' + encodeURIComponent(trackingCode), {
+                            cache: 'no-store', headers: { Accept: 'application/json' }
+                        });
+                        if (!response.ok) return false;
+                        const snapshot = await response.json();
+                        if (!matchesTrackingCode(snapshot?.codigoRastreio) || !Array.isArray(snapshot.eventos)) return false;
+                        snapshot.eventos.forEach(event => upsertCheckpoint({ ...event, codigoRastreio: snapshot.codigoRastreio }, false));
+                        // A late snapshot must not reverse a live update received
+                        // while this single reconnection request was in flight.
+                        if (liveVersion === versionAtStart) applyPublicStatus(snapshot.status);
+                        return true;
+                    } catch { return false; }
+                })().finally(() => { recoveryPromise = null; });
+                return recoveryPromise;
+            };
 
-            connection.start().then(joinTrackingGroup).then(() => {
-                console.log("Rastreamento conectado ao SignalR para: @Model.Entrega.CodigoRastreio");
-            }).catch(err => console.error("SignalR:", err));
+            if (typeof signalR === "undefined") {
+                showConnectionStatus("Atualizações indisponíveis. Consulte novamente mais tarde.", "unavailable");
+            } else {
+                const connection = new signalR.HubConnectionBuilder()
+                    .withUrl("/trackingHub")
+                    .withAutomaticReconnect()
+                    .build();
+                const joinTrackingGroup = () => connection.invoke("JoinTrackingGroup", trackingCode);
+                connection.onreconnecting(() => showConnectionStatus("Reconectando atualizações…", "reconnecting"));
+                connection.onclose(() => showConnectionStatus("Atualizações desconectadas", "closed"));
+                connection.onreconnected(async () => {
+                    try {
+                        await joinTrackingGroup();
+                        const restored = await recoverMissedCheckpoints();
+                        showConnectionStatus(restored ? "Atualizações conectadas" : "Conexão retomada; não foi possível recuperar o histórico. Consulte novamente.", restored ? "connected" : "unavailable");
+                    } catch { showConnectionStatus("Atualizações indisponíveis", "unavailable"); }
+                });
+                connection.on("ReceiveCheckpointUpdate", data => {
+                    if (upsertCheckpoint(data)) liveVersion++;
+                });
+                connection.start().then(joinTrackingGroup).then(() => {
+                    showConnectionStatus("Atualizações conectadas", "connected");
+                }).catch(() => showConnectionStatus("Atualizações indisponíveis", "unavailable"));
+            }
         </script>
     }
 }

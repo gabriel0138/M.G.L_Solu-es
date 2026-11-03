@@ -1,0 +1,8 @@
+@model int
+<div id="driverGpsSync" class="cc-gps-sync" role="status" aria-live="polite"
+     data-user="@User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value"
+     data-tenant="@User.FindFirst("TenantId")?.Value" data-delivery="@Model" data-shift="@ViewBag.GpsTurnoId">
+    <div class="cc-gps-sync-line"><span data-gps-sync-message>Consultando a fila GPS deste aparelho…</span><button type="button" class="btn btn-sm btn-outline-light" data-gps-sync-retry hidden>Tentar envio GPS</button></div>
+    <small data-gps-sync-last>Nenhuma confirmação GPS recebida.</small>
+    <details><summary>Limites da coleta e do armazenamento</summary><p>A coleta exige esta página aberta e permissão de localização. O navegador não garante rastreamento em segundo plano. Limite de 2.000 eventos no aparelho; o prazo automático é de sete dias. Eventos expirados/rejeitados permanecem preservados para recuperação manual. A cadência offline é reduzida conforme a fila cresce; leituras intermediárias não são gravadas. São mantidas as 20 confirmações mais recentes. Nenhum dado de acesso é salvo na fila.</p></details>
+</div>

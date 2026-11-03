@@ -42,7 +42,7 @@ namespace MglConnect.Web.Models
         public decimal ComprimentoMetros { get; set; } = 18.60m;
 
         [Column(TypeName = "decimal(6,2)")]
-        [Display(Name = "Peso Bruto Total (PBT em toneladas)")]
+        [Display(Name = "Massa declarada no cadastro (t; sem classificação PBT/PBTC)")]
         public decimal PesoToneladas { get; set; } = 29.50m;
 
         [Display(Name = "Quantidade de Eixos")]
@@ -54,6 +54,8 @@ namespace MglConnect.Web.Models
         public string TipoCarga { get; set; } = "Carga Geral Seca"; 
         // Ex: "Carga Geral Seca", "Produtos Perigosos", "Frigorífico", "Carga Indivisível"
 
+        public string? PerfilOperacionalJson { get; set; }
+        public int PerfilOperacionalVersao { get; set; }
         public bool Ativo { get; set; } = true;
     }
 }

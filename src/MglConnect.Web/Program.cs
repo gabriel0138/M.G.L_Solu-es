@@ -1,3 +1,6 @@
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
@@ -9,7 +12,24 @@ using MglConnect.Web.Middleware;
 using MglConnect.Web.Services;
 using QuestPDF.Infrastructure;
 
+if (args.FirstOrDefault() == "--healthcheck")
+{
+    Environment.ExitCode = await MglConnect.Web.Operations.ContainerHealthCommand.RunAsync(args);
+    return;
+}
+if (args.FirstOrDefault() == "--operations")
+{
+    Environment.ExitCode = await MglConnect.Web.Operations.RecoveryCommand.RunAsync(args);
+    return;
+}
+
 var builder = WebApplication.CreateBuilder(args);
+MglConnect.Web.Operations.HostingConfiguration.AddSecretFiles(builder.Configuration);
+builder.Services.Configure<HostOptions>(options => options.ShutdownTimeout = TimeSpan.FromSeconds(20));
+var proxyEnabled = builder.Configuration.GetValue<bool>("ReverseProxy:Enabled");
+var proxyOptions = proxyEnabled ? MglConnect.Web.Operations.HostingConfiguration.ProxyOptions(builder.Configuration) : null;
+var requireHttps = builder.Configuration.GetValue<bool>("Hosting:RequireHttps");
+if (requireHttps) builder.Services.AddHttpsRedirection(options => { options.HttpsPort = 443; options.RedirectStatusCode = 308; });
 
 QuestPDF.Settings.License = LicenseType.Community;
 
@@ -86,6 +106,10 @@ if (int.TryParse(port, out var portNumber) && portNumber is > 0 and <= 65535)
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("ValhallaExperimental").ConfigurePrimaryHttpMessageHandler(()=>new HttpClientHandler{AllowAutoRedirect=false});
+builder.Services.AddScoped<MglConnect.Web.Services.RouteTrust.IExperimentalTruckRouter,MglConnect.Web.Services.RouteTrust.ValhallaExperimentalRouter>();
+// Factory URL logs may contain geocoding addresses or provider API keys.
+builder.Services.ConfigureHttpClientDefaults(client => client.RemoveAllLoggers());
 var dataProtection = builder.Services.AddDataProtection()
     .SetApplicationName("MglConnect");
 var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
@@ -101,10 +125,22 @@ else if (usesPostgres)
 
 builder.Services.AddScoped<IPasswordHasher, SimplePasswordHasher>();
 builder.Services.AddScoped<ITrackingService, TrackingService>();
+builder.Services.AddSingleton<PublicTrackingRateLimiter>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IDriverShiftService, DriverShiftService>();
 builder.Services.AddScoped<IEmergencyAlertService, EmergencyAlertService>();
 builder.Services.AddSingleton<IRouteDeviationEngine, RouteDeviationEngine>();
+builder.Services.AddSingleton<TelemetrySubscriptions>();
+builder.Services.AddScoped<DeliveryPositionRecorder>();
+builder.Services.Configure<GpsHistoryOptions>(builder.Configuration.GetSection("GpsHistory"));
+builder.Services.AddScoped<GpsIngestionService>();
+builder.Services.AddScoped<GpsArchiveService>();
+builder.Services.AddScoped<GpsHistoryReader>();
+builder.Services.AddScoped<GpsHistoryAccess>();
+builder.Services.AddScoped<GpsTelemetryPublisher>();
+builder.Services.AddSingleton<MglConnect.Web.Services.RouteTrust.RestrictionEngine>();
+builder.Services.AddScoped<MglConnect.Web.Services.RouteTrust.IRouteEvidenceSource,MglConnect.Web.Services.RouteTrust.ConfiguredRouteEvidenceSource>();
+builder.Services.AddScoped<MglConnect.Web.Services.RouteTrust.RouteTrustService>();
 builder.Services.AddScoped<ITruckRoutingService, TruckRoutingService>();
 builder.Services.AddScoped<IFuelCostService, FuelCostService>();
 builder.Services.AddScoped<ITrafficMatchService, TrafficMatchService>();
@@ -128,6 +164,7 @@ builder.Services.AddAuthentication(options =>
     .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
     {
         options.Cookie.Name = MglConnectApiBearerDefaults.CookieName;
+        options.Cookie.SecurePolicy = requireHttps ? CookieSecurePolicy.Always : CookieSecurePolicy.SameAsRequest;
         options.LoginPath = "/Account/Login";
         options.LogoutPath = "/Account/Logout";
         options.AccessDeniedPath = "/Account/AccessDenied";
@@ -154,7 +191,7 @@ builder.Services.AddSwaggerGen(options =>
         Contact = new OpenApiContact
         {
             Name = "M.G.L Logística Integrada S.A.",
-            Email = "operacoes@mglconnect.log.br"
+            Email = "operacoes@example.invalid"
         }
     });
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
@@ -168,7 +205,16 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
+builder.Services.AddRateLimiter(options => {
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("route-assess",context=>RateLimitPartition.GetFixedWindowLimiter(context.User.FindFirstValue(ClaimTypes.NameIdentifier)??"anonymous",_=>new FixedWindowRateLimiterOptions{PermitLimit=8,Window=TimeSpan.FromMinutes(1),QueueLimit=0,AutoReplenishment=true}));
+    options.AddPolicy("gps-export", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "anonymous", _ => new FixedWindowRateLimiterOptions {
+            PermitLimit = 4, Window = TimeSpan.FromMinutes(1), QueueLimit = 0, AutoReplenishment = true }));
+});
 var app = builder.Build();
+if (proxyOptions != null) app.UseForwardedHeaders(proxyOptions);
+if (requireHttps) app.UseWhen(context => context.Request.Path != "/health/live" && context.Request.Path != "/health/ready", branch => branch.UseHttpsRedirection());
 
 using (var scope = app.Services.CreateScope())
 {
@@ -186,9 +232,12 @@ if (!app.Environment.IsDevelopment())
 
 app.UseStaticFiles();
 app.UseRouting();
+app.UseMiddleware<OperationalDiagnosticsMiddleware>();
+app.UseMiddleware<PublicTrackingMiddleware>();
 app.UseAuthentication();
 app.UseMiddleware<ActiveAccountMiddleware>();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.UseMiddleware<AdminOnlySwaggerMiddleware>();
 app.UseSwagger();
 app.UseSwaggerUI(options =>
@@ -202,6 +251,6 @@ app.MapControllerRoute(
     pattern: "{controller=Home}/{action=Index}/{id?}");
 
 app.MapHub<TrackingHub>("/trackingHub");
-app.MapHub<TelemetryHub>("/telemetryHub");
+app.MapHub<TelemetryHub>("/telemetryHub", options => options.CloseOnAuthenticationExpiration = true);
 
 app.Run();

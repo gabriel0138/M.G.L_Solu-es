@@ -18,12 +18,17 @@ namespace MglConnect.Web.Data
             _tenantIsBound = tenantProvider?.IsTenantBound ?? false;
         }
 
+        public DbSet<PerfilViagemRevisao> PerfisViagemRevisoes => Set<PerfilViagemRevisao>();
+        public DbSet<RotaAvaliacao> RotaAvaliacoes => Set<RotaAvaliacao>();
         public DbSet<Empresa> Empresas => Set<Empresa>();
         public DbSet<Usuario> Usuarios => Set<Usuario>();
         public DbSet<Cliente> Clientes => Set<Cliente>();
         public DbSet<Pedido> Pedidos => Set<Pedido>();
         public DbSet<Entrega> Entregas => Set<Entrega>();
         public DbSet<EventoRastreio> EventosRastreio => Set<EventoRastreio>();
+        public DbSet<GpsArquivo> GpsArquivos => Set<GpsArquivo>();
+        public DbSet<GpsEventoArquivado> GpsEventosArquivados => Set<GpsEventoArquivado>();
+        public DbSet<PosicaoGps> PosicoesGps => Set<PosicaoGps>();
         public DbSet<Veiculo> Veiculos => Set<Veiculo>();
         public DbSet<CodigoTurnoMotorista> CodigosTurnoMotorista => Set<CodigoTurnoMotorista>();
         public DbSet<TurnoMotorista> TurnosMotorista => Set<TurnoMotorista>();
@@ -101,6 +106,63 @@ namespace MglConnect.Web.Data
                 .HasIndex(e => e.CodigoRastreio)
                 .IsUnique();
 
+            modelBuilder.Entity<PosicaoGps>().HasQueryFilter(p => !_tenantIsBound || p.TenantId == _currentTenantId);
+            modelBuilder.Entity<PosicaoGps>().HasIndex(p => p.EventoId).IsUnique();
+            modelBuilder.Entity<PosicaoGps>().HasIndex(p => new { p.TenantId, p.EntregaId, p.CapturadoEmUtc, p.Id });
+            modelBuilder.Entity<PosicaoGps>().HasOne<Entrega>().WithMany().HasForeignKey(p => p.EntregaId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<PosicaoGps>().HasOne<Usuario>().WithMany().HasForeignKey(p => p.MotoristaId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<PosicaoGps>().HasOne<Usuario>().WithMany().HasForeignKey(p => p.AtorUsuarioId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<PosicaoGps>().HasOne<Veiculo>().WithMany().HasForeignKey(p => p.VeiculoId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<PosicaoGps>().HasOne<TurnoMotorista>().WithMany().HasForeignKey(p => p.TurnoId).OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<PosicaoGps>().HasIndex(p => new { p.TenantId, p.EntregaId, p.OrdenadoEmUtc, p.Id });
+            modelBuilder.Entity<PosicaoGps>().HasIndex(p => new { p.TenantId, p.EntregaId, p.RecebidoEmUtc });
+            modelBuilder.Entity<PosicaoGps>().HasIndex(p => new { p.TenantId, p.RecebidoEmUtc });
+            modelBuilder.Entity<GpsArquivo>().HasQueryFilter(p => !_tenantIsBound || p.TenantId == _currentTenantId);
+            modelBuilder.Entity<GpsArquivo>().Property(p => p.Versao).IsConcurrencyToken();
+            modelBuilder.Entity<GpsArquivo>().HasIndex(p => new { p.TenantId, p.EntregaId, p.CriadoEmUtc });
+            modelBuilder.Entity<GpsArquivo>().HasOne<Entrega>().WithMany().HasForeignKey(p => p.EntregaId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<GpsArquivo>().HasOne<Usuario>().WithMany().HasForeignKey(p => p.CriadoPorUsuarioId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<GpsArquivo>().HasOne<Usuario>().WithMany().HasForeignKey(p => p.CompactadoPorUsuarioId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<GpsEventoArquivado>().HasQueryFilter(p => !_tenantIsBound || p.TenantId == _currentTenantId);
+            modelBuilder.Entity<GpsEventoArquivado>().HasIndex(p => p.EventoId).IsUnique();
+            modelBuilder.Entity<GpsEventoArquivado>().HasIndex(p => p.ArquivoId);
+            modelBuilder.Entity<GpsEventoArquivado>().HasIndex(p => new { p.TenantId, p.EntregaId, p.CapturadoEmUtc });
+            modelBuilder.Entity<GpsEventoArquivado>().HasIndex(p => new { p.TenantId, p.EntregaId, p.OrdenadoEmUtc, p.Id });
+            modelBuilder.Entity<GpsEventoArquivado>().HasIndex(p => new { p.TenantId, p.EntregaId, p.RecebidoEmUtc });
+            modelBuilder.Entity<GpsEventoArquivado>().HasIndex(p => new { p.TenantId, p.RecebidoEmUtc });
+            modelBuilder.Entity<GpsEventoArquivado>().HasOne<GpsArquivo>().WithMany().HasForeignKey(p => p.ArquivoId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<GpsEventoArquivado>().HasOne<Entrega>().WithMany().HasForeignKey(p => p.EntregaId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<GpsEventoArquivado>().HasOne<Usuario>().WithMany().HasForeignKey(p => p.AtorUsuarioId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<GpsEventoArquivado>().HasOne<Usuario>().WithMany().HasForeignKey(p => p.MotoristaId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<GpsEventoArquivado>().HasOne<Veiculo>().WithMany().HasForeignKey(p => p.VeiculoId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<GpsEventoArquivado>().HasOne<TurnoMotorista>().WithMany().HasForeignKey(p => p.TurnoId).OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<PerfilViagemRevisao>().ToTable("PerfisViagemRevisoes");
+            modelBuilder.Entity<PerfilViagemRevisao>().HasQueryFilter(a=>!_tenantIsBound||a.TenantId==_currentTenantId);
+            modelBuilder.Entity<PerfilViagemRevisao>().HasIndex(a=>new{a.TenantId,a.EntregaId,a.Revisao}).IsUnique();
+            modelBuilder.Entity<PerfilViagemRevisao>().HasOne<Entrega>().WithMany().HasForeignKey(a=>a.EntregaId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<PerfilViagemRevisao>().HasOne<Veiculo>().WithMany().HasForeignKey(a=>a.VeiculoId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<PerfilViagemRevisao>().HasOne<Usuario>().WithMany().HasForeignKey(a=>a.AtorUsuarioId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<Entrega>().Property(a=>a.PerfilViagemVersao).IsConcurrencyToken();
+            modelBuilder.Entity<Entrega>().Property(a=>a.PerfilViagemJson).IsConcurrencyToken();
+            modelBuilder.Entity<RotaAvaliacao>().ToTable("RotaAvaliacoes");
+            modelBuilder.Entity<RotaAvaliacao>().HasQueryFilter(a=>!_tenantIsBound||a.TenantId==_currentTenantId);
+            modelBuilder.Entity<RotaAvaliacao>().HasIndex(a=>new{a.TenantId,a.EntregaId,a.CriadoEmUtc});
+            modelBuilder.Entity<RotaAvaliacao>().HasOne<Entrega>().WithMany().HasForeignKey(a=>a.EntregaId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<RotaAvaliacao>().HasOne<Veiculo>().WithMany().HasForeignKey(a=>a.VeiculoId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<RotaAvaliacao>().HasOne<Usuario>().WithMany().HasForeignKey(a=>a.AtorUsuarioId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<Veiculo>().Property(v=>v.PerfilOperacionalJson).IsConcurrencyToken();
+            modelBuilder.Entity<Veiculo>().Property(v=>v.PerfilOperacionalVersao).IsConcurrencyToken();
+
+            // Catalogue updates use existing values as concurrency tokens: no schema or history rewrite.
+            foreach (var field in new[] { nameof(Veiculo.Ativo), nameof(Veiculo.Placa), nameof(Veiculo.Modelo),
+                nameof(Veiculo.CapacidadeCargaKg), nameof(Veiculo.AlturaMetros), nameof(Veiculo.LarguraMetros),
+                nameof(Veiculo.ComprimentoMetros), nameof(Veiculo.PesoToneladas), nameof(Veiculo.QtdEixos), nameof(Veiculo.TipoCarga) })
+                modelBuilder.Entity<Veiculo>().Property(field).IsConcurrencyToken();
+            foreach (var field in new[] { nameof(Usuario.Ativo), nameof(Usuario.Nome), nameof(Usuario.Login), nameof(Usuario.Telefone), nameof(Usuario.Perfil) })
+                modelBuilder.Entity<Usuario>().Property(field).IsConcurrencyToken();
+
             // Login de usuário único
             modelBuilder.Entity<Usuario>()
                 .HasIndex(u => u.Login)
@@ -164,6 +226,31 @@ namespace MglConnect.Web.Data
             // ══════════════════════════════════════════════════════════════════
             // RELACIONAMENTOS
             // ══════════════════════════════════════════════════════════════════
+
+            // Operational history must not outlive its referenced records silently.
+            // Restrict avoids cascading deletion of codes, shifts and emergencies.
+            modelBuilder.Entity<CodigoTurnoMotorista>().HasOne<Entrega>().WithMany()
+                .HasForeignKey(c => c.EntregaId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<CodigoTurnoMotorista>().HasOne<Usuario>().WithMany()
+                .HasForeignKey(c => c.MotoristaId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<CodigoTurnoMotorista>().HasOne<Usuario>().WithMany()
+                .HasForeignKey(c => c.EmitidoPorUsuarioId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<TurnoMotorista>().HasOne<Entrega>().WithMany()
+                .HasForeignKey(t => t.EntregaId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<TurnoMotorista>().HasOne<Usuario>().WithMany()
+                .HasForeignKey(t => t.MotoristaId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<TurnoMotorista>().HasOne<Veiculo>().WithMany()
+                .HasForeignKey(t => t.VeiculoId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<TurnoMotorista>().HasOne<CodigoTurnoMotorista>().WithMany()
+                .HasForeignKey(t => t.CodigoTurnoId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<AlertaEmergencia>().HasOne<Entrega>().WithMany()
+                .HasForeignKey(a => a.EntregaId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<AlertaEmergencia>().HasOne<Usuario>().WithMany()
+                .HasForeignKey(a => a.MotoristaId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<AlertaEmergencia>().HasOne<Veiculo>().WithMany()
+                .HasForeignKey(a => a.VeiculoId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<AlertaEmergencia>().HasOne<Usuario>().WithMany()
+                .HasForeignKey(a => a.ReconhecidoPorUsuarioId).OnDelete(DeleteBehavior.Restrict);
 
             // Relacionamento Pedido -> Entrega (1:0..1)
             modelBuilder.Entity<Entrega>()
@@ -253,6 +340,11 @@ namespace MglConnect.Web.Data
 
         private void ApplyTenantOwnership()
         {
+            if(ChangeTracker.Entries<PerfilViagemRevisao>().Any(e=>e.State is EntityState.Modified or EntityState.Deleted))
+                throw new InvalidOperationException("Revisões de perfil são imutáveis; crie uma nova declaração.");
+            foreach (var entry in ChangeTracker.Entries<PosicaoGps>().Where(e => e.State == EntityState.Added))
+                entry.Entity.OrdenadoEmUtc ??= entry.Entity.CapturadoEmUtc ?? entry.Entity.RecebidoEmUtc;
+
             if (!_tenantIsBound)
             {
                 return;

@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using MglConnect.Web.Data;
+using MglConnect.Web.Services.RouteTrust;
 
 namespace MglConnect.Web.Services
 {
@@ -27,6 +28,10 @@ namespace MglConnect.Web.Services
         private readonly IMemoryCache _routeCache;
         private readonly ILogger<TruckRoutingService> _logger;
         private readonly IRouteDeviationEngine _deviationEngine;
+        private readonly RouteTrustService? _trust;
+        private readonly IExperimentalTruckRouter? _experimental;
+        private readonly IHttpContextAccessor? _request;
+        private CancellationToken Abort=>_request?.HttpContext?.RequestAborted??CancellationToken.None;
 
         public TruckRoutingService(
             MglDbContext context, 
@@ -34,7 +39,7 @@ namespace MglConnect.Web.Services
             IMemoryCache routeCache,
             IConfiguration configuration,
             ILogger<TruckRoutingService> logger,
-            IRouteDeviationEngine deviationEngine)
+            IRouteDeviationEngine deviationEngine, RouteTrustService? trust = null,IHttpContextAccessor? request = null,IExperimentalTruckRouter? experimental = null)
         {
             _context = context;
             _httpClientFactory = httpClientFactory;
@@ -42,6 +47,7 @@ namespace MglConnect.Web.Services
             _configuration = configuration;
             _logger = logger;
             _deviationEngine = deviationEngine;
+            _trust = trust;_request=request;_experimental=experimental;
 
             // Validar gabarito físico imediatamente após injeção de dependência
             // (para garantir que parâmetros padrão sejam consistentes)
@@ -101,7 +107,7 @@ namespace MglConnect.Web.Services
                     + Uri.EscapeDataString(endereco.Trim())
                     + "&key="
                     + Uri.EscapeDataString(apiKey);
-                using var response = await client.GetAsync(url);
+                using var response = await client.GetAsync(url,Abort);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -170,8 +176,8 @@ namespace MglConnect.Web.Services
                 client.Timeout = TimeSpan.FromSeconds(8);
                 client.DefaultRequestHeaders.UserAgent.ParseAdd("MglConnect-LogisticsEngine/2.0");
                 using var response = baseUri.Host.Equals("photon.komoot.io", StringComparison.OrdinalIgnoreCase)
-                    ? await PhotonThrottle.GetAsync(client, url)
-                    : await client.GetAsync(url);
+                    ? await PhotonThrottle.GetAsync(client, url,Abort)
+                    : await client.GetAsync(url,Abort);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -230,19 +236,19 @@ namespace MglConnect.Web.Services
                 _minimumInterval = minimumInterval;
             }
 
-            public async Task<HttpResponseMessage> GetAsync(HttpClient client, string url)
+            public async Task<HttpResponseMessage> GetAsync(HttpClient client, string url,CancellationToken ct=default)
             {
-                await _gate.WaitAsync();
+                await _gate.WaitAsync(ct);
                 try
                 {
                     var remainingDelay = _minimumInterval - (DateTimeOffset.UtcNow - _lastRequestAt);
                     if (remainingDelay > TimeSpan.Zero)
                     {
-                        await Task.Delay(remainingDelay);
+                        await Task.Delay(remainingDelay,ct);
                     }
 
                     _lastRequestAt = DateTimeOffset.UtcNow;
-                    return await client.GetAsync(url);
+                    return await client.GetAsync(url,ct);
                 }
                 finally
                 {
@@ -251,23 +257,10 @@ namespace MglConnect.Web.Services
             }
         }
 
-        /// <summary>
-        /// Valida e ajusta parâmetros de gabarito físico para rotas de caminhões pesados.
-        /// Aplica restrições de altura (> 4,10m), peso (> 23t PBT) e eixos (ZERC/Urban).
-        /// Força correção de corredor rodoviário e gera alertas de restrição.
-        /// </summary>
+        // This provider has no authoritative truck restriction dataset.
         private void ValidarGabaritoPesado()
         {
-            // Usar o logger da instância em vez de parâmetro
-            // Padrão da ARTESP/ANTT para restrição de peso e altura em vias urbanas
-            const decimal ALTURA_MAXIMA_URBANA = 4.10m; // metros
-            const decimal PESO_MAXIMO_URBANO = 23m;     // toneladas PBT
-            const int EIXOS_MAXIMO_URBANO = 3;          // eixos para circulação urbana sem restrição
-
-            // Exemplo de validação de configuração de frota (could be loaded from appsettings)
-            // Os limites são usados para alertas; o OSRM público não aplica restrições de caminhões.
-            _logger.LogInformation("Validacao de gabarito pesado ativada: Altura max urbana={AlturaMax}mt, Peso max urbano={PesoMax}t, Eixos max urbanos={EixosMax}",
-                ALTURA_MAXIMA_URBANA, PESO_MAXIMO_URBANO, EIXOS_MAXIMO_URBANO);
+            _logger.LogInformation("Roteamento genérico: limites físicos e restrições locais exigem validação independente.");
         }
 
         /// <summary>
@@ -304,11 +297,11 @@ namespace MglConnect.Web.Services
             {
                 // Adicionar alerta de peso e restrição de eixos
                 string pesoMsg = pesoToneladas > 23m
-                    ? $"Peso Bruto Total ({pesoToneladas:F1}t PBT) excede limite urbano de 23t. "
+                    ? $"Massa cadastrada ({pesoToneladas:F1}t; natureza não verificada) informado para conferência operacional. "
                     : string.Empty;
 
                 string eixosMsg = qtdEixos > 3
-                    ? $"Contagem de eixos ({qtdEixos}) acima do limite recomendado para circulação urbana sem restrição (3 eixos). "
+                    ? $"Contagem de eixos ({qtdEixos}) informada para conferência operacional. "
                     : string.Empty;
 
                 if (!string.IsNullOrWhiteSpace(pesoMsg) || !string.IsNullOrWhiteSpace(eixosMsg))
@@ -459,13 +452,6 @@ namespace MglConnect.Web.Services
 
         public async Task<TruckRoutePlan> CalcularRotaParaEntregaAsync(int entregaId, string perfilVeiculo = "Pesado")
         {
-            var cacheKey = $"rota_entrega_{entregaId}_{perfilVeiculo}";
-            if (_routeCache.TryGetValue(cacheKey, out TruckRoutePlan? cachedPlano))
-            {
-                _logger.LogInformation("Cache hit para rota entrega {EntregaId} com perfil {Perfil}", entregaId, perfilVeiculo);
-                return cachedPlano!;
-            }
-
             var entrega = await _context.Entregas
                 .Include(e => e.Pedido)
                 .Include(e => e.Veiculo)
@@ -476,6 +462,11 @@ namespace MglConnect.Web.Services
                 throw new ArgumentException("Entrega não encontrada.");
             }
 
+            var cachedTrust=_trust==null?null:await _trust.CachedForReadAsync(entregaId);
+            if(cachedTrust!=null)return new TruckRoutePlan{Confianca=cachedTrust,PerfilVeiculo=perfilVeiculo,RotaDisponivel=cachedTrust.Geometry.Count>1,
+                TrajetoCoordenadas=cachedTrust.Geometry,PassosNavegacao=cachedTrust.Steps,DistanciaKm=cachedTrust.EstimatedDistanceKm??0,TempoEstimadoMinutos=cachedTrust.EstimatedMinutes??0,
+                AvisoRota=cachedTrust.NavigationAllowed?"Verificação limitada ao escopo indicado.":"Orientação suspensa: dados insuficientes, incompatíveis ou sintéticos."};
+            var ticket = _trust == null ? null : await _trust.BeginAsync(entregaId,ct:Abort);
             var pedido = entrega.Pedido;
             var cidadeOrigem = pedido == null
                 || string.IsNullOrWhiteSpace(pedido.OrigemCidade)
@@ -510,7 +501,32 @@ namespace MglConnect.Web.Services
             var eixos = entrega.Veiculo != null ? entrega.Veiculo.QtdEixos : entrega.QtdEixos;
             var carga = entrega.TipoCarga ?? "Carga Geral Seca";
 
-            var plano = await CalcularRotaPesadaAsync(origem, destino, altura, peso, largura, eixos, carga, perfilVeiculo);
+            ProviderRouteReply? providerReply=null;
+            TruckRoutePlan originalPlan;
+            if(_experimental?.Enabled==true&&ticket!=null)
+            {
+                var physical=TruckPhysicalRequest.From(OperationalTruckProfile.Read(ticket.ProfileJson));
+                if(physical==null)providerReply=new(){Failure=ProviderFailure.MissingVehicleData,Detail="Declare o perfil completo e as cargas por eixo; nenhum default será enviado ao provedor."};
+                else
+                {
+                    var start=await GeocodificarEnderecoAsync(origem);var end=await GeocodificarEnderecoAsync(destino);
+                    providerReply=start.HasValue&&end.HasValue
+                        ?await _experimental.RouteAsync(new(new(start.Value.Latitude,start.Value.Longitude),new(end.Value.Latitude,end.Value.Longitude),physical),Abort)
+                        :new(){Failure=ProviderFailure.MissingLocations,Detail="Geocodificação indisponível; não houve consulta ao Valhalla."};
+                }
+                originalPlan=providerReply.ToPlan();
+            }
+            else originalPlan = ticket?.Evidence.RecordedPlan ?? await CalcularRotaPesadaAsync(origem, destino, altura, peso, largura, eixos, carga, perfilVeiculo);
+            // A cached raw geometry must never carry another trip's trust result.
+            var plano = JsonSerializer.Deserialize<TruckRoutePlan>(JsonSerializer.Serialize(originalPlan))!;
+            plano.RotaHomologadaParaVeiculo=false;plano.RotaAprovada=false;
+            if(ticket!=null)plano.Confianca=await _trust!.FinishAsync(ticket,plano,Abort,providerReply);
+            if(!string.Equals(perfilVeiculo,"Leve",StringComparison.OrdinalIgnoreCase)&&plano.Confianca?.NavigationAllowed!=true)
+            {
+                if(plano.Confianca?.Obsolete!=true)_deviationEngine.RemoveState(entrega.CodigoRastreio);
+                plano.AvisoRota="Orientação de caminhão suspensa: avaliação de restrições insuficiente, incompatível ou sintética. Consulte a operação.";
+                return plano;
+            }
 
             // Registro automático no motor de detecção de desvios
             double destLat = -23.961794;
@@ -531,12 +547,6 @@ namespace MglConnect.Web.Services
                 destLon,
                 destino
             );
-
-            // Cache o resultado com expiração de 30 minutos
-            var cacheEntryOptions = new MemoryCacheEntryOptions()
-                .SetSlidingExpiration(TimeSpan.FromMinutes(30))
-                .SetAbsoluteExpiration(TimeSpan.FromHours(1));
-            _routeCache.Set(cacheKey, plano, cacheEntryOptions);
 
             return plano;
         }
@@ -560,17 +570,20 @@ namespace MglConnect.Web.Services
             double lonAtual, 
             string perfilVeiculo = "Pesado")
         {
-            if (!string.Equals(perfilVeiculo, "Leve", StringComparison.OrdinalIgnoreCase))
+            if(_experimental?.Enabled==true)
+            { _logger.LogWarning("Recálculo experimental suspenso: correspondência viária e cobertura ainda não verificadas."); return null; }
+            var currentTrip=await _context.Entregas.AsNoTracking().Where(e=>e.CodigoRastreio==codigoRastreio).Select(e=>e.Id).SingleOrDefaultAsync(Abort);
+            bool trusted=_trust!=null&&currentTrip>0&&await _trust.NavigationAllowedAsync(currentTrip,Abort);
+            if((_trust!=null&&!trusted)||(!string.Equals(perfilVeiculo,"Leve",StringComparison.OrdinalIgnoreCase)&&!trusted))
             {
-                _logger.LogWarning(
-                    "Recálculo automático de veículo pesado bloqueado: o provedor atual não valida restrições de caminhões.");
-                return null;
+                _logger.LogWarning("Recálculo suspenso: não há avaliação atual suficiente para orientação operacional.");return null;
             }
+            var ticket=_trust==null?null:await _trust.BeginAsync(currentTrip,ct:Abort);
 
             // Cache key for dynamic recalculation - includes current position for variance
             var cacheKey = $"rota_recalculo_{codigoRastreio.Trim().ToUpperInvariant()}_{latAtual:F4}_{lonAtual:F4}_{perfilVeiculo}";
             
-            if (_routeCache.TryGetValue(cacheKey, out TruckRoutePlan? cachedPlano))
+            if (_trust==null&&_routeCache.TryGetValue(cacheKey, out TruckRoutePlan? cachedPlano))
             {
                 _logger.LogInformation("Cache hit para recálculo de rota, perfil {Perfil}.", perfilVeiculo);
                 return cachedPlano;
@@ -618,6 +631,12 @@ namespace MglConnect.Web.Services
                     : "Percurso recalculado com perfil rodoviário genérico; confirme limites de altura, peso e acesso locais."
             };
 
+            if(ticket!=null)
+            {
+                plano.Confianca=await _trust!.FinishAsync(ticket,plano,Abort);
+                if(!plano.Confianca.NavigationAllowed||plano.Confianca.Obsolete)
+                {if(!plano.Confianca.Obsolete)_deviationEngine.RemoveState(key);return null;}
+            }
             // Atualiza a nova rota na engine de desvio
             _deviationEngine.UpdateRouteAfterReroute(key, plano.TrajetoCoordenadas);
 
@@ -625,7 +644,7 @@ namespace MglConnect.Web.Services
             var cacheEntryOptions = new MemoryCacheEntryOptions()
                 .SetSlidingExpiration(TimeSpan.FromMinutes(5))
                 .SetAbsoluteExpiration(TimeSpan.FromMinutes(10));
-            _routeCache.Set(cacheKey, plano, cacheEntryOptions);
+            if(_trust==null)_routeCache.Set(cacheKey, plano, cacheEntryOptions);
 
             return plano;
         }
@@ -691,7 +710,7 @@ namespace MglConnect.Web.Services
                 {
                     Tipo = "Peso",
                     Severidade = "Atencao",
-                    Mensagem = $"Veículo pesado ({plano.PesoVeiculo:F1}t PBT com {plano.EixosVeiculo} eixos). O traçado não verifica limites locais nem localização de balanças.",
+                    Mensagem = $"Veículo com massa cadastrada de {plano.PesoVeiculo:F1}t (natureza não verificada), com {plano.EixosVeiculo} eixos. O traçado não verifica limites locais nem localização de balanças.",
                     Localizacao = "Verificar restrições ao longo de toda a rota"
                 });
 
@@ -779,6 +798,7 @@ namespace MglConnect.Web.Services
                 });
             }
 
+            Abort.ThrowIfCancellationRequested();
             // Aplicar restrições de gabarito físico (altura > 4,10m, peso > 23t, eixos urbanos)
             // e enriquecer instruções Turn-by-Turn baseadas nos steps do OSRM
             plano = AplicarRestricoesGabarito(plano, alturaMetros, pesoToneladas, larguraMetros, qtdEixos, tipoCarga);
@@ -830,8 +850,8 @@ namespace MglConnect.Web.Services
 
                 using var response = baseUri.Host.Equals("router.project-osrm.org", StringComparison.OrdinalIgnoreCase)
                     || baseUri.Host.Equals("routing.openstreetmap.de", StringComparison.OrdinalIgnoreCase)
-                    ? await OsrmThrottle.GetAsync(client, url)
-                    : await client.GetAsync(url);
+                    ? await OsrmThrottle.GetAsync(client, url,Abort)
+                    : await client.GetAsync(url,Abort);
                 if (!response.IsSuccessStatusCode)
                 {
                     _logger.LogWarning("OSRM retornou status HTTP {StatusCode}", response.StatusCode);
@@ -856,38 +876,17 @@ namespace MglConnect.Web.Services
                 var coordinatesArray = firstRoute.GetProperty("geometry").GetProperty("coordinates");
 
                 int totalPoints = coordinatesArray.GetArrayLength();
-                if (totalPoints == 0) return null;
+                if (totalPoints is <2 or >20000) return null;
 
-                var list = new List<RouteCoordinate>(Math.Min(totalPoints, 600));
-
-                // Amostragem inteligente para Leaflet mantendo precisão das curvas
-                int step = totalPoints > 600 ? (totalPoints / 500) : 1;
-                if (step < 1) step = 1;
-
-                for (int i = 0; i < totalPoints; i += step)
+                // Keep the provider's exact vertex order for verifiable edge references.
+                // Rendering must not change rule association by resampling geometry.
+                var list=new List<RouteCoordinate>(totalPoints);
+                for(int i=0;i<totalPoints;i++)
                 {
-                    var coord = coordinatesArray[i];
-                    double lon = coord[0].GetDouble();
-                    double lat = coord[1].GetDouble();
-
-                    list.Add(new RouteCoordinate
-                    {
-                        Latitude = lat,
-                        Longitude = lon,
-                        Tipo = (i == 0) ? "Origem" : "Waypoint",
-                        Nome = (i == 0) ? "Origem" : null
-                    });
+                    var coord=coordinatesArray[i];double lon=coord[0].GetDouble(),lat=coord[1].GetDouble();
+                    if(!double.IsFinite(lat)||lat is <-90 or >90||!double.IsFinite(lon)||lon is <-180 or >180)return null;
+                    list.Add(new RouteCoordinate{Latitude=lat,Longitude=lon,Tipo=i==0?"Origem":i==totalPoints-1?"Destino":"Waypoint",Nome=i==0?"Origem":i==totalPoints-1?"Destino da rota":null});
                 }
-
-                // Ponto final de destino
-                var lastCoord = coordinatesArray[totalPoints - 1];
-                list.Add(new RouteCoordinate
-                {
-                    Latitude = lastCoord[1].GetDouble(),
-                    Longitude = lastCoord[0].GetDouble(),
-                    Tipo = "Destino",
-                    Nome = "Destino da rota"
-                });
 
                 // Extração dos Steps de Navegação Turn-by-Turn
                 var passos = new List<RouteStep>();

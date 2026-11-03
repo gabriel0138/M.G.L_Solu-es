@@ -3,34 +3,32 @@
     ViewData["Title"] = "Meu perfil";
 }
 
-<main class="driver-home container-fluid px-3 px-sm-4 py-4">
-    <header class="driver-home-header d-flex align-items-center justify-content-between gap-3 mb-4">
-        <div>
-            <div class="driver-brand-mark">M.G.L <span>DRIVER</span></div>
-            <h1 class="h4 fw-bold text-white mt-3 mb-1">Meu perfil</h1>
-            <p class="text-white-50 mb-0">Dados pessoais cadastrados pela operação.</p>
+<section class="driver-home cc-driver-home" aria-labelledby="driverProfileTitle">
+    <header class="cc-driver-heading">
+        <div class="cc-driver-heading-copy">
+            <span class="cc-driver-eyebrow"><i class="bi bi-person-circle" aria-hidden="true"></i> Área do motorista</span>
+            <h1 id="driverProfileTitle">Meu perfil</h1>
+            <p>Confira os dados pessoais cadastrados pela operação.</p>
         </div>
-        <a asp-action="Index" class="btn btn-outline-light driver-logout" aria-label="Voltar às viagens">
-            <i class="bi bi-arrow-left me-sm-2"></i><span class="d-none d-sm-inline">Voltar</span>
+        <a asp-action="Index" class="btn btn-outline-secondary cc-driver-account-action">
+            <i class="bi bi-arrow-left" aria-hidden="true"></i><span>Minhas viagens</span>
         </a>
     </header>
 
-    <section class="driver-trip-card" aria-label="Dados do motorista">
-        <div class="driver-profile-field">
-            <span class="driver-trip-label">Nome</span>
-            <div class="fw-semibold text-white">@Model.Nome</div>
+    <section class="driver-trip-card cc-driver-profile" aria-labelledby="driverProfileDetailsTitle">
+        <div class="cc-driver-profile-heading">
+            <span class="cc-driver-vehicle-icon"><i class="bi bi-person-badge" aria-hidden="true"></i></span>
+            <div>
+                <h2 id="driverProfileDetailsTitle">Dados do motorista</h2>
+                <p>Informações vinculadas à sua conta.</p>
+            </div>
         </div>
-        <div class="driver-profile-field">
-            <span class="driver-trip-label">Data de nascimento</span>
-            <div class="fw-semibold text-white">@(Model.DataNascimento?.ToString("dd/MM/yyyy") ?? "Não informada")</div>
-        </div>
-        <div class="driver-profile-field">
-            <span class="driver-trip-label">Telefone</span>
-            <div class="fw-semibold text-white">@(Model.Telefone ?? "Não informado")</div>
-        </div>
-        <div class="driver-profile-field">
-            <span class="driver-trip-label">CPF</span>
-            <div class="fw-semibold text-white">@(Model.CpfMascarado ?? "Não informado")</div>
-        </div>
+        <dl class="cc-driver-profile-details">
+            <div><dt>Nome</dt><dd>@Model.Nome</dd></div>
+            <div><dt>Data de nascimento</dt><dd>@(Model.DataNascimento?.ToString("dd/MM/yyyy") ?? "Não informada")</dd></div>
+            <div><dt>Telefone</dt><dd>@(Model.Telefone ?? "Não informado")</dd></div>
+            <div><dt>CPF protegido</dt><dd>@(Model.CpfMascarado ?? "Não informado")</dd></div>
+        </dl>
+        <p class="cc-driver-profile-note"><i class="bi bi-shield-check" aria-hidden="true"></i> Para corrigir seus dados, entre em contato com a administração.</p>
     </section>
-</main>
+</section>

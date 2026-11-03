@@ -7,6 +7,14 @@ namespace MglConnect.Web.ViewModels
     {
         public int TotalClientes { get; set; }
         public int TotalPedidos { get; set; }
+        public int PedidosAguardandoDespacho { get; set; }
+        public int EntregasAtrasadas { get; set; }
+        public int VeiculosAtivos { get; set; }
+        public int VeiculosEmUso { get; set; }
+        public int AlertasAbertos { get; set; }
+        public System.DateTime UltimaAtualizacaoUtc { get; set; }
+        public System.DateOnly? PeriodoInicio { get; set; }
+        public System.DateOnly? PeriodoFim { get; set; }
         public int EntregasPendentes { get; set; }
         public int EntregasEmTransporte { get; set; }
         public int EntregasEntregues { get; set; }

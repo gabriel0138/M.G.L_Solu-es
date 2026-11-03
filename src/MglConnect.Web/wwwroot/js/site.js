@@ -37,30 +37,69 @@ function buscarCep(cepInputId, logradouroId, bairroId, cidadeId, ufId) {
     });
 }
 
-// 2. Copiar Código de Rastreamento com Feedback
-function copiarCodigoRastreio(codigo, buttonElement) {
-    if (!navigator.clipboard) {
-        // Fallback
-        const temp = document.createElement('input');
-        temp.value = codigo;
-        document.body.appendChild(temp);
-        temp.select();
-        document.execCommand('copy');
-        document.body.removeChild(temp);
-    } else {
-        navigator.clipboard.writeText(codigo);
-    }
-
+// 2. A confirmação só aparece depois que a área de transferência aceita o código.
+async function copiarCodigoRastreio(codigo, buttonElement) {
+    if (buttonElement?.dataset.copyState === 'pending') return false;
+    const original = buttonElement ? {
+        html: buttonElement.innerHTML, classes: buttonElement.className,
+        title: buttonElement.getAttribute('title'), label: buttonElement.getAttribute('aria-label'),
+        disabled: buttonElement.disabled
+    } : null;
     if (buttonElement) {
-        const originalHtml = buttonElement.innerHTML;
-        buttonElement.innerHTML = '<i class="bi bi-check2"></i> Copiado!';
-        buttonElement.classList.remove('btn-outline-primary', 'btn-outline-secondary');
-        buttonElement.classList.add('btn-success');
-
-        setTimeout(() => {
-            buttonElement.innerHTML = originalHtml;
-            buttonElement.classList.remove('btn-success');
-            buttonElement.classList.add('btn-outline-primary');
-        }, 2000);
+        buttonElement.dataset.copyState = 'pending';
+        buttonElement.disabled = true;
     }
+    let copied = false;
+    try {
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(codigo);
+            copied = true;
+        } else {
+            const previousFocus = document.activeElement;
+            const temp = document.createElement('input');
+            temp.value = codigo;
+            temp.style.position = 'fixed';
+            temp.style.left = '-9999px';
+            document.body.appendChild(temp);
+            try {
+                temp.select();
+                copied = document.execCommand('copy') === true;
+            } finally {
+                temp.remove();
+                previousFocus?.focus();
+            }
+        }
+    } catch {
+        copied = false;
+    }
+    const message = copied ? 'Código copiado.' : 'Não foi possível copiar. Selecione o código e copie manualmente.';
+    if (buttonElement) {
+        buttonElement.disabled = original.disabled;
+        buttonElement.dataset.copyState = copied ? 'copied' : 'failed';
+        buttonElement.innerHTML = copied ? '<i class="bi bi-check2" aria-hidden="true"></i>' : '<i class="bi bi-exclamation-circle" aria-hidden="true"></i>';
+        buttonElement.setAttribute('title', message);
+        buttonElement.setAttribute('aria-label', message);
+        setTimeout(() => {
+            buttonElement.innerHTML = original.html;
+            buttonElement.className = original.classes;
+            for (const [name, value] of [['title', original.title], ['aria-label', original.label]]) {
+                if (value === null) buttonElement.removeAttribute(name);
+                else buttonElement.setAttribute(name, value);
+            }
+            delete buttonElement.dataset.copyState;
+        }, 2500);
+    }
+    const host = document.getElementById('commandToasts');
+    if (host) {
+        const toast = document.createElement('div');
+        toast.className = 'toast show';
+        toast.setAttribute('role', 'status');
+        const body = document.createElement('p');
+        body.className = 'p-3 mb-0';
+        body.textContent = message;
+        toast.append(body);
+        host.append(toast);
+        setTimeout(() => toast.remove(), 4000);
+    }
+    return copied;
 }

@@ -21,7 +21,7 @@ namespace MglConnect.Web.Controllers
         {
             var viewModel = new RastreioViewModel
             {
-                CodigoBuscado = codigo?.Trim().ToUpper()
+                CodigoBuscado = PublicTrackingProjection.NormalizeCode(codigo)
             };
 
             if (!string.IsNullOrWhiteSpace(codigo))
@@ -30,7 +30,7 @@ namespace MglConnect.Web.Controllers
                 var entrega = await _trackingService.GetTrackingDetailsAsync(codigo);
                 if (entrega == null)
                 {
-                    viewModel.MensagemErro = $"Nenhum pacote encontrado com o código de rastreamento \"{codigo}\". Verifique o código digitado e tente novamente.";
+                    viewModel.MensagemErro = "Rastreamento não localizado. Verifique o código digitado e tente novamente.";
                 }
                 else
                 {

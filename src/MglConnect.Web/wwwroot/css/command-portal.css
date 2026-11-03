@@ -1,0 +1,115 @@
+/* Customer portal uses the shared Command Center components and theme tokens. */
+.cc-portal { min-width: 0; }
+.cc-portal-account { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.25rem; padding: 1.1rem 1.25rem; border: 1px solid var(--mgl-border-subtle); border-radius: var(--mgl-radius-md); background: var(--mgl-bg-subtle); }
+.cc-portal-account > div { flex: 1 1 15rem; min-width: 0; }
+.cc-portal-account .cc-eyebrow { font-size: .55rem; }
+.cc-portal-account h2 { margin: .25rem 0; color: var(--mgl-text-main); font-size: .92rem; font-weight: 800; overflow-wrap: anywhere; }
+.cc-portal-account p { margin: 0; color: var(--mgl-text-secondary); font-size: .68rem; }
+.cc-portal-scope { display: inline-flex; align-items: center; gap: .45rem; color: var(--mgl-text-secondary); font-size: .65rem; }
+.cc-portal-scope > i { color: var(--mgl-color-link); font-size: .9rem; }
+.cc-portal .cc-stat-meta { margin-top: auto; padding-top: .2rem; }
+.cc-portal-value .cc-stat-value { margin-block: 1.1rem .55rem; font-size: clamp(1.1rem, 1.6vw, 1.65rem); letter-spacing: -.035em; overflow-wrap: anywhere; }
+.cc-portal-filters { margin-bottom: 1.25rem; }
+.cc-portal-filters > .cc-portal-search { flex: 1 1 20rem; }
+.cc-portal-filters > div:not(.cc-portal-search) { flex-basis: 15rem; }
+.cc-portal-filters .form-select { min-height: 2.65rem; font-size: .75rem; }
+.cc-portal-table { max-width: 100%; border-radius: 0; overscroll-behavior-x: contain; }
+.cc-portal-table:focus-visible { outline: 2px solid var(--mgl-focus-ring); outline-offset: -3px; }
+.cc-portal-table table { min-width: 860px; }
+.cc-portal-table tbody > tr > th { font-weight: 400; }
+.cc-portal-table .cc-status { white-space: nowrap; }
+.cc-portal-order-number { color: var(--mgl-text-main); font-family: var(--mgl-font-mono); font-size: .75rem; font-weight: 700; text-decoration: none; overflow-wrap: anywhere; }
+.cc-portal-order-number:hover { color: var(--mgl-color-link); }
+.cc-portal-cell-meta { display: block; margin-top: .3rem; color: var(--mgl-text-secondary); font-size: .65rem; font-weight: 400; line-height: 1.55; }
+.cc-portal-description { min-width: 11rem; max-width: 23rem; overflow-wrap: anywhere; }
+.cc-portal-description .cc-portal-cell-meta { display: flex; align-items: center; flex-wrap: wrap; gap: .3rem; }
+.cc-portal-money { color: var(--mgl-text-main); font-size: .76rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cc-portal-tracking { display: flex; align-items: center; gap: .5rem; }
+.cc-portal-tracking > a { max-width: 12rem; font-size: .7rem; text-decoration: none; overflow-wrap: anywhere; }
+.cc-portal-copy { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; min-width: 2.2rem; min-height: 2.2rem; padding: .4rem; }
+.cc-portal-table td:last-child > a { white-space: nowrap; }
+.cc-portal-form-layout { display: grid; grid-template-columns: minmax(0, 1fr) 18rem; align-items: start; gap: 1.25rem; }
+.cc-portal-order-form { display: flex; flex-direction: column; min-width: 0; gap: 1.25rem; }
+.cc-portal-order-form .validation-summary-valid { display: none; }
+.cc-portal-order-form .validation-summary-errors { margin: 0; }
+.cc-portal-order-form .validation-summary-errors ul { margin-bottom: 0; padding-inline-start: 1.2rem; }
+.cc-portal-order-form :is(.field-validation-error, .text-danger) { display: block; margin-top: .3rem; font-size: .7rem; }
+.cc-portal-order-form .field-validation-valid { margin: 0; }
+.cc-portal-form-heading { display: flex; align-items: center; gap: .75rem; }
+.cc-portal-form-heading > div { min-width: 0; }
+.cc-portal-form-hint { margin: 0; color: var(--mgl-text-secondary); font-size: .68rem; line-height: 1.65; }
+.cc-portal-form-hint > i { color: var(--mgl-color-link); }
+.cc-portal-dimensions { margin: 1.25rem 0 0; padding-top: 1.25rem; border-top: 1px solid var(--mgl-border-subtle); }
+.cc-portal-dimensions legend { display: flex; align-items: baseline; flex-wrap: wrap; gap: .35rem .75rem; float: none; width: auto; margin-bottom: .75rem; color: var(--mgl-text-main); font-size: .78rem; font-weight: 700; }
+.cc-portal-dimensions legend span { color: var(--mgl-text-secondary); font-size: .65rem; font-weight: 400; }
+.cc-portal-uf { text-transform: uppercase; }
+.cc-portal-form-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: .75rem; padding-block: .25rem; }
+.cc-portal-form-actions .btn { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; }
+.cc-portal-form-guide .cc-timeline p { margin: .35rem 0 0; color: var(--mgl-text-secondary); font-size: .7rem; line-height: 1.65; }
+.cc-portal-form-guide .cc-timeline + .cc-portal-form-hint { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--mgl-border-subtle); }
+.cc-portal-detail-title { overflow-wrap: anywhere; }
+.cc-portal-order-overview { display: grid; grid-template-columns: minmax(0, 1fr) minmax(12rem, .48fr); align-items: center; gap: 1.5rem; margin-bottom: 1.25rem; padding: 1.25rem; }
+.cc-portal-order-state { display: flex; align-items: flex-start; gap: .85rem; min-width: 0; }
+.cc-portal-order-state h2 { margin: 0 0 .65rem; color: var(--mgl-text-secondary); font-size: .72rem; font-weight: 600; }
+.cc-portal-order-state p { max-width: 35rem; margin: .6rem 0 0; color: var(--mgl-text-secondary); font-size: .73rem; line-height: 1.7; }
+.cc-portal-order-reference { min-width: 0; padding-inline-start: 1.5rem; border-inline-start: 1px solid var(--mgl-border-subtle); }
+.cc-portal-order-reference > strong { display: block; margin-top: .5rem; color: var(--mgl-text-main); font-size: .8rem; }
+.cc-portal-order-reference > small { display: block; margin-top: .4rem; color: var(--mgl-text-secondary); font-size: .65rem; }
+.cc-portal-order-reference .cc-portal-tracking { margin-top: .35rem; overflow-wrap: anywhere; }
+.cc-portal-order-reference .cc-portal-tracking strong { min-width: 0; color: var(--mgl-color-link); font-size: .9rem; overflow-wrap: anywhere; }
+.cc-portal-detail-label { color: var(--mgl-text-secondary); font-size: .66rem; }
+.cc-portal-detail-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); align-items: start; gap: 1.25rem; }
+.cc-portal-detail-stack { display: flex; flex-direction: column; min-width: 0; gap: 1.25rem; }
+.cc-portal-cargo-description { margin: 0 0 1.25rem; color: var(--mgl-text-main); font-size: .83rem; line-height: 1.7; overflow-wrap: anywhere; }
+.cc-portal-detail-data { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin: 0; }
+.cc-portal-detail-data dt { color: var(--mgl-text-secondary); font-size: .65rem; font-weight: 500; }
+.cc-portal-detail-data dd { margin: .35rem 0 0; color: var(--mgl-text-main); font-size: .78rem; font-weight: 700; overflow-wrap: anywhere; }
+.cc-portal-addresses { display: flex; flex-direction: column; gap: 1.25rem; }
+.cc-portal-addresses > section { display: flex; align-items: flex-start; gap: .85rem; min-width: 0; }
+.cc-portal-addresses > section + section { padding-top: 1.25rem; border-top: 1px solid var(--mgl-border-subtle); }
+.cc-portal-addresses > section > div { min-width: 0; }
+.cc-portal-addresses h3 { margin: 0 0 .5rem; color: var(--mgl-text-main); font-size: .78rem; font-weight: 800; }
+.cc-portal-addresses address { display: flex; flex-direction: column; gap: .2rem; margin: 0; color: var(--mgl-text-secondary); font-size: .73rem; line-height: 1.65; overflow-wrap: anywhere; }
+.cc-portal-addresses address strong { color: var(--mgl-text-main); font-weight: 600; }
+.cc-portal-pod .cc-panel-header h2 > i { color: var(--mgl-success); }
+.cc-portal-signature { margin: 1.25rem 0 0; padding: 1rem; border: 1px solid var(--mgl-border-subtle); border-radius: var(--mgl-radius-sm); background: var(--mgl-bg-subtle); }
+.cc-portal-signature figcaption { margin-bottom: .75rem; color: var(--mgl-text-secondary); font-size: .65rem; }
+.cc-portal-signature img { max-width: 100%; max-height: 90px; padding: .5rem; border-radius: var(--mgl-radius-xs); background: var(--mgl-on-solid); object-fit: contain; }
+.cc-portal-order-timeline > li { overflow-wrap: anywhere; }
+.cc-portal-order-timeline strong { display: block; margin-top: .35rem; color: var(--mgl-text-main); }
+.cc-portal-order-timeline p { margin: .45rem 0 0; color: var(--mgl-text-secondary); font-size: .73rem; line-height: 1.7; }
+.cc-portal-order-timeline small { display: block; margin-top: .5rem; color: var(--mgl-text-secondary); font-size: .65rem; }
+.cc-portal-timeline-note { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--mgl-border-subtle); }
+
+@media (max-width: 1199.98px) {
+    .cc-portal-form-layout { grid-template-columns: minmax(0, 1fr); }
+    .cc-portal-form-guide .cc-timeline { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }
+    .cc-portal-form-guide .cc-timeline > li { padding-bottom: 0; }
+}
+
+@media (max-width: 991.98px) {
+    .cc-portal-detail-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 767.98px) {
+    .cc-portal-account { align-items: flex-start; gap: .75rem; padding: 1rem; }
+    .cc-portal-account > div { flex-basis: calc(100% - 3.1rem); }
+    .cc-portal-account > .cc-portal-scope { margin-inline-start: 3.1rem; }
+    .cc-portal-value .cc-stat-value { font-size: clamp(1rem, 3.5vw, 1.5rem); }
+    .cc-portal-filters > div:not(.cc-portal-search) { flex: 1 1 100%; }
+    .cc-portal-filters > .cc-portal-search { flex-basis: 100%; }
+    .cc-portal-filters > .btn { flex: 1 1 auto; }
+    .cc-portal .cc-panel-header > .cc-portal-scope { flex-basis: 100%; }
+    .cc-portal-table table { min-width: 820px; }
+    .cc-portal-order-overview { grid-template-columns: minmax(0, 1fr); gap: 1rem; padding: 1rem; }
+    .cc-portal-order-reference { padding: 1rem 0 0; border-inline-start: 0; border-top: 1px solid var(--mgl-border-subtle); }
+    .cc-portal-form-guide .cc-timeline { display: block; }
+    .cc-portal-form-guide .cc-timeline > li { padding-bottom: 1.1rem; }
+    .cc-portal-form-guide .cc-timeline > li:last-child { padding-bottom: 0; }
+    .cc-portal-form-actions > .btn { flex: 1 1 auto; }
+    .cc-portal-detail-data { gap: 1rem .75rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cc-portal :is(a, button) { transition: none; }
+}

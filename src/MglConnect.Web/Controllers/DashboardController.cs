@@ -1,6 +1,3 @@
-using System;
-using System.Linq;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -8,78 +5,70 @@ using MglConnect.Web.Data;
 using MglConnect.Web.Services;
 using MglConnect.Web.ViewModels;
 
-namespace MglConnect.Web.Controllers
+namespace MglConnect.Web.Controllers;
+
+[Authorize(Roles = "Admin")]
+[ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+public class DashboardController : Controller
 {
-    [Authorize(Roles = "Admin")]
-    public class DashboardController : Controller
+    private readonly MglDbContext _context;
+
+    public DashboardController(MglDbContext context, IFuelCostService fuelService) => _context = context;
+
+    public async Task<IActionResult> Index(DateOnly? de, DateOnly? ate)
     {
-        private readonly MglDbContext _context;
-        private readonly IFuelCostService _fuelService;
-
-        public DashboardController(MglDbContext context, IFuelCostService fuelService)
+        if (!ValidPeriod(de, ate))
         {
-            _context = context;
-            _fuelService = fuelService;
+            ModelState.AddModelError(string.Empty, "Informe um período válido, com a data inicial anterior à final.");
+            return View(new DashboardViewModel { PeriodoInicio = de, PeriodoFim = ate });
         }
+        return View(await LoadAsync(de, ate));
+    }
 
-        public async Task<IActionResult> Index()
+    [HttpGet]
+    public async Task<IActionResult> Painel(DateOnly? de, DateOnly? ate)
+    {
+        if (!ValidPeriod(de, ate)) return BadRequest(new { erro = "Período inválido." });
+        return PartialView("_OperationalPanel", await LoadAsync(de, ate));
+    }
+
+    private bool ValidPeriod(DateOnly? de, DateOnly? ate) => ModelState.IsValid && (!de.HasValue || !ate.HasValue || de <= ate);
+
+    private async Task<DashboardViewModel> LoadAsync(DateOnly? de, DateOnly? ate)
+    {
+        var now = DateTime.UtcNow;
+        var orders = _context.Pedidos.AsNoTracking().AsQueryable();
+        var deliveries = _context.Entregas.AsNoTracking().AsQueryable();
+        if (de.HasValue)
         {
-            var totalClientes = await _context.Clientes.CountAsync(c => c.Ativo);
-            var totalPedidos = await _context.Pedidos.CountAsync();
-            var entregasPendentes = await _context.Entregas.CountAsync(e => e.StatusEntrega == "Pendente");
-            var entregasEmTransporte = await _context.Entregas.CountAsync(e => e.StatusEntrega == "Em transporte");
-            var entregasEntregues = await _context.Entregas.CountAsync(e => e.StatusEntrega == "Entregue");
-
-            // Cast seguro SQLite contra NotSupportedException em SumAsync
-            // Usa AsNoTracking para consultas puramente informativas (Dashboard)
-            var valorTotalDouble = await _context.Pedidos.AsNoTracking().SumAsync(p => (double?)p.ValorTotal) ?? 0.0;
-            var valorTotal = (decimal)valorTotalDouble;
-
-            // Métricas de Custos Operacionais e Combustível da Frota (Módulo 3)
-            var fleetCosts = await _fuelService.ObterResumoCustosFrotaAsync();
-
-            var entregasRecentes = await _context.Entregas
-                .Include(e => e.Pedido)
-                    .ThenInclude(p => p!.Cliente)
-                .Include(e => e.Motorista)
-                .OrderByDescending(e => e.DataCriacao)
-                .Take(5)
-                .AsNoTracking()
-                .ToListAsync();
-
-            var pedidosSemEntrega = await _context.Pedidos
-                .Include(p => p.Cliente)
-                .Where(p => p.Entrega == null)
-                .OrderByDescending(p => p.DataPedido)
-                .Take(5)
-                .AsNoTracking()
-                .ToListAsync();
-
-            var viewModel = new DashboardViewModel
-            {
-                TotalClientes = totalClientes,
-                TotalPedidos = totalPedidos,
-                EntregasPendentes = entregasPendentes,
-                EntregasEmTransporte = entregasEmTransporte,
-                EntregasEntregues = entregasEntregues,
-                ValorTotalPedidos = valorTotal,
-                CustoTotalCombustivel = fleetCosts.CustoTotalCombustivel,
-                CustoTotalPedagios = fleetCosts.CustoTotalPedagios,
-                CustoTotalFrota = fleetCosts.CustoTotalOperacional,
-                MargemLucroLiquida = fleetCosts.MargemLucroLiquida,
-                MargemLucroPercentual = fleetCosts.MargemLucroPercentual,
-                TotalLitrosCombustivel = fleetCosts.TotalLitrosDiesel,
-                EntregasRecentes = entregasRecentes,
-                PedidosSemEntrega = pedidosSemEntrega
-            };
-
-            // ESG: Calcular emissões CO2 acumuladas (baseado em distância média por entrega)
-            var totalEntregasConc = entregasEntregues;
-            viewModel.TotalEntregasConcluidas = totalEntregasConc;
-            // Estimativa: média 150km/entrega, 3.8 kg CO2/km para caminhão pesado (diesel)
-            viewModel.EmissaoCo2TotalKg = Math.Round(totalEntregasConc * 150.0 * 3.8, 1);
-
-            return View(viewModel);
+            var start = de.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            orders = orders.Where(p => p.DataPedido >= start);
+            deliveries = deliveries.Where(e => e.DataCriacao >= start);
         }
+        if (ate.HasValue)
+        {
+            // Include the final date with its full subsecond precision.
+            var end = ate.Value.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
+            orders = orders.Where(p => p.DataPedido <= end);
+            deliveries = deliveries.Where(e => e.DataCriacao <= end);
+        }
+        var queue = orders.Where(p => (p.Status == "Registrado" || p.Status == "EmProcessamento") && p.Entrega == null);
+        return new DashboardViewModel
+        {
+            PeriodoInicio = de, PeriodoFim = ate, UltimaAtualizacaoUtc = now,
+            TotalClientes = await _context.Clientes.CountAsync(c => c.Ativo),
+            TotalPedidos = await orders.CountAsync(),
+            PedidosAguardandoDespacho = await queue.CountAsync(),
+            EntregasPendentes = await deliveries.CountAsync(e => e.StatusEntrega == "Pendente"),
+            EntregasEmTransporte = await deliveries.CountAsync(e => e.StatusEntrega == "Em transporte"),
+            EntregasEntregues = await deliveries.CountAsync(e => e.StatusEntrega == "Entregue"),
+            EntregasAtrasadas = await deliveries.CountAsync(e => (e.StatusEntrega == "Pendente" || e.StatusEntrega == "Em transporte") && e.DataPrevisaoEntrega < now),
+            ValorTotalPedidos = Math.Round((decimal)(await orders.Where(p => p.Status != "Cancelado").SumAsync(p => (double?)p.ValorTotal) ?? 0), 2),
+            VeiculosAtivos = await _context.Veiculos.CountAsync(v => v.Ativo),
+            VeiculosEmUso = await _context.Entregas.Where(e => e.AtribuicaoAtiva && e.VeiculoId != null).Select(e => e.VeiculoId).Distinct().CountAsync(),
+            AlertasAbertos = await _context.AlertasEmergencia.CountAsync(a => a.Status == "Aberto" || a.Status == "Reconhecido" || a.Status == "EmAtendimento"),
+            EntregasRecentes = await deliveries.Include(e => e.Motorista).Include(e => e.Pedido).ThenInclude(p => p!.Cliente).OrderByDescending(e => e.DataCriacao).Take(5).ToListAsync(),
+            PedidosSemEntrega = await queue.Include(p => p.Cliente).OrderBy(p => p.DataPedido).Take(5).ToListAsync()
+        };
     }
 }

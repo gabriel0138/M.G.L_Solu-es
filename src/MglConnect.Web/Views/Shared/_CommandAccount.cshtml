@@ -1,0 +1,27 @@
+@{
+    var displayName = User.Identity?.Name ?? "Usuário";
+    var firstLetter = string.IsNullOrWhiteSpace(displayName) ? "U" : displayName.Trim()[..1].ToUpperInvariant();
+    var profile = User.IsInRole("Admin") ? "Administrador" : User.IsInRole("Motorista") ? "Motorista" : User.IsInRole("Intermediador") ? "Intermediador" : "Cliente";
+}
+<details class="cc-account-menu">
+    <summary class="cc-account" aria-label="Conta de @displayName">
+        <span class="cc-avatar" aria-hidden="true">@firstLetter</span>
+        <span class="cc-account-copy"><strong>@displayName</strong><small>@profile</small></span>
+        <i class="bi bi-chevron-down" aria-hidden="true"></i>
+    </summary>
+    <div class="cc-account-dropdown">
+        <span class="cc-nav-label">@profile</span>
+        @if (User.IsInRole("Motorista"))
+        {
+            <a asp-controller="Entregas" asp-action="PerfilMotorista"><i class="bi bi-person" aria-hidden="true"></i> Meu perfil</a>
+            <a asp-controller="Entregas" asp-action="Index"><i class="bi bi-truck" aria-hidden="true"></i> Minhas viagens</a>
+        }
+        else
+        {
+            <a asp-controller="Home" asp-action="Index"><i class="bi bi-grid-1x2" aria-hidden="true"></i> Meu painel</a>
+        }
+        <form asp-controller="Account" asp-action="Logout" method="post">
+            <button type="submit"><i class="bi bi-box-arrow-right" aria-hidden="true"></i> Encerrar sessão</button>
+        </form>
+    </div>
+</details>

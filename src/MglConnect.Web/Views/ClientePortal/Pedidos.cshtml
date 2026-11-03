@@ -1,134 +1,138 @@
 @model IEnumerable<MglConnect.Web.Models.Pedido>
 @{
-    ViewData["Title"] = "Portal do Cliente - Meus Pedidos";
+    ViewData["Title"] = "Meus pedidos";
     var cliente = ViewBag.Cliente as MglConnect.Web.Models.Cliente;
+    var br = System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
+    var pedidos = Model.ToList();
+    string? statusSelecionado = ViewBag.StatusSelecionado;
+    string? termoBusca = ViewBag.TermoBusca;
+    var filtrosAtivos = !string.IsNullOrWhiteSpace(statusSelecionado) || !string.IsNullOrWhiteSpace(termoBusca);
 }
 
-<div class="container py-4">
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+<div class="cc-dashboard cc-portal">
+    <header class="cc-section-heading cc-page-heading">
         <div>
-            <h3 class="fw-bold mb-1" style="color: var(--mgl-dark-primary);">
-                <i class="bi bi-boxes me-2" style="color: var(--mgl-teal);"></i> Meus Pedidos de Carga
-            </h3>
-            <p class="text-muted small mb-0">Listagem completa de ordens de distribuição associadas a @cliente?.RazaoSocial.</p>
+            <span class="cc-eyebrow">COMMAND CENTER / PORTAL DO CLIENTE</span>
+            <h1>Meus pedidos</h1>
+            <p>Solicitações de @(cliente?.NomeFantasia ?? cliente?.RazaoSocial ?? "sua conta"), do registro à conclusão da entrega.</p>
         </div>
-        <div class="d-flex gap-2">
-            <a asp-action="NovoPedido" class="btn btn-mgl-teal btn-sm">
-                <i class="bi bi-plus-circle me-1"></i> Novo pedido
-            </a>
-            <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
-                <i class="bi bi-arrow-left me-1"></i> Voltar ao Dashboard
-            </a>
+        <div class="cc-quick-actions">
+            <a asp-action="Index" class="btn btn-outline-secondary"><i class="bi bi-grid" aria-hidden="true"></i> Visão geral</a>
+            <a asp-action="NovoPedido" class="btn btn-mgl-primary"><i class="bi bi-plus-lg" aria-hidden="true"></i> Novo pedido</a>
         </div>
-    </div>
+    </header>
 
-    <!-- Barra de Filtros -->
-    <div class="card-mgl p-3 mb-4">
-        <form method="get" class="row g-2 align-items-center">
-            <div class="col-md-7">
-                <div class="input-group">
-                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-search text-muted"></i></span>
-                    <input type="text" name="termo" value="@ViewBag.TermoBusca" class="form-control border-start-0" 
-                           placeholder="Buscar por número do pedido, itens ou código de rastreio..." />
-                </div>
-            </div>
-            <div class="col-md-3">
-                <select name="status" class="form-select">
-                    <option value="">-- Todos os Status --</option>
-                    <option value="Em transporte" selected="@(ViewBag.StatusSelecionado == "Em transporte")">Em trânsito</option>
-                    <option value="Entregue" selected="@(ViewBag.StatusSelecionado == "Entregue")">Entregue</option>
-                    <option value="Pendente" selected="@(ViewBag.StatusSelecionado == "Pendente")">Pendente</option>
-                </select>
-            </div>
-            <div class="col-md-2 d-grid">
-                <button type="submit" class="btn btn-mgl-primary">Filtrar</button>
-            </div>
-        </form>
-    </div>
+    <form method="get" asp-action="Pedidos" class="cc-filter-bar cc-portal-filters" aria-label="Filtrar seus pedidos">
+        <div class="cc-portal-search">
+            <label for="portalOrderSearch" class="form-label">Buscar pedido ou rastreio</label>
+            <input id="portalOrderSearch" type="search" name="termo" value="@termoBusca" class="form-control" placeholder="Número, descrição da carga ou código de rastreio" maxlength="255" />
+        </div>
+        <div>
+            <label for="portalOrderStatus" class="form-label">Estado do pedido ou da viagem</label>
+            <select id="portalOrderStatus" name="status" class="form-select">
+                <option value="">Todos os estados</option>
+                <option value="Registrado" selected="@(statusSelecionado == "Registrado")">Pedido registrado</option>
+                <option value="EmProcessamento" selected="@(statusSelecionado == "EmProcessamento")">Pedido em processamento</option>
+                <option value="ComEntregaAtribuida" selected="@(statusSelecionado == "ComEntregaAtribuida")">Pedido em despacho</option>
+                <option value="Pendente" selected="@(statusSelecionado == "Pendente")">Viagem pendente</option>
+                <option value="Em transporte" selected="@(statusSelecionado == "Em transporte")">Viagem em transporte</option>
+                <option value="Entregue" selected="@(statusSelecionado == "Entregue")">Entrega concluída</option>
+                <option value="Concluido" selected="@(statusSelecionado == "Concluido")">Pedido concluído</option>
+                <option value="Cancelado" selected="@(statusSelecionado == "Cancelado")">Pedido cancelado</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-mgl-primary"><i class="bi bi-funnel" aria-hidden="true"></i> Filtrar</button>
+        @if (filtrosAtivos)
+        {
+            <a asp-action="Pedidos" class="btn btn-link">Limpar filtros</a>
+        }
+        <p class="cc-filter-help">A busca e o estado são combinados e consideram somente os pedidos da sua conta.</p>
+    </form>
 
-    <!-- Lista de Pedidos -->
-    <div class="card-mgl p-4">
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="table-light fs-8 text-uppercase">
-                    <tr>
-                        <th>Número</th>
-                        <th>Data</th>
-                        <th>Itens / Descrição</th>
-                        <th>Valor Total</th>
-                        <th>Status</th>
-                        <th>Rastreamento</th>
-                        <th class="text-end">Ações</th>
-                    </tr>
-                </thead>
-                <tbody class="fs-7">
-                    @if (!Model.Any())
-                    {
+    <section class="cc-panel cc-portal-results" aria-labelledby="portalOrdersHeading">
+        <header class="cc-panel-header">
+            <div>
+                <h2 id="portalOrdersHeading">@(filtrosAtivos ? "Resultado da consulta" : "Histórico de pedidos")</h2>
+                <p>@pedidos.Count @(pedidos.Count == 1 ? "pedido encontrado" : "pedidos encontrados") · Datas de criação em UTC</p>
+            </div>
+            <span class="cc-portal-scope"><i class="bi bi-shield-check" aria-hidden="true"></i> Sua conta corporativa</span>
+        </header>
+        @if (pedidos.Count == 0)
+        {
+            <div class="cc-empty-state">
+                <i class="bi @(filtrosAtivos ? "bi-search" : "bi-box-seam")" aria-hidden="true"></i>
+                <h3>@(filtrosAtivos ? "Nenhum pedido corresponde aos filtros" : "Você ainda não tem pedidos")</h3>
+                <p>@(filtrosAtivos ? "Tente outro número, descrição ou código de rastreio, ou consulte todos os estados." : "Crie sua primeira solicitação com os dados da carga, da coleta e do destino.")</p>
+                @if (filtrosAtivos)
+                {
+                    <a asp-action="Pedidos" class="btn btn-outline-secondary">Ver todos os pedidos</a>
+                }
+                else
+                {
+                    <a asp-action="NovoPedido" class="btn btn-mgl-primary">Criar primeiro pedido</a>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive cc-portal-table" role="region" aria-label="Seus pedidos, role horizontalmente para consultar todas as colunas" tabindex="0">
+                <table class="table table-hover align-middle mb-0">
+                    <caption class="visually-hidden">Pedidos da sua conta. Valores declarados de mercadoria em reais; datas de criação em UTC.</caption>
+                    <thead>
                         <tr>
-                            <td colspan="7" class="text-center py-4 text-muted">Nenhum pedido encontrado.</td>
+                            <th scope="col">Pedido / criação (UTC)</th>
+                            <th scope="col">Carga / trajeto</th>
+                            <th scope="col">Mercadoria / peso</th>
+                            <th scope="col">Estado do envio</th>
+                            <th scope="col">Rastreamento</th>
+                            <th scope="col" class="text-end">Ações</th>
                         </tr>
-                    }
-                    @foreach (var p in Model)
-                    {
-                        <tr>
-                            <td>
-                                <strong class="font-monospace text-dark">@p.NumeroPedido</strong>
-                            </td>
-                            <td>@p.DataPedido.ToString("dd/MM/yyyy HH:mm")</td>
-                            <td>@p.Descricao</td>
-                            <td>
-                                <strong>R$ @p.ValorTotal.ToString("N2")</strong>
-                                <div class="text-muted fs-8">@p.PesoKg.ToString("F1") kg</div>
-                            </td>
-                            <td>
-                                @if (p.Entrega != null)
-                                {
-                                    @if (p.Entrega.StatusEntrega == "Entregue")
+                    </thead>
+                    <tbody>
+                        @foreach (var p in pedidos)
+                        {
+                            var estado = p.Status == "Cancelado" ? p.Status : p.Entrega?.StatusEntrega ?? p.Status;
+                            <tr>
+                                <th scope="row">
+                                    <a asp-action="PedidoDetalhes" asp-route-id="@p.Id" class="cc-portal-order-number">@p.NumeroPedido</a>
+                                    <time class="cc-portal-cell-meta" datetime="@p.DataPedido.ToString("yyyy-MM-ddTHH:mm:ssZ")">@p.DataPedido.ToString("dd/MM/yyyy HH:mm")</time>
+                                </th>
+                                <td class="cc-portal-description">
+                                    <span>@p.Descricao</span>
+                                    @if (!string.IsNullOrWhiteSpace(p.OrigemCidade) && !string.IsNullOrWhiteSpace(p.DestinoCidade))
                                     {
-                                        <span class="badge badge-mgl-delivered">Entregue</span>
+                                        <span class="cc-portal-cell-meta">@p.OrigemCidade / @p.OrigemEstado <i class="bi bi-arrow-right" aria-hidden="true"></i> @p.DestinoCidade / @p.DestinoEstado</span>
                                     }
-                                    else if (p.Entrega.StatusEntrega == "Em transporte")
+                                </td>
+                                <td>
+                                    <strong class="cc-portal-money">@p.ValorTotal.ToString("C", br)</strong>
+                                    <span class="cc-portal-cell-meta">@p.PesoKg.ToString("N1", br) kg</span>
+                                </td>
+                                <td><partial name="_CommandStatus" model="estado" /></td>
+                                <td>
+                                    @if (p.Entrega != null)
                                     {
-                                        <span class="badge badge-mgl-transit">Em trânsito</span>
+                                        <div class="cc-portal-tracking">
+                                            <a asp-controller="Rastreio" asp-action="Index" asp-route-codigo="@p.Entrega.CodigoRastreio" class="font-monospace" aria-label="Rastrear o pedido @p.NumeroPedido">@p.Entrega.CodigoRastreio</a>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm cc-portal-copy" data-tracking-code="@p.Entrega.CodigoRastreio" onclick="copiarCodigoRastreio(this.dataset.trackingCode, this)" aria-label="Copiar código de rastreio do pedido @p.NumeroPedido" title="Copiar código de rastreio">
+                                                <i class="bi bi-clipboard" aria-hidden="true"></i>
+                                            </button>
+                                        </div>
                                     }
                                     else
                                     {
-                                        <span class="badge badge-mgl-pending">No CD</span>
+                                        <span class="cc-portal-cell-meta">Disponível após o despacho</span>
                                     }
-                                }
-                                else
-                                {
-                                    <span class="badge bg-secondary">Aguardando</span>
-                                }
-                            </td>
-                            <td>
-                                @if (p.Entrega != null)
-                                {
-                                    <div class="d-flex align-items-center gap-1">
-                                        <a asp-controller="Rastreio" asp-action="Index" asp-route-codigo="@p.Entrega.CodigoRastreio" 
-                                           class="font-monospace fw-bold text-decoration-none" style="color: var(--mgl-accent-2);">
-                                            @p.Entrega.CodigoRastreio
-                                        </a>
-                                        <button type="button" class="btn btn-sm btn-link text-decoration-none p-0 text-muted" 
-                                                onclick="copiarCodigoRastreio('@p.Entrega.CodigoRastreio', this)" title="Copiar código">
-                                            <i class="bi bi-clipboard"></i>
-                                        </button>
-                                    </div>
-                                }
-                                else
-                                {
-                                    <span class="text-muted fs-8">—</span>
-                                }
-                            </td>
-                            <td class="text-end">
-                                <a asp-action="PedidoDetalhes" asp-route-id="@p.Id" class="btn btn-mgl-primary btn-sm">
-                                    <i class="bi bi-eye"></i> Detalhes
-                                </a>
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-    </div>
+                                </td>
+                                <td class="text-end">
+                                    <a asp-action="PedidoDetalhes" asp-route-id="@p.Id" class="btn btn-outline-secondary btn-sm" aria-label="Ver detalhes do pedido @p.NumeroPedido">Detalhes <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+    <div class="cc-data-note"><i class="bi bi-info-circle" aria-hidden="true"></i><p>Consulte os detalhes de cada pedido para ver a entrega e os comprovantes disponíveis. Valor da mercadoria é o valor declarado da carga.</p></div>
 </div>

@@ -3,129 +3,163 @@
     ViewData["Title"] = "Novo pedido";
 }
 
-<div class="container py-4">
-    <div class="row justify-content-center">
-        <div class="col-lg-9">
-            <div class="card-mgl p-4 p-md-5">
-                <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
-                    <div>
-                        <span class="badge rounded-pill mb-2" style="background: var(--mgl-teal); color: var(--mgl-dark-primary);">Solicitação do cliente</span>
-                        <h3 class="fw-bold mb-1">Novo pedido de coleta e entrega</h3>
-                        <p class="text-muted mb-0">O pedido ficará aguardando validação e despacho pela operação.</p>
-                    </div>
-                    <a asp-action="Pedidos" class="btn btn-outline-secondary btn-sm">Voltar</a>
-                </div>
+<div class="cc-dashboard cc-portal">
+    <header class="cc-section-heading cc-page-heading">
+        <div>
+            <span class="cc-eyebrow">COMMAND CENTER / NOVO PEDIDO</span>
+            <h1 id="newClientOrderHeading">Solicite sua próxima operação</h1>
+            <p>Informe a carga, a coleta e o destino. A operação receberá o pedido para validação e despacho.</p>
+        </div>
+        <div class="cc-quick-actions"><a asp-action="Pedidos" class="btn btn-outline-secondary"><i class="bi bi-arrow-left" aria-hidden="true"></i> Meus pedidos</a></div>
+    </header>
 
-                <form asp-action="NovoPedido" method="post">
-                    <input asp-for="ChaveEnvio" type="hidden" />
-                    <div asp-validation-summary="All" class="alert alert-danger"></div>
+    <div class="cc-portal-form-layout">
+        <form asp-action="NovoPedido" method="post" id="clientOrderForm" class="cc-portal-order-form">
+            <input asp-for="ChaveEnvio" type="hidden" />
+            <div asp-validation-summary="All" class="alert alert-danger" role="alert" aria-live="polite"></div>
 
-                    <h5 class="fw-bold border-bottom pb-2">Carga</h5>
-                    <div class="row g-3 mb-4">
+            <section class="cc-panel" aria-labelledby="clientCargoHeading">
+                <header class="cc-panel-header">
+                    <div class="cc-portal-form-heading"><span class="cc-trip-icon"><i class="bi bi-box-seam" aria-hidden="true"></i></span><div><h2 id="clientCargoHeading">1. Dados da carga</h2><p>Declare o conteúdo, o peso e o valor da mercadoria.</p></div></div>
+                </header>
+                <div class="cc-panel-body">
+                    <div class="row g-3">
                         <div class="col-12">
                             <label asp-for="Descricao" class="form-label"></label>
-                            <textarea asp-for="Descricao" class="form-control" rows="2"></textarea>
-                            <span asp-validation-for="Descricao" class="text-danger"></span>
+                            <textarea asp-for="Descricao" class="form-control" rows="3" maxlength="255" required aria-describedby="DescricaoError" placeholder="Descreva os itens e as quantidades da carga"></textarea>
+                            <span asp-validation-for="Descricao" id="DescricaoError" class="text-danger"></span>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-12">
                             <label asp-for="TipoCarga" class="form-label"></label>
-                            <input asp-for="TipoCarga" class="form-control" />
-                            <span asp-validation-for="TipoCarga" class="text-danger"></span>
+                            <input asp-for="TipoCarga" class="form-control" maxlength="50" required aria-describedby="TipoCargaError" />
+                            <span asp-validation-for="TipoCarga" id="TipoCargaError" class="text-danger"></span>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-sm-6">
                             <label asp-for="PesoKg" class="form-label"></label>
-                            <input asp-for="PesoKg" class="form-control" type="number" step="0.01" />
-                            <span asp-validation-for="PesoKg" class="text-danger"></span>
+                            <input asp-for="PesoKg" class="form-control" type="number" step="0.01" min="0.01" max="1000000" inputmode="decimal" required aria-describedby="PesoKgError" />
+                            <span asp-validation-for="PesoKg" id="PesoKgError" class="text-danger"></span>
                         </div>
-                        <div class="col-md-4">
-                            <label asp-for="ValorTotal" class="form-label"></label>
-                            <input asp-for="ValorTotal" class="form-control" type="number" step="0.01" />
-                            <span asp-validation-for="ValorTotal" class="text-danger"></span>
+                        <div class="col-sm-6">
+                            <label asp-for="ValorTotal" class="form-label">Valor declarado da mercadoria (R$)</label>
+                            <input asp-for="ValorTotal" class="form-control" type="number" step="0.01" min="0" max="100000000" inputmode="decimal" required aria-describedby="ValorTotalError cargoValueHint" />
+                            <span asp-validation-for="ValorTotal" id="ValorTotalError" class="text-danger"></span>
                         </div>
-                        <div class="col-md-4">
-                            <label asp-for="AlturaCargaMetros" class="form-label"></label>
-                            <input asp-for="AlturaCargaMetros" class="form-control" type="number" step="0.01" />
-                        </div>
-                        <div class="col-md-4">
-                            <label asp-for="LarguraCargaMetros" class="form-label"></label>
-                            <input asp-for="LarguraCargaMetros" class="form-control" type="number" step="0.01" />
-                        </div>
-                        <div class="col-md-4">
-                            <label asp-for="ComprimentoCargaMetros" class="form-label"></label>
-                            <input asp-for="ComprimentoCargaMetros" class="form-control" type="number" step="0.01" />
-                        </div>
+                        <div class="col-12"><p id="cargoValueHint" class="cc-portal-form-hint">O valor declarado descreve a mercadoria transportada.</p></div>
                     </div>
+                    <fieldset class="cc-portal-dimensions">
+                        <legend>Dimensões da carga <span>Opcional · em metros</span></legend>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label asp-for="AlturaCargaMetros" class="form-label"></label>
+                                <input asp-for="AlturaCargaMetros" class="form-control" type="number" step="0.01" min="0.01" max="20" inputmode="decimal" aria-describedby="AlturaCargaMetrosError" />
+                                <span asp-validation-for="AlturaCargaMetros" id="AlturaCargaMetrosError" class="text-danger"></span>
+                            </div>
+                            <div class="col-md-4">
+                                <label asp-for="LarguraCargaMetros" class="form-label"></label>
+                                <input asp-for="LarguraCargaMetros" class="form-control" type="number" step="0.01" min="0.01" max="20" inputmode="decimal" aria-describedby="LarguraCargaMetrosError" />
+                                <span asp-validation-for="LarguraCargaMetros" id="LarguraCargaMetrosError" class="text-danger"></span>
+                            </div>
+                            <div class="col-md-4">
+                                <label asp-for="ComprimentoCargaMetros" class="form-label"></label>
+                                <input asp-for="ComprimentoCargaMetros" class="form-control" type="number" step="0.01" min="0.01" max="30" inputmode="decimal" aria-describedby="ComprimentoCargaMetrosError" />
+                                <span asp-validation-for="ComprimentoCargaMetros" id="ComprimentoCargaMetrosError" class="text-danger"></span>
+                            </div>
+                        </div>
+                    </fieldset>
+                </div>
+            </section>
 
-                    <h5 class="fw-bold border-bottom pb-2">Endereço de coleta</h5>
-                    <div class="row g-3 mb-4">
-                        <div class="col-md-8">
-                            <label asp-for="OrigemEndereco" class="form-label"></label>
-                            <input asp-for="OrigemEndereco" class="form-control" />
-                            <span asp-validation-for="OrigemEndereco" class="text-danger"></span>
-                        </div>
-                        <div class="col-md-4">
-                            <label asp-for="OrigemNumero" class="form-label"></label>
-                            <input asp-for="OrigemNumero" class="form-control" />
-                            <span asp-validation-for="OrigemNumero" class="text-danger"></span>
-                        </div>
-                        <div class="col-md-4">
-                            <label asp-for="OrigemBairro" class="form-label"></label>
-                            <input asp-for="OrigemBairro" class="form-control" />
-                        </div>
-                        <div class="col-md-4">
-                            <label asp-for="OrigemCidade" class="form-label"></label>
-                            <input asp-for="OrigemCidade" class="form-control" />
-                            <span asp-validation-for="OrigemCidade" class="text-danger"></span>
-                        </div>
-                        <div class="col-md-2">
-                            <label asp-for="OrigemEstado" class="form-label"></label>
-                            <input asp-for="OrigemEstado" class="form-control" maxlength="2" />
-                            <span asp-validation-for="OrigemEstado" class="text-danger"></span>
-                        </div>
-                        <div class="col-md-2">
-                            <label asp-for="OrigemCep" class="form-label"></label>
-                            <input asp-for="OrigemCep" class="form-control" />
-                        </div>
+            <section class="cc-panel" aria-labelledby="clientPickupHeading">
+                <header class="cc-panel-header">
+                    <div class="cc-portal-form-heading"><span class="cc-trip-icon"><i class="bi bi-geo" aria-hidden="true"></i></span><div><h2 id="clientPickupHeading">2. Endereço de coleta</h2><p>Onde a carga ficará disponível para a operação.</p></div></div>
+                </header>
+                <div class="cc-panel-body"><div class="row g-3">
+                    <div class="col-md-8">
+                        <label asp-for="OrigemEndereco" class="form-label"></label>
+                        <input asp-for="OrigemEndereco" class="form-control" maxlength="200" required autocomplete="section-pickup address-line1" aria-describedby="OrigemEnderecoError" />
+                        <span asp-validation-for="OrigemEndereco" id="OrigemEnderecoError" class="text-danger"></span>
                     </div>
+                    <div class="col-md-4">
+                        <label asp-for="OrigemNumero" class="form-label"></label>
+                        <input asp-for="OrigemNumero" class="form-control" maxlength="20" required aria-describedby="OrigemNumeroError" />
+                        <span asp-validation-for="OrigemNumero" id="OrigemNumeroError" class="text-danger"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label asp-for="OrigemBairro" class="form-label">Bairro de coleta (opcional)</label>
+                        <input asp-for="OrigemBairro" class="form-control" maxlength="80" aria-describedby="OrigemBairroError" />
+                        <span asp-validation-for="OrigemBairro" id="OrigemBairroError" class="text-danger"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label asp-for="OrigemCidade" class="form-label"></label>
+                        <input asp-for="OrigemCidade" class="form-control" maxlength="80" required autocomplete="section-pickup address-level2" aria-describedby="OrigemCidadeError" />
+                        <span asp-validation-for="OrigemCidade" id="OrigemCidadeError" class="text-danger"></span>
+                    </div>
+                    <div class="col-sm-4">
+                        <label asp-for="OrigemEstado" class="form-label"></label>
+                        <input asp-for="OrigemEstado" class="form-control cc-portal-uf" maxlength="2" pattern="[A-Za-z]{2}" required autocomplete="section-pickup address-level1" aria-describedby="OrigemEstadoError" placeholder="UF" />
+                        <span asp-validation-for="OrigemEstado" id="OrigemEstadoError" class="text-danger"></span>
+                    </div>
+                    <div class="col-sm-8">
+                        <label asp-for="OrigemCep" class="form-label">CEP de coleta (opcional)</label>
+                        <input asp-for="OrigemCep" class="form-control" maxlength="10" autocomplete="section-pickup postal-code" inputmode="numeric" aria-describedby="OrigemCepError" placeholder="00000-000" />
+                        <span asp-validation-for="OrigemCep" id="OrigemCepError" class="text-danger"></span>
+                    </div>
+                </div></div>
+            </section>
 
-                    <h5 class="fw-bold border-bottom pb-2">Endereço de destino</h5>
-                    <div class="row g-3 mb-4">
-                        <div class="col-md-8">
-                            <label asp-for="DestinoEndereco" class="form-label"></label>
-                            <input asp-for="DestinoEndereco" class="form-control" />
-                            <span asp-validation-for="DestinoEndereco" class="text-danger"></span>
-                        </div>
-                        <div class="col-md-4">
-                            <label asp-for="DestinoNumero" class="form-label"></label>
-                            <input asp-for="DestinoNumero" class="form-control" />
-                            <span asp-validation-for="DestinoNumero" class="text-danger"></span>
-                        </div>
-                        <div class="col-md-4">
-                            <label asp-for="DestinoBairro" class="form-label"></label>
-                            <input asp-for="DestinoBairro" class="form-control" />
-                        </div>
-                        <div class="col-md-4">
-                            <label asp-for="DestinoCidade" class="form-label"></label>
-                            <input asp-for="DestinoCidade" class="form-control" />
-                            <span asp-validation-for="DestinoCidade" class="text-danger"></span>
-                        </div>
-                        <div class="col-md-2">
-                            <label asp-for="DestinoEstado" class="form-label"></label>
-                            <input asp-for="DestinoEstado" class="form-control" maxlength="2" />
-                            <span asp-validation-for="DestinoEstado" class="text-danger"></span>
-                        </div>
-                        <div class="col-md-2">
-                            <label asp-for="DestinoCep" class="form-label"></label>
-                            <input asp-for="DestinoCep" class="form-control" />
-                        </div>
+            <section class="cc-panel" aria-labelledby="clientDestinationHeading">
+                <header class="cc-panel-header">
+                    <div class="cc-portal-form-heading"><span class="cc-trip-icon"><i class="bi bi-geo-alt" aria-hidden="true"></i></span><div><h2 id="clientDestinationHeading">3. Endereço de destino</h2><p>Onde a mercadoria deverá ser entregue.</p></div></div>
+                </header>
+                <div class="cc-panel-body"><div class="row g-3">
+                    <div class="col-md-8">
+                        <label asp-for="DestinoEndereco" class="form-label"></label>
+                        <input asp-for="DestinoEndereco" class="form-control" maxlength="200" required autocomplete="section-delivery address-line1" aria-describedby="DestinoEnderecoError" />
+                        <span asp-validation-for="DestinoEndereco" id="DestinoEnderecoError" class="text-danger"></span>
                     </div>
+                    <div class="col-md-4">
+                        <label asp-for="DestinoNumero" class="form-label"></label>
+                        <input asp-for="DestinoNumero" class="form-control" maxlength="20" required aria-describedby="DestinoNumeroError" />
+                        <span asp-validation-for="DestinoNumero" id="DestinoNumeroError" class="text-danger"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label asp-for="DestinoBairro" class="form-label">Bairro de destino (opcional)</label>
+                        <input asp-for="DestinoBairro" class="form-control" maxlength="80" aria-describedby="DestinoBairroError" />
+                        <span asp-validation-for="DestinoBairro" id="DestinoBairroError" class="text-danger"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label asp-for="DestinoCidade" class="form-label"></label>
+                        <input asp-for="DestinoCidade" class="form-control" maxlength="80" required autocomplete="section-delivery address-level2" aria-describedby="DestinoCidadeError" />
+                        <span asp-validation-for="DestinoCidade" id="DestinoCidadeError" class="text-danger"></span>
+                    </div>
+                    <div class="col-sm-4">
+                        <label asp-for="DestinoEstado" class="form-label"></label>
+                        <input asp-for="DestinoEstado" class="form-control cc-portal-uf" maxlength="2" pattern="[A-Za-z]{2}" required autocomplete="section-delivery address-level1" aria-describedby="DestinoEstadoError" placeholder="UF" />
+                        <span asp-validation-for="DestinoEstado" id="DestinoEstadoError" class="text-danger"></span>
+                    </div>
+                    <div class="col-sm-8">
+                        <label asp-for="DestinoCep" class="form-label">CEP de destino (opcional)</label>
+                        <input asp-for="DestinoCep" class="form-control" maxlength="10" autocomplete="section-delivery postal-code" inputmode="numeric" aria-describedby="DestinoCepError" placeholder="00000-000" />
+                        <span asp-validation-for="DestinoCep" id="DestinoCepError" class="text-danger"></span>
+                    </div>
+                </div></div>
+            </section>
 
-                    <div class="d-flex justify-content-end gap-2">
-                        <a asp-action="Pedidos" class="btn btn-outline-secondary">Cancelar</a>
-                        <button type="submit" class="btn btn-mgl-teal fw-bold">Enviar para validação</button>
-                    </div>
-                </form>
+            <div class="cc-portal-form-actions">
+                <a asp-action="Pedidos" class="btn btn-outline-secondary">Cancelar</a>
+                <button type="submit" class="btn btn-mgl-primary"><i class="bi bi-send" aria-hidden="true"></i> Enviar para validação</button>
             </div>
-        </div>
+        </form>
+        <aside class="cc-panel cc-portal-form-guide" aria-labelledby="clientOrderGuideHeading">
+            <header class="cc-panel-header"><h2 id="clientOrderGuideHeading">Da solicitação à entrega</h2></header>
+            <div class="cc-panel-body">
+                <ol class="cc-timeline">
+                    <li><strong>Preencha a solicitação</strong><p>Descreva a mercadoria e informe os endereços.</p></li>
+                    <li><strong>Acompanhe a validação</strong><p>A operação analisa os dados e organiza o despacho.</p></li>
+                    <li><strong>Consulte seus pedidos</strong><p>Encontre o estado do envio, o rastreamento e os comprovantes disponíveis.</p></li>
+                </ol>
+                <p class="cc-portal-form-hint"><i class="bi bi-shield-check" aria-hidden="true"></i> O pedido será vinculado à sua conta corporativa.</p>
+            </div>
+        </aside>
     </div>
 </div>

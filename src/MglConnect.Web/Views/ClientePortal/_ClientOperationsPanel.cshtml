@@ -1,0 +1,117 @@
+@model IEnumerable<MglConnect.Web.Models.Pedido>
+@{
+    var br = System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
+    var cliente = ViewBag.Cliente as MglConnect.Web.Models.Cliente;
+    var pedidos = Model.ToList();
+}
+
+<section class="cc-portal-account" aria-label="Conta do cliente">
+    <span class="cc-trip-icon"><i class="bi bi-building" aria-hidden="true"></i></span>
+    <div>
+        <span class="cc-eyebrow">Sua conta corporativa</span>
+        <h2>@(cliente?.NomeFantasia ?? cliente?.RazaoSocial ?? "Cliente")</h2>
+        <p>CNPJ: <span class="font-monospace">@cliente?.Cnpj</span></p>
+    </div>
+    <span class="cc-portal-scope"><i class="bi bi-shield-check" aria-hidden="true"></i> Operações da sua conta</span>
+</section>
+
+<section class="cc-stat-grid" aria-label="Resumo dos seus pedidos">
+    <article class="cc-stat-card">
+        <div class="cc-stat-card-header"><h2>Seus pedidos</h2><span class="cc-stat-icon"><i class="bi bi-boxes" aria-hidden="true"></i></span></div>
+        <strong class="cc-stat-value" data-client-metric="total">@ViewBag.TotalPedidos</strong>
+        <p class="cc-stat-meta">@ViewBag.Pendentes registrados, em processamento ou com viagem pendente</p>
+    </article>
+    <article class="cc-stat-card">
+        <div class="cc-stat-card-header"><h2>Em trânsito</h2><span class="cc-stat-icon"><i class="bi bi-truck" aria-hidden="true"></i></span></div>
+        <strong class="cc-stat-value" data-client-metric="transito">@ViewBag.EmTransito</strong>
+        <p class="cc-stat-meta"><a asp-action="Pedidos" asp-route-status="Em transporte">Acompanhar viagens em transporte <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a></p>
+    </article>
+    <article class="cc-stat-card" data-tone="success">
+        <div class="cc-stat-card-header"><h2>Entregues</h2><span class="cc-stat-icon"><i class="bi bi-check2-circle" aria-hidden="true"></i></span></div>
+        <strong class="cc-stat-value" data-client-metric="entregues">@ViewBag.Entregues</strong>
+        <p class="cc-stat-meta"><a asp-action="Pedidos" asp-route-status="Entregue">Consultar entregas concluídas <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a></p>
+    </article>
+    <article class="cc-stat-card cc-portal-value">
+        <div class="cc-stat-card-header"><h2>Valor das mercadorias</h2><span class="cc-stat-icon"><i class="bi bi-archive" aria-hidden="true"></i></span></div>
+        <strong class="cc-stat-value">@(((decimal)ViewBag.ValorTotal).ToString("C", br))</strong>
+        <p class="cc-stat-meta">Total declarado em pedidos não cancelados</p>
+    </article>
+</section>
+
+<section class="cc-panel" aria-labelledby="recentOrdersHeading">
+    <header class="cc-panel-header">
+        <div>
+            <h2 id="recentOrdersHeading">Pedidos recentes</h2>
+            <p>As últimas solicitações da sua conta, com o estado atual de cada envio.</p>
+        </div>
+        <a asp-action="Pedidos">Ver todos os pedidos <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+    </header>
+    @if (pedidos.Count == 0)
+    {
+        <div class="cc-empty-state">
+            <i class="bi bi-box-seam" aria-hidden="true"></i>
+            <h3>Seu próximo envio começa aqui</h3>
+            <p>Você ainda não tem pedidos. Informe a coleta e o destino para enviar uma solicitação à operação.</p>
+            <a asp-action="NovoPedido" class="btn btn-mgl-primary">Criar primeiro pedido</a>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive cc-portal-table" role="region" aria-label="Pedidos recentes, role horizontalmente para consultar todas as colunas" tabindex="0">
+            <table class="table table-hover align-middle mb-0">
+                <caption class="visually-hidden">Até cinco pedidos mais recentes. Datas de criação em UTC e valores de mercadoria em reais.</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Pedido / criação (UTC)</th>
+                        <th scope="col">Carga</th>
+                        <th scope="col">Mercadoria / peso</th>
+                        <th scope="col">Estado do envio</th>
+                        <th scope="col">Rastreamento</th>
+                        <th scope="col" class="text-end">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in pedidos.Take(5))
+                    {
+                        var estado = p.Status == "Cancelado" ? p.Status : p.Entrega?.StatusEntrega ?? p.Status;
+                        <tr>
+                            <th scope="row">
+                                <a asp-action="PedidoDetalhes" asp-route-id="@p.Id" class="cc-portal-order-number">@p.NumeroPedido</a>
+                                <time class="cc-portal-cell-meta" datetime="@p.DataPedido.ToString("yyyy-MM-ddTHH:mm:ssZ")">@p.DataPedido.ToString("dd/MM/yyyy HH:mm")</time>
+                            </th>
+                            <td class="cc-portal-description">@p.Descricao</td>
+                            <td>
+                                <strong class="cc-portal-money">@p.ValorTotal.ToString("C", br)</strong>
+                                <span class="cc-portal-cell-meta">@p.PesoKg.ToString("N1", br) kg</span>
+                            </td>
+                            <td><partial name="_CommandStatus" model="estado" /></td>
+                            <td>
+                                @if (p.Entrega != null)
+                                {
+                                    <div class="cc-portal-tracking">
+                                        <a asp-controller="Rastreio" asp-action="Index" asp-route-codigo="@p.Entrega.CodigoRastreio" class="font-monospace" aria-label="Rastrear o pedido @p.NumeroPedido">@p.Entrega.CodigoRastreio</a>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm cc-portal-copy" data-tracking-code="@p.Entrega.CodigoRastreio" onclick="copiarCodigoRastreio(this.dataset.trackingCode, this)" aria-label="Copiar código de rastreio do pedido @p.NumeroPedido" title="Copiar código de rastreio">
+                                            <i class="bi bi-clipboard" aria-hidden="true"></i>
+                                        </button>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span class="cc-portal-cell-meta">Disponível após o despacho</span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <a asp-action="PedidoDetalhes" asp-route-id="@p.Id" class="btn btn-outline-secondary btn-sm" aria-label="Ver detalhes do pedido @p.NumeroPedido">Detalhes <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<div class="cc-data-note">
+    <i class="bi bi-info-circle" aria-hidden="true"></i>
+    <p>Abra os detalhes do pedido para consultar a entrega e os comprovantes disponíveis. Os valores representam as mercadorias declaradas.</p>
+</div>

@@ -1,176 +1,30 @@
 @model IEnumerable<MglConnect.Web.Models.Pedido>
 @{
-    ViewData["Title"] = "Portal do Cliente - Dashboard";
-    var cliente = ViewBag.Cliente as MglConnect.Web.Models.Cliente;
+    ViewData["Title"] = "Portal do cliente";
 }
 
-<div class="container py-4">
-    <!-- Header Boas-vindas Cliente -->
-    <div class="card-mgl p-4 mb-4" style="background: linear-gradient(135deg, var(--mgl-dark-primary), var(--mgl-accent-1)); color: #fff;">
-        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
-            <div>
-                <span class="badge px-3 py-2 rounded-pill fs-8 mb-2 fw-bold" style="background-color: var(--mgl-teal); color: var(--mgl-dark-primary);">
-                    <i class="bi bi-shield-check me-1"></i> Portal do Cliente Corporativo
-                </span>
-                <h3 class="fw-extrabold mb-1">Olá, @(cliente?.NomeFantasia ?? cliente?.RazaoSocial ?? "Cliente")!</h3>
-                <p class="text-white-50 small mb-0">CNPJ: <span class="font-monospace text-light">@cliente?.Cnpj</span> • Acompanhamento em tempo real de cargas e faturas</p>
-            </div>
-            <div class="d-flex gap-2">
-                <a asp-action="NovoPedido" class="btn btn-outline-light btn-sm px-3 rounded-pill">
-                    <i class="bi bi-plus-circle me-1"></i> Novo pedido
-                </a>
-                <a asp-action="Pedidos" class="btn btn-mgl-teal btn-sm px-3 rounded-pill">
-                    <i class="bi bi-boxes me-1"></i> Meus Pedidos & Cargas
-                </a>
-            </div>
+<div class="cc-dashboard cc-portal">
+    <header class="cc-section-heading cc-page-heading">
+        <div>
+            <span class="cc-eyebrow">COMMAND CENTER / PORTAL DO CLIENTE</span>
+            <h1>Suas operações, conectadas</h1>
+            <p>Envie pedidos, acompanhe suas cargas e encontre o histórico das suas entregas.</p>
         </div>
-    </div>
+        <div class="cc-quick-actions">
+            <a asp-action="Pedidos" class="btn btn-outline-secondary">
+                <i class="bi bi-box-seam" aria-hidden="true"></i> Meus pedidos
+            </a>
+            <a asp-action="NovoPedido" class="btn btn-mgl-primary">
+                <i class="bi bi-plus-lg" aria-hidden="true"></i> Novo pedido
+            </a>
+        </div>
+    </header>
 
-    <!-- Cards de KPIs do Cliente -->
-    <div class="row g-3 mb-4">
-        <div class="col-sm-6 col-xl-3">
-            <div class="card-mgl p-3">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="text-muted fs-8 text-uppercase fw-bold">Total de Pedidos</div>
-                        <h3 class="fw-extrabold mb-0" style="color: var(--mgl-dark-primary);">@ViewBag.TotalPedidos</h3>
-                    </div>
-                    <div class="kpi-icon-box" style="background-color: rgba(58, 80, 107, 0.12); color: var(--mgl-accent-2);">
-                        <i class="bi bi-receipt"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-sm-6 col-xl-3">
-            <div class="card-mgl p-3">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="text-muted fs-8 text-uppercase fw-bold">Cargas em Trânsito</div>
-                        <h3 class="fw-extrabold mb-0" style="color: var(--mgl-teal);">@ViewBag.EmTransito</h3>
-                    </div>
-                    <div class="kpi-icon-box" style="background-color: rgba(91, 192, 190, 0.15); color: #0F766E;">
-                        <i class="bi bi-truck"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-sm-6 col-xl-3">
-            <div class="card-mgl p-3">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="text-muted fs-8 text-uppercase fw-bold">Entregas Concluídas</div>
-                        <h3 class="fw-extrabold mb-0" style="color: var(--mgl-emerald);">@ViewBag.Entregues</h3>
-                    </div>
-                    <div class="kpi-icon-box" style="background-color: rgba(16, 185, 129, 0.15); color: var(--mgl-emerald);">
-                        <i class="bi bi-patch-check-fill"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-sm-6 col-xl-3">
-            <div class="card-mgl p-3">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="text-muted fs-8 text-uppercase fw-bold">Valor Movimentado</div>
-                        <h4 class="fw-extrabold mb-0" style="color: var(--mgl-accent-1);">R$ @ViewBag.ValorTotal.ToString("N2")</h4>
-                    </div>
-                    <div class="kpi-icon-box" style="background-color: rgba(255, 159, 28, 0.15); color: var(--mgl-amber);">
-                        <i class="bi bi-wallet2"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Cargas Recentes com Rastreamento Rápido -->
-    <div class="card-mgl p-4 mb-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="fw-bold mb-0" style="color: var(--mgl-dark-primary);">
-                <i class="bi bi-clock-history me-2" style="color: var(--mgl-teal);"></i> Cargas e Pedidos Recentes
-            </h5>
-            <a asp-action="Pedidos" class="btn btn-outline-secondary btn-sm">Ver Todos</a>
-        </div>
-
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="table-light fs-8 text-uppercase">
-                    <tr>
-                        <th>Número / Data</th>
-                        <th>Itens Expedidos</th>
-                        <th>Valor & Peso</th>
-                        <th>Status do Envio</th>
-                        <th>Código de Rastreio</th>
-                        <th class="text-end">Ações</th>
-                    </tr>
-                </thead>
-                <tbody class="fs-7">
-                    @foreach (var p in Model.Take(5))
-                    {
-                        <tr>
-                            <td>
-                                <strong class="font-monospace text-dark">@p.NumeroPedido</strong>
-                                <div class="fs-8 text-muted">@p.DataPedido.ToString("dd/MM/yyyy HH:mm")</div>
-                            </td>
-                            <td>@p.Descricao</td>
-                            <td>
-                                <div><strong>R$ @p.ValorTotal.ToString("N2")</strong></div>
-                                <span class="badge bg-light text-secondary border fs-8">@p.PesoKg.ToString("F1") kg</span>
-                            </td>
-                            <td>
-                                @if (p.Entrega != null)
-                                {
-                                    @if (p.Entrega.StatusEntrega == "Entregue")
-                                    {
-                                        <span class="badge badge-mgl-delivered">
-                                            <i class="bi bi-check-circle-fill me-1"></i> Entregue
-                                        </span>
-                                    }
-                                    else if (p.Entrega.StatusEntrega == "Em transporte")
-                                    {
-                                        <span class="badge badge-mgl-transit">
-                                            <i class="bi bi-truck me-1"></i> Em trânsito
-                                        </span>
-                                    }
-                                    else
-                                    {
-                                        <span class="badge badge-mgl-pending">
-                                            <i class="bi bi-hourglass-split me-1"></i> No Centro Logístico
-                                        </span>
-                                    }
-                                }
-                                else
-                                {
-                                    <span class="badge bg-secondary">Aguardando Expedição</span>
-                                }
-                            </td>
-                            <td>
-                                @if (p.Entrega != null)
-                                {
-                                    <div class="d-flex align-items-center gap-1">
-                                        <span class="font-monospace fw-bold" style="color: var(--mgl-accent-2);">@p.Entrega.CodigoRastreio</span>
-                                        <button type="button" class="btn btn-sm btn-link text-decoration-none p-0 text-muted" 
-                                                onclick="copiarCodigoRastreio('@p.Entrega.CodigoRastreio', this)" title="Copiar código">
-                                            <i class="bi bi-clipboard"></i>
-                                        </button>
-                                    </div>
-                                }
-                                else
-                                {
-                                    <span class="text-muted fs-8">—</span>
-                                }
-                            </td>
-                            <td class="text-end">
-                                <a asp-action="PedidoDetalhes" asp-route-id="@p.Id" class="btn btn-mgl-primary btn-sm">
-                                    <i class="bi bi-eye me-1"></i> Detalhes
-                                </a>
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
+    <p id="operationalRefreshStatus" class="cc-refresh-status" role="status" aria-live="polite">Atualização automática a cada 20 segundos enquanto esta tela estiver visível.</p>
+    <div id="operationalPanel" data-refresh-url="@Url.Action("Painel")">
+        <partial name="_ClientOperationsPanel" model="Model" />
     </div>
 </div>
+@section Scripts {
+    <script src="~/js/operational-dashboard.js" asp-append-version="true"></script>
+}

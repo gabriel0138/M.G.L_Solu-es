@@ -1,7 +1,7 @@
 /**
  * M.G.L Connect - Módulo de Rastreamento em Tempo Real & Suavização Cartográfica
  * Arquitetura: OpenStreetMap / Esri + rotas OSRM e telemetria SignalR
- * Offline-First: Fila local de GPS e POD salva no IndexedDB, sincronizada via Service Worker.
+ * Posições ao vivo exigem telemetria; um trajeto planejado não é uma posição GPS.
  */
 class MglCockpitTracker {
     /**
@@ -41,6 +41,8 @@ class MglCockpitTracker {
     }
 
     constructor(options) {
+        this.navigationAllowed = options.navigationAllowed !== false;
+        this.navigationValidUntil = Date.parse(options.navigationValidUntil);
         this.map = options.map;
         this.entregaId = options.entregaId;
         this.codigoRastreio = (options.codigoRastreio || '').trim().toUpperCase();
@@ -49,7 +51,8 @@ class MglCockpitTracker {
         this.steps = options.steps || [];
         this.totalDistKm = options.totalDistKm || 0;
         this.totalFuelLiters = options.totalFuelLiters || 0;
-        this.tempoBaseMinutos = options.tempoBaseMinutos || 120;
+        this.tempoBaseMinutos = Number.isFinite(options.tempoBaseMinutos) && options.tempoBaseMinutos > 0
+            ? options.tempoBaseMinutos : 0;
         this.baseMaps = options.baseMaps || null;
         this.activeLayerName = options.activeLayerName || "OpenStreetMap (ruas)";
 
@@ -66,7 +69,12 @@ class MglCockpitTracker {
         this.maneuverDist = document.getElementById('maneuverDist');
         this.trafficBadge = document.getElementById('trafficStatusBadge');
         this.positionSourceBadge = document.getElementById('positionSourceBadge');
+        this.telemetryConnectionState = document.getElementById('telemetryConnectionState');
+        this.lastPositionTimestamp = null;
+        this.lastPositionSource = null;
+        this.destroyed = false;
         this.followVehicle = false;
+        if (this.tempoBaseMinutos === 0) this.updateArrivalEstimate(null);
 
         // Camadas Leaflet
         this.routePolylineOutline = null;
@@ -102,14 +110,26 @@ class MglCockpitTracker {
         this.isOnline = navigator.onLine;
 
         // Event listener para mudança de status de conectividade
-        window.addEventListener('online', () => {
+        this.onlineHandler = () => {
             this.isOnline = true;
             this.syncOfflineGPS();
-        });
-        window.addEventListener('offline', () => {
+        };
+        this.offlineHandler = () => {
             this.isOnline = false;
-        });
+            this.updateConnectionStatus('closed');
+        };
+        window.addEventListener('online', this.onlineHandler);
+        window.addEventListener('offline', this.offlineHandler);
 
+        this.gpsReceiptHandler = event => {
+            const { receipt, metrics } = event.detail || {};
+            if (receipt?.posicao) this.applyTelemetryPosition(receipt.posicao);
+            if (metrics?.navigationAllowed===false)this.suspendNavigation();
+            if (metrics && !metrics.gpsDataAccepted) this.showToastAlert(metrics.motivo || 'GPS ignorado.', 'bi-geo-alt', 'var(--mgl-warning)');
+        };
+        window.addEventListener('mgl:gps-confirmed', this.gpsReceiptHandler);
+        this.updatePositionStatus();
+        this.positionFreshnessTimer = setInterval(() => {this.updatePositionStatus();if(Number.isFinite(this.navigationValidUntil)&&Date.now()>this.navigationValidUntil)this.suspendNavigation('EXPIRADA');}, 5000);
         this.init();
 
         // Sincronizar dados offline ao retomar conexão (Service Worker already listens for 'sync' event,
@@ -121,7 +141,6 @@ class MglCockpitTracker {
 
     init() {
         this.setupRouteLayers(this.initialCoordinates);
-        this.setupVehicleMarker();
         this.setupSignalR();
         this.setupTrafficLayerMatch();
         this.setupLayerListeners();
@@ -180,7 +199,7 @@ class MglCockpitTracker {
         this.bringOverlaysToFront();
     }
 
-    setupVehicleMarker(startPoint = this.initialCoordinates[0]) {
+    setupVehicleMarker(startPoint) {
         if (!startPoint) return;
         this.currentLatLng = L.latLng(startPoint[0], startPoint[1]);
         this.startLatLng = this.currentLatLng;
@@ -218,11 +237,12 @@ class MglCockpitTracker {
     }
 
     setupLayerListeners() {
-        if (!this.map) return;
-        this.map.on('baselayerchange', (e) => {
+        if (!this.map || typeof this.map.on !== 'function') return;
+        this.baseLayerChangeHandler = (e) => {
             this.activeLayerName = e.name;
             this.bringOverlaysToFront();
-        });
+        };
+        this.map.on('baselayerchange', this.baseLayerChangeHandler);
     }
 
     // Alterna sequencialmente as camadas de mapa disponíveis no baseMaps
@@ -249,7 +269,7 @@ class MglCockpitTracker {
         this.activeLayerName = nextKey;
         this.bringOverlaysToFront();
 
-        this.showToastAlert(`Camada ativa: <strong>${nextKey}</strong>`, 'bi-layers-fill', '#00C9B7');
+        this.showToastAlert(`Camada ativa: ${nextKey}`, 'bi-layers-fill', '#00C9B7');
         return nextKey;
     }
 
@@ -270,9 +290,11 @@ class MglCockpitTracker {
     setupSignalR() {
         if (typeof signalR === 'undefined') {
             console.warn('SignalR client não carregado.');
+            this.updateConnectionStatus('closed');
             return;
         }
 
+        this.updateConnectionStatus('connecting');
         this.hubConnection = new signalR.HubConnectionBuilder()
             .withUrl('/telemetryHub')
             .withAutomaticReconnect([0, 2000, 5000, 10000])
@@ -280,20 +302,16 @@ class MglCockpitTracker {
 
         // 1. Recebimento de Coordenadas em Tempo Real (outros dispositivos / central)
         this.hubConnection.on('ReceiveVehiclePosition', (payload) => {
-            if (payload.codigoRastreio === this.codigoRastreio) {
-                if (this.positionSourceBadge) {
-                    this.positionSourceBadge.textContent = payload.isSimulated
-                        ? 'SIMULAÇÃO — POSIÇÃO FICTÍCIA'
-                        : 'POSIÇÃO GPS';
-                    this.positionSourceBadge.classList.toggle('text-warning', Boolean(payload.isSimulated));
-                    this.positionSourceBadge.classList.toggle('text-success', !payload.isSimulated);
-                }
-                this.updateVehiclePosition(payload.latitude, payload.longitude, payload.speedKmH, payload.heading);
-            }
+            this.applyTelemetryPosition(payload);
         });
 
         // 2. Recebimento de Recálculo Dinâmico de Rota (Off-Route acionado no C#)
+        this.hubConnection.on('ReceiveRouteTrustInvalidated', (payload) => {
+            if(payload.codigoRastreio===this.codigoRastreio)this.suspendNavigation('OBSOLETA');
+        });
         this.hubConnection.on('ReceiveRouteRecalculated', (payload) => {
+            if(payload.codigoRastreio!==this.codigoRastreio)return;
+            if(payload.navigationAllowed===false){this.suspendNavigation();return;}
             if (payload.codigoRastreio === this.codigoRastreio) {
                 this.applyRouteReroute(payload);
             }
@@ -301,6 +319,8 @@ class MglCockpitTracker {
 
         // 3. Telemetria Diagnóstica (XTE / ATD)
         this.hubConnection.on('ReceiveTelemetryMetrics', (metrics) => {
+            if(metrics.codigoRastreio&&metrics.codigoRastreio!==this.codigoRastreio)return;
+            if(metrics.navigationAllowed===false){this.suspendNavigation();return;}
             if (!metrics.gpsDataAccepted) {
                 this.showToastAlert(metrics.motivo || 'A posição GPS foi ignorada por baixa qualidade.', 'bi-geo-alt-fill', '#FFB020');
             } else if (metrics.isOffRoute) {
@@ -309,27 +329,158 @@ class MglCockpitTracker {
         });
 
         this.hubConnection.on('ReceiveRouteRecalculationFailed', (payload) => {
+            if(payload.codigoRastreio===this.codigoRastreio)this.suspendNavigation('NÃO VERIFICADA');
             if (payload.codigoRastreio === this.codigoRastreio) {
                 this.showToastAlert(payload.mensagem, 'bi-exclamation-triangle-fill', '#EF4444');
             }
         });
 
         const joinLiveTracking = () => this.hubConnection.invoke('JoinLiveTracking', this.codigoRastreio);
-        this.hubConnection.onreconnected(joinLiveTracking);
+        const connected = () => {
+            if (this.destroyed) return Promise.resolve();
+            return joinLiveTracking().then(() => {
+                if (!this.destroyed) {
+                    this.updateConnectionStatus('connected');
+                    this.refreshConfirmedPosition();
+                }
+            });
+        };
+        this.hubConnection.onreconnecting(() => {
+            if (!this.destroyed) this.updateConnectionStatus('reconnecting');
+        });
+        this.hubConnection.onreconnected(() => connected().catch(() => this.updateConnectionStatus('closed')));
+        this.hubConnection.onclose(() => {
+            if (!this.destroyed) this.updateConnectionStatus('closed');
+        });
 
         this.hubConnection.start()
-            .then(joinLiveTracking)
+            .then(connected)
             .then(() => {
-                console.log('Conectado ao TelemetryHub para remessa:', this.codigoRastreio);
+                if (!this.destroyed) console.log('Conectado ao TelemetryHub para remessa:', this.codigoRastreio);
             })
-            .catch(err => console.error('Erro ao conectar ao TelemetryHub:', err));
+            .catch(err => {
+                if (this.destroyed) return;
+                this.updateConnectionStatus('closed');
+                console.error('Erro ao conectar ao TelemetryHub:', err);
+            });
+    }
+
+    async refreshConfirmedPosition() {
+        if (this.destroyed || !this.entregaId) return;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        try {
+            const response = await fetch(`/api/gps/historico/${this.entregaId}`, { credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
+            if (!response.ok || response.redirected || this.destroyed) return;
+            const history = await response.json();
+            if (history.ultimaPosicao && !this.destroyed) this.applyTelemetryPosition(history.ultimaPosicao);
+        } catch { /* Keep the last observed position and its original age. */ }
+        finally { clearTimeout(timeout); }
+    }
+
+    updateConnectionStatus(state) {
+        if (!this.telemetryConnectionState) return;
+        const labels = {
+            connecting: 'Conectando às atualizações',
+            connected: 'Atualizações ao vivo conectadas',
+            reconnecting: 'Reconectando às atualizações',
+            closed: this.isOnline === false ? 'Sem conexão de rede' : 'Atualizações ao vivo desconectadas',
+            completed: 'Viagem concluída · atualizações encerradas',
+            cancelled: 'Viagem cancelada · atualizações encerradas'
+        };
+        this.telemetryConnectionState.textContent = labels[state] || labels.closed;
+        this.telemetryConnectionState.dataset.state = Object.hasOwn(labels, state) ? state : 'closed';
+    }
+
+    // Shared entry point for persisted snapshots, hub updates and local device fixes.
+    // A planned route never supplies a fallback position or a capture timestamp.
+    applyTelemetryPosition(payload, options = {}) {
+        if (this.destroyed || !payload || typeof payload !== 'object') return false;
+        const { latitude, longitude, accuracyMeters, timestamp, isSimulated } = payload;
+        if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90
+            || !Number.isFinite(longitude) || longitude < -180 || longitude > 180
+            || (accuracyMeters != null && (!Number.isFinite(accuracyMeters) || accuracyMeters < 0 || accuracyMeters > 50))
+            || typeof isSimulated !== 'boolean') return false;
+
+        if (payload.codigoRastreio != null
+            && (typeof payload.codigoRastreio !== 'string'
+                || payload.codigoRastreio.trim().toUpperCase() !== this.codigoRastreio)) return false;
+
+        const iso = typeof timestamp === 'string'
+            ? /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,7})?(Z|[+-]\d{2}:\d{2})$/i.exec(timestamp)
+            : null;
+        if (!iso) return false;
+        const capturedAt = Date.parse(timestamp);
+        const [, year, month, day, hour, minute, second, zone] = iso;
+        const daysInMonth = new Date(Date.UTC(Number(year), Number(month), 0)).getUTCDate();
+        if (!Number.isFinite(capturedAt) || Number(month) < 1 || Number(month) > 12
+            || Number(day) < 1 || Number(day) > daysInMonth || Number(hour) > 23
+            || Number(minute) > 59 || Number(second) > 59
+            || (zone !== 'Z' && zone !== 'z' && (Number(zone.slice(1, 3)) > 23 || Number(zone.slice(4)) > 59))
+            || capturedAt > Date.now() + 60000
+            || (Number.isFinite(this.lastPositionTimestamp) && capturedAt < this.lastPositionTimestamp)) return false;
+
+        const speed = Number.isFinite(payload.speedKmH) && payload.speedKmH >= 0 ? payload.speedKmH : undefined;
+        const heading = Number.isFinite(payload.heading) ? ((payload.heading % 360) + 360) % 360 : undefined;
+        this.positionIsHistorical = Date.now() - capturedAt > 120000 || (!isSimulated && (payload.captureTimeKnown === false || accuracyMeters == null || accuracyMeters > 50));
+        if (this.updateVehiclePosition(latitude, longitude, speed, heading, options.snap === true) === false) return false;
+        if (speed === undefined && this.speedElem) this.speedElem.textContent = '—';
+
+        this.lastPositionTimestamp = capturedAt;
+        // Simulation always stays visibly simulated, even if a caller passes localOnly.
+        this.lastPositionSource = isSimulated ? 'simulated' : payload.captureTimeKnown === false ? 'legacy' : options.localOnly === true ? 'local' : 'real';
+        if (this.routeCoordinates.length < 2 && this.maneuverInstruction) {
+            this.maneuverInstruction.textContent = 'Sem instruções de navegação. Confirme o trajeto com a operação.';
+        }
+        this.updatePositionStatus();
+        return true;
+    }
+
+    updatePositionStatus(now = Date.now()) {
+        if (!this.positionSourceBadge) return;
+        let state = 'awaiting';
+        let label = 'Aguardando posição GPS';
+        if (Number.isFinite(this.lastPositionTimestamp) && this.lastPositionSource) {
+            const time = new Date(this.lastPositionTimestamp).toLocaleTimeString('pt-BR', {
+                hour: '2-digit', minute: '2-digit', second: '2-digit'
+            });
+            const stale = now - this.lastPositionTimestamp > 120000;
+            if (this.lastPositionSource === 'simulated') {
+                state = 'simulated';
+                label = 'SIMULAÇÃO — POSIÇÃO FICTÍCIA';
+            } else if (this.lastPositionSource === 'local') {
+                state = stale ? 'stale' : 'local';
+                label = `${stale ? 'GPS do aparelho desatualizado' : 'GPS do aparelho'} · ${time}`;
+            } else {
+                state = stale ? 'stale' : 'received';
+                label = `${stale ? 'GPS desatualizado' : 'GPS recebido'} · ${time}`;
+            }
+        }
+        if (this.lastPositionSource === 'legacy' && state !== 'awaiting') {
+            state = 'unknown-age'; label = 'Telemetria recebida · captura não informada';
+        }
+        this.positionSourceBadge.textContent = label;
+        this.positionSourceBadge.dataset.state = state;
+        this.positionSourceBadge.classList.toggle('text-warning', state === 'simulated' || state === 'stale' || state === 'unknown-age');
+        this.positionSourceBadge.classList.toggle('text-success', state === 'received');
+        if (state === 'stale' || state === 'unknown-age') {
+            this.positionIsHistorical = true;
+            this.updateArrivalEstimate(null);
+            if (this.speedElem) this.speedElem.textContent = '—';
+        }
     }
 
     // Atualiza a posição do veículo com interpolação suave via requestAnimationFrame
     updateVehiclePosition(lat, lng, speedKmH, heading, snap = false) {
+        if (!Number.isFinite(lat) || lat < -90 || lat > 90
+            || !Number.isFinite(lng) || lng < -180 || lng > 180) return false;
+        const firstPosition = !this.currentLatLng;
         this.targetLatLng = L.latLng(lat, lng);
         this.targetHeading = heading !== undefined && heading !== null ? heading : this.currentHeading;
-        if (this.followVehicle) {
+        if (firstPosition && this.map && typeof this.map.setView === 'function') {
+            // Leaflet may not have a center yet when the delivery has no planned route.
+            this.map.setView(this.targetLatLng, 15, { animate: false });
+        } else if (this.followVehicle && this.map && typeof this.map.panTo === 'function') {
             this.map.panTo(this.targetLatLng, { animate: true, duration: 0.4 });
         }
 
@@ -348,10 +499,15 @@ class MglCockpitTracker {
             }
             const iconElem = document.getElementById('cockpitVehicleMarker');
             if (iconElem) iconElem.style.transform = `rotate(${this.currentHeading.toFixed(1)}deg)`;
-            delete this.map.getContainer().dataset.mapStatus;
+            const mapContainer = this.map && typeof this.map.getContainer === 'function' ? this.map.getContainer() : null;
+            if (mapContainer && mapContainer.dataset
+                && (mapContainer.dataset.mapStatus === 'awaiting'
+                    || /^Aguardando uma posição GPS/i.test(mapContainer.dataset.mapStatus || ''))) {
+                delete mapContainer.dataset.mapStatus;
+            }
             this.updateRouteProgress(lat, lng);
             this.updateNavigationGuidance(lat, lng);
-            return;
+            return true;
         }
 
         this.startLatLng = this.currentLatLng;
@@ -395,40 +551,100 @@ class MglCockpitTracker {
         this.animFrameId = requestAnimationFrame(this.animateStep);
         this.updateRouteProgress(lat, lng);
         this.updateNavigationGuidance(lat, lng);
+        return true;
     }
 
+    suspendNavigation(state='SUSPENSA') {
+        this.navigationAllowed=false;this.updateArrivalEstimate(null);
+        if(this.distElem)this.distElem.textContent='—';
+        if(this.maneuverInstruction)this.maneuverInstruction.textContent='Orientação suspensa. Consulte a operação.';
+        const badge=document.getElementById('routeTrustBadge');if(badge){badge.textContent=(state==='SUSPENSA'?(badge.dataset.confidence||'NÃO VERIFICADA'):state)+' · orientação suspensa';badge.dataset.navigationAllowed='false';}
+    }
     updateRouteProgress(lat, lng) {
+        if(this.navigationAllowed===false||Number.isFinite(this.navigationValidUntil)&&Date.now()>this.navigationValidUntil){this.suspendNavigation();this.updateArrivalEstimate(null);if(this.distElem)this.distElem.textContent='—';return;}
+        if (this.positionIsHistorical) {
+            this.updateArrivalEstimate(null);
+            if (this.distElem) this.distElem.textContent = '—';
+            return;
+        }
         if (!this.routeCoordinates || this.routeCoordinates.length < 2 || this.totalRouteMeters <= 0) return;
 
-        const current = L.latLng(lat, lng);
-        let nearestIndex = 0;
+        // Display-only projection over each segment, not GPS map matching.
+        // Keep the vehicle at its observed coordinate, including off-route fixes.
+        const radians = Math.PI / 180;
+        const metersPerDegree = 6371000 * radians;
+        const longitudeScale = Math.cos(lat * radians) * metersPerDegree;
+        const wrapLongitude = value => ((value + 540) % 360) - 180;
         let nearestDistance = Number.POSITIVE_INFINITY;
-        for (let i = 0; i < this.routeCoordinates.length; i++) {
-            const distance = current.distanceTo(L.latLng(this.routeCoordinates[i]));
+        let alongRoute = this.progressMeters;
+        for (let i = 1; i < this.routeCoordinates.length; i++) {
+            const a = this.routeCoordinates[i - 1];
+            const b = this.routeCoordinates[i];
+            if (!a.every(Number.isFinite) || !b.every(Number.isFinite)
+                || !Number.isFinite(this.routeCumulativeMeters[i])) continue;
+            const ax = wrapLongitude(a[1] - lng) * longitudeScale;
+            const ay = (a[0] - lat) * metersPerDegree;
+            const dx = wrapLongitude(b[1] - a[1]) * longitudeScale;
+            const dy = (b[0] - a[0]) * metersPerDegree;
+            const squaredLength = dx * dx + dy * dy;
+            const fraction = squaredLength > 0
+                ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / squaredLength)) : 0;
+            const distance = Math.hypot(ax + fraction * dx, ay + fraction * dy);
             if (distance < nearestDistance) {
                 nearestDistance = distance;
-                nearestIndex = i;
+                alongRoute = this.routeCumulativeMeters[i - 1]
+                    + fraction * (this.routeCumulativeMeters[i] - this.routeCumulativeMeters[i - 1]);
             }
         }
 
-        this.progressMeters = Math.max(this.progressMeters, this.routeCumulativeMeters[nearestIndex]);
+        // Outside this display tolerance, progress and estimates must wait for a
+        // valid route again. Authoritative deviation/recalculation stays on the server.
+        this.routeProjectionOffRoute = nearestDistance > 100;
+        const mapContainer = this.map?.getContainer?.();
+        if (mapContainer?.dataset) mapContainer.dataset.routeState = this.routeProjectionOffRoute ? 'off-route' : 'on-route';
+        const routeStatus = document.getElementById('routePositionStatus');
+        if (routeStatus) {
+            routeStatus.hidden = !this.routeProjectionOffRoute;
+            routeStatus.textContent = this.routeProjectionOffRoute
+                ? 'GPS fora do traçado planejado. Distância e chegada aguardam uma rota válida.' : '';
+        }
+        if (this.routeProjectionOffRoute) {
+            this.updateArrivalEstimate(null);
+            if (this.distElem) this.distElem.textContent = '—';
+            if (this.fuelElem) this.fuelElem.textContent = '—';
+            return;
+        }
+        this.progressMeters = Math.min(this.totalRouteMeters, Math.max(this.progressMeters, alongRoute));
         const progress = this.progressMeters / this.totalRouteMeters;
         const remainingKm = (this.totalDistKm * (1 - progress));
-        if (this.progressBar) this.progressBar.style.width = `${Math.round(progress * 100)}%`;
+        if (this.progressBar) {
+            const percent = Math.max(0, Math.min(100, Math.round(progress * 100)));
+            this.progressBar.style.width = `${percent}%`;
+            this.progressBar.setAttribute('aria-valuenow', String(percent));
+        }
         if (this.distElem) this.distElem.textContent = remainingKm.toFixed(1);
         if (this.fuelElem) this.fuelElem.textContent = (this.totalFuelLiters * (1 - progress)).toFixed(1);
 
-        const remainingMinutes = Math.round(this.tempoBaseMinutos * (1 - progress));
-        if (this.etaMinutesElem && remainingMinutes > 0) {
-            this.etaMinutesElem.textContent = `${remainingMinutes} min`;
+        this.updateArrivalEstimate(this.tempoBaseMinutos > 0
+            ? Math.max(0, Math.round(this.tempoBaseMinutos * (1 - progress))) : null);
+    }
+
+    updateArrivalEstimate(remainingMinutes) {
+        if (!Number.isFinite(remainingMinutes) || remainingMinutes < 0) {
+            if (this.etaMinutesElem) this.etaMinutesElem.textContent = 'Sem estimativa';
+            if (this.etaElem) this.etaElem.textContent = '--:--';
+            return;
         }
-        if (this.etaElem && remainingMinutes > 0) {
+        if (this.etaMinutesElem) this.etaMinutesElem.textContent = `${remainingMinutes} min estimados`;
+        if (this.etaElem) {
             const eta = new Date(Date.now() + remainingMinutes * 60000);
             this.etaElem.textContent = `${String(eta.getHours()).padStart(2, '0')}:${String(eta.getMinutes()).padStart(2, '0')}`;
         }
     }
 
     updateNavigationGuidance(lat, lng) {
+        if(this.navigationAllowed===false||Number.isFinite(this.navigationValidUntil)&&Date.now()>this.navigationValidUntil){this.suspendNavigation();return;}
+        if (this.routeProjectionOffRoute || this.positionIsHistorical) return;
         if (!this.steps || this.steps.length === 0) return;
 
         let nearestIndex = -1;
@@ -476,8 +692,15 @@ class MglCockpitTracker {
     }
 
     // Emissão de telemetria contínua pelo condutor para o backend C# (RouteDeviationEngine)
-    emitTelemetry(lat, lng, speedKmH, heading, accuracyMeters = null, isSimulated = false) {
+    emitTelemetry(lat, lng, speedKmH, heading, accuracyMeters = null, isSimulated = false, capturedAt = new Date().toISOString()) {
         const now = Date.now();
+        if (!isSimulated && window.mglGpsOutbox) {
+            if (now - this.lastTelemetryEmitTime < (window.mglGpsOutbox.intervalMs?.() ?? 5000)) return;
+            this.lastTelemetryEmitTime = now;
+            return window.mglGpsOutbox.capture({ latitude: lat, longitude: lng, velocidadeKmH: speedKmH,
+                direcao: heading, precisaoMetros: accuracyMeters, capturadoEmUtc: capturedAt })
+                .catch(error => this.showToastAlert(error.message, 'bi-cloud-slash', 'var(--mgl-error)'));
+        }
         if (now - this.lastTelemetryEmitTime < 2000) return; // Throttle 2s
         this.lastTelemetryEmitTime = now;
 
@@ -497,26 +720,24 @@ class MglCockpitTracker {
 
     setFollowVehicle(enabled) {
         this.followVehicle = Boolean(enabled);
-        if (this.followVehicle && this.currentLatLng) {
-            this.map.setView(this.currentLatLng, Math.max(this.map.getZoom(), 15), { animate: true });
+        if (this.followVehicle && this.currentLatLng && this.map && typeof this.map.setView === 'function') {
+            const zoom = typeof this.map.getZoom === 'function' ? this.map.getZoom() : 15;
+            this.map.setView(this.currentLatLng, Number.isFinite(zoom) ? Math.max(zoom, 15) : 15, { animate: true });
         }
     }
 
     // Sincronizar fila de GPS offline quando voltar à conexão
     syncOfflineGPS() {
         if (this.gpsOfflineQueue.length > 0 && this.isOnline) {
-            // Enviar todas as coordenadas acumuladas offline para o backend
-            this.gpsOfflineQueue.forEach(pos => {
-                this.emitTelemetry(pos.lat, pos.lng, pos.speedKmH, pos.heading);
-            });
-            this.gpsOfflineQueue = [];
-            this.showToastAlert('Dados offline sincronizados com sucesso!', 'bi-cloud-sync', '#12C982');
+            // The legacy live method has no capture-time/idempotency contract.
+            // Preserve old samples instead of publishing them as current GPS.
+            this.showToastAlert('Há posições antigas pendentes. O envio de histórico GPS ainda não está disponível.', 'bi-cloud-slash', '#FFB020');
         }
     }
 
     // Aplicação da nova polilinha após recálculo OSRM com efeito de Cross-Fade
     applyRouteReroute(payload) {
-        console.log('Aplicando rota recalculada:', payload);
+        console.debug('Atualização de rota recebida.');
 
         // 1. Esmaece a rota anterior (Cross-Fade)
         if (this.routePolyline) {
@@ -578,9 +799,9 @@ class MglCockpitTracker {
         if (this.distElem && payload.distanciaKm) {
             this.distElem.textContent = Number(payload.distanciaKm).toFixed(1);
         }
-        if (this.etaMinutesElem && payload.tempoEstimadoMinutos) {
-            this.etaMinutesElem.textContent = `${payload.tempoEstimadoMinutos} min`;
-        }
+        this.tempoBaseMinutos = Number.isFinite(payload.tempoEstimadoMinutos) && payload.tempoEstimadoMinutos > 0
+            ? payload.tempoEstimadoMinutos : 0;
+        this.updateArrivalEstimate(this.tempoBaseMinutos > 0 ? this.tempoBaseMinutos : null);
         if (payload.passosNavegacao && payload.passosNavegacao.length > 0) {
             this.steps = payload.passosNavegacao;
             this.currentStepIndex = 0;
@@ -611,23 +832,26 @@ class MglCockpitTracker {
 
     // Matchmaking da Camada de Tráfego: Atualiza o ETA via API sem mexer no traçado OSRM
     setupTrafficLayerMatch() {
+        if(this.navigationAllowed===false)return;
         if (!this.entregaId || this.initialCoordinates.length < 2) return;
         this.fetchTrafficConditions();
         this.trafficTimer = setInterval(() => this.fetchTrafficConditions(), 300000);
     }
 
     async fetchTrafficConditions() {
-        if (!this.entregaId || this.initialCoordinates.length < 2) return;
+        if (!this.entregaId || this.initialCoordinates.length < 2 || !this.currentLatLng
+            || this.tempoBaseMinutos <= 0 || this.routeProjectionOffRoute) return;
 
         try {
-            const lat = this.currentLatLng ? this.currentLatLng.lat : this.initialCoordinates[0][0];
-            const lng = this.currentLatLng ? this.currentLatLng.lng : this.initialCoordinates[0][1];
+            const lat = this.currentLatLng.lat;
+            const lng = this.currentLatLng.lng;
             const url = `/api/entregas/${this.entregaId}/trafego-eta?latAtual=${lat}&lngAtual=${lng}&tempoBaseMinutos=${this.tempoBaseMinutos}`;
 
             const res = await fetch(url);
             if (!res.ok) return;
 
             const data = await res.json();
+            if (this.destroyed || this.routeProjectionOffRoute) return;
 
             // Atualiza badge de tráfego
             if (this.trafficBadge) {
@@ -637,54 +861,69 @@ class MglCockpitTracker {
             }
 
             // Atualiza ETA no HUD somando eventuais atrasos da malha
-            if (this.etaMinutesElem && data.tempoFinalMinutos) {
-                this.etaMinutesElem.textContent = `${data.tempoFinalMinutos} min`;
-                if (data.atrasoMinutos > 0) {
-                    this.etaMinutesElem.innerHTML = `${data.tempoFinalMinutos} min <span class="badge bg-danger ms-1">+${data.atrasoMinutos}m</span>`;
+            if (Number.isFinite(data.tempoFinalMinutos) && data.tempoFinalMinutos > 0) {
+                this.updateArrivalEstimate(data.tempoFinalMinutos);
+                if (this.etaMinutesElem && Number.isFinite(data.atrasoMinutos) && data.atrasoMinutos > 0) {
+                    this.etaMinutesElem.textContent += ` · +${data.atrasoMinutos} min de atraso estimado`;
                 }
-            }
-
-            if (this.etaElem && data.tempoFinalMinutos) {
-                const agora = new Date();
-                agora.setMinutes(agora.getMinutes() + data.tempoFinalMinutos);
-                const h = String(agora.getHours()).padStart(2, '0');
-                const m = String(agora.getMinutes()).padStart(2, '0');
-                this.etaElem.textContent = `${h}:${m}`;
             }
         } catch (e) {
             console.warn('Erro ao obter camada de tráfego:', e);
         }
     }
 
-    showToastAlert(msg, iconClass = 'bi-broadcast', iconColor = '#FFB020') {
+    showToastAlert(msg, iconClass = 'bi-broadcast', iconColor = 'var(--mgl-warning)') {
         const toast = document.createElement('div');
-        toast.className = 'position-fixed top-50 start-50 translate-middle p-3 bg-dark text-white rounded-4 border shadow-lg z-3 text-center mgl-hud-toast';
-        toast.style.maxWidth = '360px';
-        toast.style.backdropFilter = 'blur(12px)';
-        toast.style.backgroundColor = 'rgba(10, 27, 43, 0.96)';
+        toast.className = 'mgl-hud-toast';
+        toast.setAttribute('role', 'status');
         toast.style.borderColor = iconColor;
-        toast.style.zIndex = '9999';
-        toast.innerHTML = `
-            <div class="d-flex align-items-center gap-2 mb-1 justify-content-center fw-bold" style="color: ${iconColor};">
-                <i class="bi ${iconClass} fs-4"></i> Telemetria M.G.L HUD
-            </div>
-            <div class="fs-7 text-white-50">${msg}</div>
-        `;
+        const heading = document.createElement('div');
+        heading.className = 'd-flex align-items-center justify-content-center gap-2 fw-bold mb-1';
+        const icon = document.createElement('i');
+        icon.className = `bi ${/^bi-[a-z0-9-]+$/.test(iconClass) ? iconClass : 'bi-broadcast'}`;
+        icon.setAttribute('aria-hidden', 'true');
+        icon.style.color = iconColor;
+        const title = document.createElement('span');
+        title.textContent = 'Atualização da viagem';
+        heading.append(icon, title);
+        const message = document.createElement('p');
+        message.className = 'small mb-0';
+        message.textContent = String(msg ?? '');
+        toast.append(heading, message);
         document.body.appendChild(toast);
         setTimeout(() => {
-            toast.style.transition = 'opacity 0.4s ease';
             toast.style.opacity = '0';
             setTimeout(() => toast.remove(), 400);
         }, 3200);
     }
 
+    completeDelivery(status = 'Entregue') {
+        this.destroy();
+        this.updateConnectionStatus(status === 'Cancelada' ? 'cancelled' : 'completed');
+        if (this.positionSourceBadge) {
+            this.positionSourceBadge.dataset.state = 'completed';
+            this.positionSourceBadge.textContent = Number.isFinite(this.lastPositionTimestamp)
+                ? 'GPS encerrado · última posição preservada' : 'GPS encerrado · nenhuma posição recebida';
+        }
+    }
+
     destroy() {
+        if (this.destroyed) return;
+        this.destroyed = true;
         if (this.trafficTimer) clearInterval(this.trafficTimer);
+        if (this.positionFreshnessTimer) clearInterval(this.positionFreshnessTimer);
         if (this.animFrameId) cancelAnimationFrame(this.animFrameId);
+        window.removeEventListener('online', this.onlineHandler);
+        window.removeEventListener('offline', this.offlineHandler);
+        window.removeEventListener('mgl:gps-confirmed', this.gpsReceiptHandler);
+        if (this.map && typeof this.map.off === 'function' && this.baseLayerChangeHandler) {
+            this.map.off('baselayerchange', this.baseLayerChangeHandler);
+        }
         if (this.hubConnection) {
             this.hubConnection.invoke('LeaveLiveTracking', this.codigoRastreio)
                 .catch(() => {})
-                .finally(() => this.hubConnection.stop());
+                .finally(() => this.hubConnection.stop())
+                .catch(() => {});
         }
     }
 }

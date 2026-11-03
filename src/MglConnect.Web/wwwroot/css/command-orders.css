@@ -1,0 +1,23 @@
+/* Shared administrative order and dispatch surfaces use Command Center tokens. */
+.cc-orders { min-width: 0; }
+.cc-order-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: var(--mgl-space-3); }
+.cc-order-form { display: grid; gap: var(--mgl-space-3); max-width: 68rem; }
+.cc-order-form .form-control, .cc-order-form .form-select { min-height: 44px; }
+.cc-order-description { color: var(--mgl-text-main); font-size: 1rem; font-weight: 700; overflow-wrap: anywhere; }
+.cc-order-data { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: var(--mgl-space-3); margin: var(--mgl-space-3) 0; }
+.cc-order-data > div { min-width: 0; }
+.cc-order-data dt, .cc-order-label { display: block; color: var(--mgl-text-secondary); font-size: .7rem; font-weight: 600; }
+.cc-order-data dd { margin: .35rem 0 0; font-size: .85rem; font-weight: 700; overflow-wrap: anywhere; }
+.cc-order-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--mgl-space-1); }
+.cc-order-actions .btn { min-height: 44px; }
+.cc-order-hint { margin: var(--mgl-space-3) 0 0; color: var(--mgl-text-secondary); font-size: .75rem; }
+.cc-order-empty { padding-block: var(--mgl-space-3); }
+.cc-order-empty > i { display: block; margin-bottom: var(--mgl-space-2); color: var(--mgl-color-link); font-size: 2rem; }
+.cc-order-empty h3 { font-size: 1rem; font-weight: 800; }
+.cc-order-empty p { color: var(--mgl-text-secondary); font-size: .8rem; }
+.cc-order-reference { margin: .5rem 0 1rem; font-family: var(--mgl-font-mono); font-size: 1.15rem; font-weight: 800; color: var(--mgl-color-link); overflow-wrap: anywhere; }
+.cc-orders address { margin: 0; font-size: .85rem; line-height: 1.8; overflow-wrap: anywhere; }
+.cc-order-capacity { padding: var(--mgl-space-2); border: 1px solid var(--mgl-border-subtle); border-radius: var(--mgl-radius-md); background: var(--mgl-bg-subtle); color: var(--mgl-text-secondary); font-size: .8rem; }
+.cc-order-capacity[data-state="warning"] { border-color: var(--mgl-warning); background: var(--mgl-warning-tint); color: var(--mgl-warning); }
+@media (max-width: 767.98px) { .cc-order-grid { grid-template-columns: 1fr; } .cc-order-actions .btn { flex: 1 1 auto; } }
+@media (max-width: 389.98px) { .cc-order-data { grid-template-columns: 1fr; } }

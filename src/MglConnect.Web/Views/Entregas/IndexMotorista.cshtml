@@ -2,59 +2,77 @@
 @{
     ViewData["Title"] = "Minhas viagens";
     var nome = User.Identity?.Name ?? "Motorista";
+    var turnosAtivos = Model.Count(viagem => viagem.TurnoAtivo);
 }
 
-<main class="driver-home container-fluid px-3 px-sm-4 py-4">
-    <header class="driver-home-header d-flex align-items-center justify-content-between gap-3 mb-4">
-        <div>
-            <div class="driver-brand-mark">M.G.L <span>DRIVER</span></div>
-            <h1 class="h4 fw-bold text-white mt-3 mb-1">Olá, @nome</h1>
-            <p class="text-white-50 mb-0">Selecione o veículo e a viagem atribuídos a você.</p>
+<section class="driver-home cc-driver-home" aria-labelledby="driverHomeTitle">
+    <header class="cc-driver-heading">
+        <div class="cc-driver-heading-copy">
+            <span class="cc-driver-eyebrow"><i class="bi bi-compass" aria-hidden="true"></i> Área do motorista</span>
+            <p class="cc-driver-greeting">Olá, @nome</p>
+            <h1 id="driverHomeTitle">Minhas viagens</h1>
+            <p>Confira sua atribuição e valide o turno para abrir a navegação.</p>
         </div>
-        <div class="d-flex gap-2">
-            <a asp-action="PerfilMotorista" class="btn btn-outline-light driver-logout" aria-label="Abrir perfil">
-                <i class="bi bi-person-circle me-sm-2"></i><span class="d-none d-sm-inline">Perfil</span>
+        <div class="cc-driver-account-actions">
+            <a asp-action="PerfilMotorista" class="btn btn-outline-secondary cc-driver-account-action">
+                <i class="bi bi-person-circle" aria-hidden="true"></i><span>Meu perfil</span>
             </a>
             <form asp-controller="Account" asp-action="Logout" method="post">
                 @Html.AntiForgeryToken()
-                <button type="submit" class="btn btn-outline-light driver-logout" aria-label="Sair da conta">
-                    <i class="bi bi-box-arrow-right me-sm-2"></i><span class="d-none d-sm-inline">Sair</span>
+                <button type="submit" class="btn btn-outline-secondary cc-driver-account-action">
+                    <i class="bi bi-box-arrow-right" aria-hidden="true"></i><span>Sair</span>
                 </button>
             </form>
         </div>
     </header>
 
-    @if (TempData["MensagemSucesso"] is string sucesso)
-    {
-        <div class="alert alert-success" role="status">@sucesso</div>
-    }
-    @if (TempData["MensagemErro"] is string erro)
-    {
-        <div class="alert alert-danger" role="alert">@erro</div>
-    }
+    <dl class="cc-driver-summary" aria-label="Resumo das suas atribuições">
+        <div>
+            <dt><i class="bi bi-truck-front" aria-hidden="true"></i> Viagens atribuídas</dt>
+            <dd>@Model.Count</dd>
+        </div>
+        <div>
+            <dt><i class="bi bi-key" aria-hidden="true"></i> Turnos ativos</dt>
+            <dd>@turnosAtivos</dd>
+        </div>
+    </dl>
 
     @if (Model.Count == 0)
     {
-        <section class="driver-empty-state">
-            <i class="bi bi-truck-front" aria-hidden="true"></i>
-            <h2 class="h5 fw-bold mt-3">Nenhuma viagem atribuída</h2>
-            <p class="mb-0">A operação ainda não atribuiu um veículo e uma viagem ativos à sua conta.</p>
+        <section class="driver-empty-state cc-driver-empty" aria-labelledby="driverEmptyTitle">
+            <span class="cc-driver-empty-icon"><i class="bi bi-truck-front" aria-hidden="true"></i></span>
+            <h2 id="driverEmptyTitle">Nenhuma viagem atribuída</h2>
+            <p>A operação ainda não atribuiu uma viagem ativa à sua conta. Quando receber uma atribuição, ela aparecerá aqui.</p>
+            <a asp-action="Index" class="btn btn-outline-secondary"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Atualizar viagens</a>
         </section>
     }
     else
     {
         <section aria-labelledby="assigned-trips-heading">
-            <h2 id="assigned-trips-heading" class="h6 text-uppercase text-white-50 tracking-wider mb-3">
-                Viagens disponíveis
-            </h2>
+            <div class="cc-driver-section-heading">
+                <h2 id="assigned-trips-heading">Suas atribuições</h2>
+                <a asp-action="Index" class="cc-driver-refresh"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Atualizar</a>
+            </div>
             <div class="driver-trip-list">
                 @foreach (var viagem in Model)
                 {
-                    <article class="driver-trip-card">
-                        <div class="d-flex align-items-start justify-content-between gap-3">
-                            <div>
-                                <span class="driver-trip-label">Veículo atribuído</span>
-                                <h3 class="h5 fw-bold text-white mt-1 mb-1">
+                    var statusClass = viagem.Status switch
+                    {
+                        "Entregue" => "is-success",
+                        "Cancelada" => "is-danger",
+                        "Em transporte" => "is-info",
+                        _ => "is-neutral"
+                    };
+                    <article class="driver-trip-card cc-driver-trip @(viagem.TurnoAtivo ? "cc-driver-trip-active" : "")" aria-labelledby="trip-title-@viagem.EntregaId">
+                        <div class="cc-driver-trip-top">
+                            <span class="cc-driver-trip-reference">Viagem #@viagem.EntregaId</span>
+                            <span class="cc-driver-status @statusClass">@(string.IsNullOrWhiteSpace(viagem.Status) ? "Estado não informado" : viagem.Status)</span>
+                        </div>
+                        <div class="cc-driver-vehicle">
+                            <span class="cc-driver-vehicle-icon"><i class="bi bi-truck-front" aria-hidden="true"></i></span>
+                            <div class="cc-driver-vehicle-copy">
+                                <span class="cc-driver-label">Veículo atribuído</span>
+                                <h3 id="trip-title-@viagem.EntregaId">
                                     @(viagem.ModeloVeiculo ?? "Veículo pendente")
                                 </h3>
                                 @if (!string.IsNullOrWhiteSpace(viagem.PlacaVeiculo))
@@ -62,53 +80,53 @@
                                     <span class="driver-plate">@viagem.PlacaVeiculo</span>
                                 }
                             </div>
-                            <span class="driver-status">@viagem.Status</span>
                         </div>
 
-                        <div class="driver-trip-destination mt-4">
-                            <i class="bi bi-geo-alt-fill" aria-hidden="true"></i>
+                        <div class="cc-driver-destination">
+                            <span class="cc-driver-destination-icon"><i class="bi bi-geo-alt" aria-hidden="true"></i></span>
                             <div>
-                                <span class="driver-trip-label">Destino</span>
-                                <div class="fw-semibold text-white">@viagem.CidadeDestino / @viagem.EstadoDestino</div>
+                                <span class="cc-driver-label">Destino</span>
+                                <p>@viagem.CidadeDestino / @viagem.EstadoDestino</p>
                             </div>
                         </div>
 
                         @if (viagem.TurnoAtivo)
                         {
-                            <a asp-action="Navegar" asp-route-id="@viagem.EntregaId"
-                               class="btn btn-driver-primary w-100 mt-4">
-                                <i class="bi bi-compass-fill me-2" aria-hidden="true"></i>
-                                Abrir navegação
-                            </a>
-                            <form asp-action="EncerrarTurno" method="post" class="mt-2">
-                                @Html.AntiForgeryToken()
-                                <button type="submit" class="btn btn-outline-light w-100">Encerrar turno</button>
-                            </form>
+                            <div class="cc-driver-shift-state is-active"><i class="bi bi-check-circle" aria-hidden="true"></i><span>Turno ativo <small>Navegação liberada para esta viagem.</small></span></div>
+                            <div class="cc-driver-trip-actions">
+                                <a asp-action="Navegar" asp-route-id="@viagem.EntregaId" class="btn btn-driver-primary w-100">
+                                    <i class="bi bi-compass-fill" aria-hidden="true"></i> Abrir navegação
+                                </a>
+                                <form asp-action="EncerrarTurno" method="post">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-outline-secondary w-100"><i class="bi bi-stop-circle" aria-hidden="true"></i> Encerrar turno</button>
+                                </form>
+                            </div>
                         }
                         else if (viagem.VeiculoAtribuido)
                         {
-                            <form asp-action="IniciarTurno" method="post" class="mt-4">
+                            <div class="cc-driver-shift-state"><i class="bi bi-lock" aria-hidden="true"></i><span>Aguardando validação <small>Use o código temporário fornecido pela operação.</small></span></div>
+                            <form asp-action="IniciarTurno" method="post" class="cc-driver-shift-form">
                                 @Html.AntiForgeryToken()
                                 <input type="hidden" name="entregaId" value="@viagem.EntregaId" />
-                                <label class="form-label text-white" for="shift-code-@viagem.EntregaId">Código temporário do turno</label>
+                                <label class="form-label" for="shift-code-@viagem.EntregaId">Código temporário do turno</label>
                                 <input id="shift-code-@viagem.EntregaId" name="codigo" class="form-control"
                                        type="password" maxlength="100" autocomplete="one-time-code"
-                                       autocapitalize="off" spellcheck="false" required />
-                                <button type="submit" class="btn btn-driver-primary w-100 mt-2">
-                                    <i class="bi bi-key-fill me-2" aria-hidden="true"></i>Validar e iniciar turno
+                                       autocapitalize="off" spellcheck="false" aria-describedby="shift-hint-@viagem.EntregaId" required />
+                                <p id="shift-hint-@viagem.EntregaId" class="cc-driver-field-hint">O código autoriza o início do turno desta viagem.</p>
+                                <button type="submit" class="btn btn-driver-primary w-100">
+                                    <i class="bi bi-key-fill" aria-hidden="true"></i> Validar e iniciar turno
                                 </button>
                             </form>
                         }
                         else
                         {
-                            <button type="button" class="btn btn-secondary w-100 mt-4" disabled>
-                                <i class="bi bi-hourglass-split me-2" aria-hidden="true"></i>
-                                Aguardando veículo atribuído
-                            </button>
+                            <div class="cc-driver-shift-state is-pending"><i class="bi bi-hourglass-split" aria-hidden="true"></i><span>Aguardando veículo <small>A operação precisa atribuir um veículo antes do início do turno.</small></span></div>
+                            <button type="button" class="btn btn-secondary w-100" disabled>Aguardando veículo atribuído</button>
                         }
                     </article>
                 }
             </div>
         </section>
     }
-</main>
+</section>

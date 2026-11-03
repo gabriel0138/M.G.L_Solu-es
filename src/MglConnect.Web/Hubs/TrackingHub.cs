@@ -2,25 +2,28 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.SignalR;
 using MglConnect.Web.Data;
+using MglConnect.Web.Services;
 
 namespace MglConnect.Web.Hubs
 {
     public class TrackingHub : Hub
     {
         private readonly MglDbContext _context;
+        private readonly PublicTrackingRateLimiter _limiter;
 
-        public TrackingHub(MglDbContext context)
+        public TrackingHub(MglDbContext context, PublicTrackingRateLimiter limiter)
         {
             _context = context;
+            _limiter = limiter;
         }
 
         public async Task JoinTrackingGroup(string codigoRastreio)
         {
-            if (string.IsNullOrWhiteSpace(codigoRastreio))
-                throw new HubException("Código de rastreio inválido.");
-
-            var key = codigoRastreio.Trim().ToUpperInvariant();
-            if (!await _context.Entregas.AnyAsync(e => e.CodigoRastreio == key))
+            using var lease = _limiter.Acquire(Context.GetHttpContext());
+            if (!lease.IsAcquired)
+                throw new HubException("Muitas consultas. Aguarde antes de tentar novamente.");
+            var key = PublicTrackingProjection.NormalizeCode(codigoRastreio);
+            if (key == null || !await _context.Entregas.AnyAsync(e => e.CodigoRastreio.ToUpper() == key))
                 throw new HubException("Rastreamento não localizado.");
 
             await Groups.AddToGroupAsync(Context.ConnectionId, key);
@@ -28,9 +31,8 @@ namespace MglConnect.Web.Hubs
 
         public async Task LeaveTrackingGroup(string codigoRastreio)
         {
-            if (string.IsNullOrWhiteSpace(codigoRastreio)) return;
-
-            var key = codigoRastreio.Trim().ToUpperInvariant();
+            var key = PublicTrackingProjection.NormalizeCode(codigoRastreio);
+            if (key == null) return;
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, key);
         }
     }

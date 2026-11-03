@@ -89,36 +89,36 @@ namespace MglConnect.Web.Data
             // 2. Criar Clientes Corporativos
             var cliente1 = new Cliente
             {
-                RazaoSocial = "Alpha Distribuidora de Eletrônicos Ltda",
-                NomeFantasia = "Alpha Tech Logística",
-                Cnpj = "12.345.678/0001-90",
-                Email = "operacional@alphatech.com.br",
-                Telefone = "(13) 3219-8800",
-                Cep = "11013-001",
-                Logradouro = "Rua do Comércio",
-                Numero = "150",
-                Complemento = "Sala 402",
-                Bairro = "Centro",
-                Cidade = "Santos",
-                Estado = "SP",
+                RazaoSocial = "Empresa de Demonstração 1 Ltda",
+                NomeFantasia = "Cliente Demo 1",
+                Cnpj = "00.000.000/0001-00",
+                Email = "cliente1@example.invalid",
+                Telefone = "00000000000",
+                Cep = "00000-000",
+                Logradouro = "Endereço de demonstração",
+                Numero = "0",
+                Complemento = "Sem complemento",
+                Bairro = "Demonstração",
+                Cidade = "Cidade Demo",
+                Estado = "ZZ",
                 Ativo = true,
                 DataCadastro = DateTime.UtcNow.AddDays(-30)
             };
 
             var cliente2 = new Cliente
             {
-                RazaoSocial = "Varejo Express Mercadorias e E-commerce S.A.",
-                NomeFantasia = "Express Hub",
-                Cnpj = "98.765.432/0001-11",
-                Email = "contato@expresshub.com.br",
-                Telefone = "(11) 3100-2244",
-                Cep = "01310-100",
-                Logradouro = "Avenida Paulista",
-                Numero = "1200",
-                Complemento = "Andar 10",
-                Bairro = "Bela Vista",
-                Cidade = "São Paulo",
-                Estado = "SP",
+                RazaoSocial = "Empresa de Demonstração 2 Ltda",
+                NomeFantasia = "Cliente Demo 2",
+                Cnpj = "00.000.000/0002-00",
+                Email = "cliente2@example.invalid",
+                Telefone = "00000000000",
+                Cep = "00000-000",
+                Logradouro = "Endereço de demonstração",
+                Numero = "0",
+                Complemento = "Sem complemento",
+                Bairro = "Demonstração",
+                Cidade = "Cidade Demo",
+                Estado = "ZZ",
                 Ativo = true,
                 DataCadastro = DateTime.UtcNow.AddDays(-20)
             };
@@ -129,38 +129,37 @@ namespace MglConnect.Web.Data
             // 3. Criar Usuários (Admin, Motorista e Perfil Cliente)
             var admin = new Usuario
             {
-                Nome = "Administrador Geral MGL",
+                Nome = "Administrador de Demonstração",
                 Login = "admin",
                 SenhaHash = hasher.HashPassword(demoCredentials.AdminPassword),
                 Perfil = "Admin",
-                Telefone = "(13) 99111-2233",
-                Cpf = "111.222.333-44",
+                Telefone = "00000000000",
+                Cpf = "000.000.000-00",
                 Ativo = true,
                 DataCadastro = DateTime.UtcNow
             };
 
             var motorista1 = new Usuario
             {
-                Nome = "Carlos Eduardo Santos",
+                Nome = "Motorista de Demonstração",
                 Login = "carlos.motorista",
                 SenhaHash = hasher.HashPassword(demoCredentials.DriverPassword),
                 Perfil = "Motorista",
-                Telefone = "(13) 98844-5566",
-                Cpf = "222.333.444-55",
-                DataNascimento = new DateTime(1988, 4, 15),
+                Telefone = "00000000000",
+                Cpf = "000.000.000-00",
                 Ativo = true,
                 DataCadastro = DateTime.UtcNow
             };
 
             var usuarioCliente = new Usuario
             {
-                Nome = "Gerente de Logística - Alpha Tech",
+                Nome = "Usuário Cliente de Demonstração",
                 Login = "cliente.demo",
                 SenhaHash = hasher.HashPassword(demoCredentials.ClientPassword),
                 Perfil = "Cliente",
                 ClienteId = cliente1.Id,
-                Telefone = "(13) 99888-7711",
-                Cpf = "444.555.666-77",
+                Telefone = "00000000000",
+                Cpf = "000.000.000-00",
                 Ativo = true,
                 DataCadastro = DateTime.UtcNow
             };
@@ -188,7 +187,7 @@ namespace MglConnect.Web.Data
                 ValorTotal = 8900.00m,
                 PesoKg = 14.2m,
                 DataPedido = DateTime.UtcNow.AddDays(-4),
-                Status = "ComEntregaAtribuida"
+                Status = "Concluido"
             };
 
             var pedido3 = new Pedido
@@ -212,19 +211,20 @@ namespace MglConnect.Web.Data
                 MotoristaId = motorista1.Id,
                 VeiculoId = veiculo1.Id,
                 CodigoRastreio = "MGL-BR100201",
-                DestinatarioNome = "MegaByte Informática & Serviços",
-                DestinatarioDocumento = "44.555.666/0001-77",
-                EnderecoDestino = "Avenida Ana Costa",
-                NumeroDestino = "200",
-                ComplementoDestino = "Loja 12 - Térreo",
-                BairroDestino = "Gonzaga",
-                CidadeDestino = "Santos",
-                EstadoDestino = "SP",
-                CepDestino = "11060-000",
-                StatusEntrega = "Em transporte",
+                AtribuicaoAtiva = true,
+                DestinatarioNome = "Destinatário de Demonstração 1",
+                DestinatarioDocumento = "DOC-DEMO-1",
+                EnderecoDestino = "Endereço de demonstração",
+                NumeroDestino = "0",
+                ComplementoDestino = "Sem complemento",
+                BairroDestino = "Demonstração",
+                CidadeDestino = "Cidade Demo",
+                EstadoDestino = "ZZ",
+                CepDestino = "00000-000",
+                StatusEntrega = "Pendente",
                 DataCriacao = DateTime.UtcNow.AddDays(-1),
                 DataPrevisaoEntrega = DateTime.UtcNow.AddDays(1),
-                Observacoes = "Horário comercial de recebimento: 09h às 18h.",
+                Observacoes = "Dados sintéticos para demonstração.",
                 AlturaMetros = veiculo1.AlturaMetros,
                 LarguraMetros = veiculo1.LarguraMetros,
                 PesoToneladas = veiculo1.PesoToneladas,
@@ -239,20 +239,20 @@ namespace MglConnect.Web.Data
                 MotoristaId = motorista1.Id,
                 VeiculoId = veiculo3.Id,
                 CodigoRastreio = "MGL-BR200302",
-                DestinatarioNome = "Supermercado Litoral Sul Ltda",
-                DestinatarioDocumento = "18.999.888/0001-22",
-                EnderecoDestino = "Avenida Presidente Wilson",
-                NumeroDestino = "450",
-                ComplementoDestino = "Docas 2",
-                BairroDestino = "José Menino",
-                CidadeDestino = "Santos",
-                EstadoDestino = "SP",
-                CepDestino = "11065-200",
+                DestinatarioNome = "Destinatário de Demonstração 2",
+                DestinatarioDocumento = "DOC-DEMO-2",
+                EnderecoDestino = "Endereço de demonstração",
+                NumeroDestino = "0",
+                ComplementoDestino = "Sem complemento",
+                BairroDestino = "Demonstração",
+                CidadeDestino = "Cidade Demo",
+                EstadoDestino = "ZZ",
+                CepDestino = "00000-000",
                 StatusEntrega = "Entregue",
                 DataCriacao = DateTime.UtcNow.AddDays(-3),
                 DataPrevisaoEntrega = DateTime.UtcNow,
                 DataEntregaRealizada = DateTime.UtcNow.AddHours(-2),
-                Observacoes = "Entregue diretamente na recepção das docas.",
+                Observacoes = "Dados sintéticos para demonstração.",
                 AlturaMetros = veiculo3.AlturaMetros,
                 LarguraMetros = veiculo3.LarguraMetros,
                 PesoToneladas = veiculo3.PesoToneladas,
@@ -260,10 +260,10 @@ namespace MglConnect.Web.Data
                 TipoCarga = veiculo3.TipoCarga,
                 RotaRestritaCaminhao = true,
                 // Comprovante Digital de Entrega (POD)
-                NomeRecebedor = "Maria Oliveira Santos",
-                DocumentoRecebedor = "34.871.992-X",
+                NomeRecebedor = "Recebedor de Demonstração",
+                DocumentoRecebedor = "DOC-DEMO-RECEBEDOR",
                 DataHoraRecebimento = DateTime.UtcNow.AddHours(-2),
-                AssinaturaDigitalBase64 = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='60'><path d='M10 40 Q 60 10, 110 35 T 190 25' stroke='%230B132B' stroke-width='2' fill='none'/><text x='15' y='55' font-family='sans-serif' font-size='10' fill='%23666'>Maria O. Santos</text></svg>"
+                AssinaturaDigitalBase64 = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='60'><path d='M10 40 Q 60 10, 110 35 T 190 25' stroke='%230B132B' stroke-width='2' fill='none'/><text x='15' y='55' font-family='sans-serif' font-size='10' fill='%23666'>Recebedor Demo</text></svg>"
             };
 
             context.Entregas.AddRange(entrega1, entrega2);
@@ -275,42 +275,12 @@ namespace MglConnect.Web.Data
                 new EventoRastreio
                 {
                     EntregaId = entrega1.Id,
-                    DataHora = DateTime.UtcNow.AddDays(-1).AddHours(2),
-                    Titulo = "Pedido postado e bipado no Centro de Distribuição",
-                    Descricao = "Mercadoria recebida e conferida no CD Logístico MGL Cajamar.",
+                    DataHora = entrega1.DataCriacao,
+                    Titulo = "Pedido validado e remessa preparada",
+                    Descricao = "Aguardando início de turno autenticado pelo motorista.",
                     Localidade = "Cajamar - SP",
                     StatusAssociado = "Pendente",
                     Icone = "bi-box-seam"
-                },
-                new EventoRastreio
-                {
-                    EntregaId = entrega1.Id,
-                    DataHora = DateTime.UtcNow.AddDays(-1).AddHours(8),
-                    Titulo = "Em transferência entre centros operacionais",
-                    Descricao = "Carga despachada em caminhão pesado Scania R450 rumo ao centro de distribuição litorâneo via Rodoanel.",
-                    Localidade = "São Paulo - SP",
-                    StatusAssociado = "Em transporte",
-                    Icone = "bi-truck"
-                },
-                new EventoRastreio
-                {
-                    EntregaId = entrega1.Id,
-                    DataHora = DateTime.UtcNow.AddHours(-4),
-                    Titulo = "Chegou à unidade de distribuição local",
-                    Descricao = "Pacote descarregado e triado para a rota do dia.",
-                    Localidade = "Santos - SP",
-                    StatusAssociado = "Em transporte",
-                    Icone = "bi-geo-alt-fill"
-                },
-                new EventoRastreio
-                {
-                    EntregaId = entrega1.Id,
-                    DataHora = DateTime.UtcNow.AddHours(-1),
-                    Titulo = "Saiu para entrega ao destinatário",
-                    Descricao = "Motorista Carlos Eduardo iniciou o percurso final de entrega.",
-                    Localidade = "Santos - SP",
-                    StatusAssociado = "Em transporte",
-                    Icone = "bi-bicycle"
                 }
             };
 
@@ -341,7 +311,7 @@ namespace MglConnect.Web.Data
                     EntregaId = entrega2.Id,
                     DataHora = DateTime.UtcNow.AddHours(-6),
                     Titulo = "Saiu para entrega",
-                    Descricao = "Motorista Carlos Eduardo a caminho do endereço de entrega.",
+                    Descricao = "Motorista de demonstração a caminho do destino.",
                     Localidade = "Santos - SP",
                     StatusAssociado = "Em transporte",
                     Icone = "bi-truck"
@@ -351,7 +321,7 @@ namespace MglConnect.Web.Data
                     EntregaId = entrega2.Id,
                     DataHora = DateTime.UtcNow.AddHours(-2),
                     Titulo = "Comprovante Digital de Entrega (POD) Confirmado",
-                    Descricao = "Pacote recebido e conferido por Maria Oliveira Santos (Doc: 34.871.992-X). Assinatura digital arquivada.",
+                    Descricao = "Pacote recebido por destinatário de demonstração. Assinatura sintética arquivada.",
                     Localidade = "Santos - SP",
                     StatusAssociado = "Entregue",
                     Icone = "bi-patch-check-fill"

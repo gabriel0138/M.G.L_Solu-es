@@ -20,15 +20,10 @@ namespace MglConnect.Web.Controllers.Api
         [HttpGet("{codigo}")]
         public async Task<IActionResult> Consultar(string codigo)
         {
-            if (string.IsNullOrWhiteSpace(codigo))
-            {
-                return BadRequest(new { erro = "Código de rastreio não informado." });
-            }
-
             var entrega = await _trackingService.GetTrackingDetailsAsync(codigo);
             if (entrega == null)
             {
-                return NotFound(new { erro = $"Pacote com código '{codigo}' não encontrado." });
+                return NotFound(new { erro = "Rastreamento não localizado." });
             }
 
             return Ok(new
@@ -36,6 +31,8 @@ namespace MglConnect.Web.Controllers.Api
                 codigoRastreio = entrega.CodigoRastreio,
                 status = entrega.StatusEntrega,
                 destinatario = entrega.DestinatarioNome,
+                cidadeOrigem = entrega.CidadeOrigem,
+                ufOrigem = entrega.EstadoOrigem,
                 cidadeDestino = entrega.CidadeDestino,
                 ufDestino = entrega.EstadoDestino,
                 dataPostagem = entrega.DataCriacao,

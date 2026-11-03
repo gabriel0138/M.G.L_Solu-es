@@ -1,0 +1,38 @@
+@model MglConnect.Web.ViewModels.GpsHistoryConsoleViewModel
+@{ ViewData["Title"]="Histórico GPS operacional";ViewData["GpsHistoryAdmin"]=true;ViewData["GpsHistoryDe"]=Model.De;ViewData["GpsHistoryAte"]=Model.Ate; }
+<div class="cc-dashboard cc-gps-console">
+<header class="cc-section-heading cc-page-heading"><div><span class="cc-eyebrow">COMMAND CENTER / TELEMETRIA</span><h1>Histórico GPS operacional</h1><p>Capturas confirmadas, qualidade do sinal e arquivos verificáveis da sua organização.</p></div><a asp-controller="Operacoes" asp-action="Index" class="btn btn-outline-secondary">Mapa operacional</a></header>
+<div asp-validation-summary="All" class="alert alert-danger" role="alert"></div>
+<form asp-action="Index" method="get" class="cc-filter-bar cc-gps-filters">
+<div><label for="gpsTripSearch" class="form-label">Buscar código de rastreamento</label><input id="gpsTripSearch" name="termo" value="@Model.Termo" maxlength="64" type="search" class="form-control" /></div>
+<div><label for="gpsTrip" class="form-label">Viagem (até 100 mais recentes)</label><select id="gpsTrip" name="entregaId" class="form-select"><option value="">Escolha a viagem</option>@foreach(var trip in Model.Viagens){<option value="@trip.Id" selected="@(Model.EntregaId==trip.Id)">@trip.Codigo · @trip.Estado</option>}</select></div>
+<div><label for="gpsPeriodStart" class="form-label">Início (UTC, inclusivo)</label><input id="gpsPeriodStart" name="de" type="datetime-local" step="1" value="@Model.De" class="form-control" /></div>
+<div><label for="gpsPeriodEnd" class="form-label">Fim (UTC, inclusivo)</label><input id="gpsPeriodEnd" name="ate" type="datetime-local" step="1" value="@Model.Ate" class="form-control" /></div>
+<button type="submit" class="btn btn-primary">Consultar período</button><a asp-action="Index" class="btn btn-outline-secondary">Limpar</a>
+</form>
+@if(Model.EntregaId.HasValue&&ViewData.ModelState.IsValid){
+    <div class="cc-data-note mb-4"><i class="bi bi-info-circle" aria-hidden="true"></i><p>@Model.Recebidas24h posições recebidas nesta viagem nas últimas 24h. Cota móvel: @Model.CotaViagem24h por 24h, sem limite acumulado de duração. Posições imprecisas permanecem na auditoria e não geram ETA ou desvio.</p></div>
+    <partial name="_GpsHistory" model="Model.EntregaId.Value" />
+    <section class="cc-panel mb-4"><header class="cc-panel-header"><div><h2>Exportação autorizada</h2><p>CSV em UTC, com proteção de células e até @Model.LinhasCsv linhas por arquivo. Limite de quatro exportações por minuto por usuário.</p></div></header><div class="cc-panel-body">
+    <form asp-action="Exportar" method="get" class="d-flex flex-wrap align-items-end gap-3"><input type="hidden" name="entregaId" value="@Model.EntregaId" /><input type="hidden" name="de" value="@Model.De" /><input type="hidden" name="ate" value="@Model.Ate" />
+    <div><label for="gpsCsvPage" class="form-label">Página de exportação</label><input id="gpsCsvPage" name="pagina" type="number" min="1" value="1" class="form-control" required /></div><button class="btn btn-outline-secondary" type="submit">Baixar CSV do período</button></form></div></section>
+    <section class="cc-panel"><header class="cc-panel-header"><div><h2>Retenção e arquivos</h2><p>@Model.PosicoesOnlineSemArquivo posições online sem arquivo verificado.</p></div></header><div class="cc-panel-body">
+    <p class="cc-gps-policy">@Model.BytesArquivados bytes comprimidos na organização, de @Model.LimiteBytesArquivo configurados. O índice de UUIDs é permanente e também exige dimensionamento.</p>
+    <p class="cc-gps-policy">Somente viagens encerradas, sem reserva e sem turno ativo, podem ser arquivadas. Cada ação processa um lote limitado, preservando a cópia online. Compactação manual após @Model.RetencaoDias dias desde a criação do arquivo: o conteúdo verificável e o índice permanente de UUIDs são mantidos. Nenhuma limpeza automática é executada.</p>
+    @if(Model.StatusEntrega is "Entregue" or "Cancelada") {<form asp-action="Arquivar" method="post" class="mb-3"><input type="hidden" name="entregaId" value="@Model.EntregaId" /><button class="btn btn-primary" type="submit" disabled="@(Model.PosicoesOnlineSemArquivo==0)">Arquivar próximo lote</button></form>}
+    else {<p class="alert alert-info" role="status">Viagem em andamento: posições protegidas contra arquivamento e compactação.</p>}
+    @if(Model.Arquivos.Count==0){<div class="cc-empty-state"><h3>Nenhum arquivo criado</h3><p>As posições continuam disponíveis na consulta online.</p></div>}
+    else {<div class="table-responsive cc-gps-archive-table" role="region" aria-label="Arquivos GPS verificados na criação" tabindex="0"><table class="table"><caption class="visually-hidden">Arquivos, integridade e compactação controlada</caption><thead><tr><th scope="col">Criado (UTC)</th><th scope="col">Posições / responsável</th><th scope="col">Integridade</th><th scope="col">Ações</th></tr></thead><tbody>
+    @foreach(var file in Model.Arquivos){<tr><td>@file.CriadoEmUtc.ToString("dd/MM/yyyy HH:mm:ss")</td><td>@file.Quantidade posições<br />Operador #@file.ResponsavelId<br />@file.Bytes bytes comprimidos</td><td><details><summary>SHA-256 verificado na criação</summary><code class="cc-gps-checksum">@file.Sha256</code></details><small>Revalidado ao baixar ou compactar.</small></td><td><a asp-action="Arquivo" asp-route-id="@file.Id" class="btn btn-outline-secondary">Baixar arquivo verificado</a>
+        @if(file.CompactadoEmUtc.HasValue){<p class="mt-2 mb-0">Cópia online compactada em @file.CompactadoEmUtc.Value.ToString("dd/MM/yyyy HH:mm") UTC.</p>}
+        else if(DateTime.UtcNow<file.CriadoEmUtc.AddDays(Model.RetencaoDias)){<p class="mt-2 mb-0">Retenção online em vigor até @file.CriadoEmUtc.AddDays(Model.RetencaoDias).ToString("dd/MM/yyyy HH:mm") UTC.</p>}
+        else {<form asp-action="Compactar" method="post" class="mt-2"><input type="hidden" name="id" value="@file.Id" /><div class="form-check mb-2"><input id="compact-@file.Id" name="confirmar" value="true" type="checkbox" class="form-check-input" required /><label for="compact-@file.Id" class="form-check-label">Confirmo remover apenas a cópia online, preservando o arquivo e os UUIDs.</label></div><button type="submit" class="btn btn-outline-secondary">Compactar cópia online</button></form>}
+    </td></tr>}
+    </tbody></table></div>
+    <nav class="cc-gps-history-pagination" aria-label="Páginas dos arquivos"><span>Página @Model.PaginaArquivos de @Model.PaginasArquivos</span>
+    @if(Model.PaginaArquivos>1){<a class="btn btn-outline-secondary" asp-action="Index" asp-route-entregaId="@Model.EntregaId" asp-route-paginaArquivos="@(Model.PaginaArquivos-1)">Arquivos anteriores</a>}
+    @if(Model.PaginaArquivos<Model.PaginasArquivos){<a class="btn btn-outline-secondary" asp-action="Index" asp-route-entregaId="@Model.EntregaId" asp-route-paginaArquivos="@(Model.PaginaArquivos+1)">Próximos arquivos</a>}
+    </nav>}
+    </div></section>
+}else if(!Model.EntregaId.HasValue){<div class="cc-panel cc-empty-state"><h2>Selecione uma viagem</h2><p>O histórico é consultado dentro da sua organização. Nenhum ponto é inferido de endereços.</p></div>}
+</div>

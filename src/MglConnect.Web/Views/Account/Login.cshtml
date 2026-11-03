@@ -1,80 +1,92 @@
 @model MglConnect.Web.ViewModels.LoginViewModel
 @inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment HostEnvironment
 @{
-    ViewData["Title"] = "Autenticação Corporativa";
+    ViewData["Title"] = "Acesso ao Command Center";
 }
 
-<div class="container py-5">
-    <div class="row justify-content-center">
-        <div class="col-md-5">
-            <div class="card-mgl overflow-hidden">
-                <div class="p-4 text-center text-white" style="background-color: var(--mgl-dark-primary);">
-                    <span class="brand-badge fs-6 mb-2 d-inline-block">
-                        <i class="bi bi-box-seam-fill"></i> M.G.L Connect
-                    </span>
-                    <h5 class="fw-bold mb-0">Portal de Acesso Unificado</h5>
-                    <p class="text-white-50 fs-8 mb-0">Administração • Motoristas • Clientes Corporativos</p>
-                </div>
-
-                <div class="p-4 p-md-5">
-                    @if (!ViewData.ModelState.IsValid)
-                    {
-                        <div class="alert alert-danger py-2 fs-7 mb-3" asp-validation-summary="All"></div>
-                    }
-
-                    <form asp-action="Login" method="post">
-                        <input type="hidden" asp-for="ReturnUrl" />
-
-                        <div class="mb-3">
-                            <label asp-for="Login" class="form-label fs-7 fw-semibold text-secondary">Usuário / Login</label>
-                            <div class="input-group">
-                                <span class="input-group-text bg-light"><i class="bi bi-person"></i></span>
-                                <input asp-for="Login" class="form-control" placeholder="admin, carlos.motorista ou cliente.demo" required autofocus />
-                            </div>
-                            <span asp-validation-for="Login" class="text-danger fs-8"></span>
-                        </div>
-
-                        <div class="mb-3">
-                            <label asp-for="Senha" class="form-label fs-7 fw-semibold text-secondary">Senha de Acesso</label>
-                            <div class="input-group">
-                                <span class="input-group-text bg-light"><i class="bi bi-key"></i></span>
-                                <input asp-for="Senha" type="password" class="form-control" placeholder="••••••••" required />
-                            </div>
-                            <span asp-validation-for="Senha" class="text-danger fs-8"></span>
-                        </div>
-
-                        <div class="mb-4 form-check">
-                            <input asp-for="LembrarMe" class="form-check-input" />
-                            <label asp-for="LembrarMe" class="form-check-label fs-7 text-muted">Manter conectado</label>
-                        </div>
-
-                        <div class="d-grid mb-3">
-                            <button type="submit" class="btn btn-mgl-teal fw-bold py-2 shadow-sm">
-                                <i class="bi bi-box-arrow-in-right me-1"></i> Acessar Plataforma
-                            </button>
-                        </div>
-                    </form>
-
-                    @if (HostEnvironment.IsDevelopment())
-                    {
-                        <div class="p-3 rounded-3 border fs-8 mt-4" style="background-color: var(--mgl-bg);">
-                            <div class="fw-bold mb-2" style="color: var(--mgl-dark-primary);"><i class="bi bi-info-circle text-primary"></i> Perfis e Credenciais de Demonstração:</div>
-                            <div class="d-flex justify-content-between text-muted mb-1 pb-1 border-bottom">
-                                <span><i class="bi bi-shield-check text-warning me-1"></i> Administrador:</span>
-                                <span class="font-monospace fw-semibold text-dark">admin / admin123</span>
-                            </div>
-                            <div class="d-flex justify-content-between text-muted mb-1 pb-1 border-bottom">
-                                <span><i class="bi bi-truck text-info me-1"></i> Motorista de Frota:</span>
-                                <span class="font-monospace fw-semibold text-dark">carlos.motorista / motorista123</span>
-                            </div>
-                            <div class="d-flex justify-content-between text-muted">
-                                <span><i class="bi bi-building text-success me-1"></i> Cliente Corporativo:</span>
-                                <span class="font-monospace fw-semibold text-dark">cliente.demo / cliente123</span>
-                            </div>
-                        </div>
-                    }
-                </div>
-            </div>
+<section class="cc-login" aria-label="Acesso ao M.G.L Connect">
+    <aside class="cc-login-story" aria-labelledby="login-story-title">
+        <div class="cc-login-mark">
+            <i class="bi bi-box-seam" aria-hidden="true"></i>
+            <span>M.G.L CONNECT</span>
         </div>
+        <div>
+            <p class="cc-eyebrow">Command Center</p>
+            <h1 id="login-story-title">Uma operação.<br />Todos conectados.</h1>
+            <p>Pedidos, despacho, viagens e entregas em um único lugar. Cada perfil com as informações e ações da sua operação.</p>
+        </div>
+
+        <ol class="cc-login-flow" aria-label="Etapas da operação logística">
+            <li><i class="bi bi-box-seam" aria-hidden="true"></i><span>Pedido</span></li>
+            <li><i class="bi bi-diagram-3" aria-hidden="true"></i><span>Despacho</span></li>
+            <li><i class="bi bi-truck" aria-hidden="true"></i><span>Viagem</span></li>
+            <li><i class="bi bi-check2-circle" aria-hidden="true"></i><span>Entrega</span></li>
+        </ol>
+        <p class="cc-login-caption">Administração · Motoristas · Clientes corporativos</p>
+    </aside>
+
+    <div class="cc-login-panel">
+        <header>
+            <p class="cc-eyebrow">Bem-vindo ao M.G.L Connect</p>
+            <h2>Acesso ao Command Center</h2>
+            <p>Entre com suas credenciais para acessar seu ambiente de trabalho.</p>
+        </header>
+
+        @if (!ViewData.ModelState.IsValid)
+        {
+            <div class="alert alert-danger" role="alert" asp-validation-summary="All"></div>
+        }
+
+        <form asp-action="Login" method="post" asp-antiforgery="true" class="cc-login-form">
+            <input type="hidden" asp-for="ReturnUrl" />
+
+            <div>
+                <label asp-for="Login" class="form-label">Usuário</label>
+                <input asp-for="Login" class="form-control" placeholder="Seu usuário de acesso" autocomplete="username" autocapitalize="none" spellcheck="false" aria-describedby="login-validation" required autofocus />
+                <span id="login-validation" asp-validation-for="Login" class="text-danger"></span>
+            </div>
+
+            <div>
+                <label asp-for="Senha" class="form-label">Senha</label>
+                <div class="cc-password-control">
+                    <input asp-for="Senha" type="password" class="form-control" placeholder="Sua senha" autocomplete="current-password" aria-describedby="password-validation" required />
+                    <button type="button" class="cc-password-toggle" data-toggle-password="Senha" aria-controls="Senha" aria-pressed="false" aria-label="Mostrar senha">
+                        <i class="bi bi-eye" aria-hidden="true"></i>
+                    </button>
+                </div>
+                <span id="password-validation" asp-validation-for="Senha" class="text-danger"></span>
+            </div>
+
+            <div class="form-check">
+                <input asp-for="LembrarMe" class="form-check-input" />
+                <label asp-for="LembrarMe" class="form-check-label">Manter conectado</label>
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100">
+                <span>Acessar plataforma</span>
+                <i class="bi bi-arrow-right" aria-hidden="true"></i>
+            </button>
+        </form>
+
+        @if (HostEnvironment.IsDevelopment())
+        {
+            <details class="cc-demo-access">
+                <summary><i class="bi bi-info-circle" aria-hidden="true"></i> Acessos de demonstração local</summary>
+                <dl>
+                    <div>
+                        <dt>Administrador</dt>
+                        <dd><code>admin</code> / <code>admin123</code></dd>
+                    </div>
+                    <div>
+                        <dt>Motorista</dt>
+                        <dd><code>carlos.motorista</code> / <code>motorista123</code></dd>
+                    </div>
+                    <div>
+                        <dt>Cliente</dt>
+                        <dd><code>cliente.demo</code> / <code>cliente123</code></dd>
+                    </div>
+                </dl>
+            </details>
+        }
     </div>
-</div>
+</section>

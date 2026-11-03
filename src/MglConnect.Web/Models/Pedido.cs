@@ -75,22 +75,27 @@ namespace MglConnect.Web.Models
         public string? DestinoCep { get; set; }
 
         [Column(TypeName = "decimal(5,2)")]
+        [Range(typeof(decimal), "0.01", "20", ParseLimitsInInvariantCulture = true, ErrorMessage = "Informe uma altura entre 0,01 e 20 metros.")]
         public decimal? AlturaCargaMetros { get; set; }
 
         [Column(TypeName = "decimal(5,2)")]
+        [Range(typeof(decimal), "0.01", "20", ParseLimitsInInvariantCulture = true, ErrorMessage = "Informe uma largura entre 0,01 e 20 metros.")]
         public decimal? LarguraCargaMetros { get; set; }
 
         [Column(TypeName = "decimal(5,2)")]
+        [Range(typeof(decimal), "0.01", "30", ParseLimitsInInvariantCulture = true, ErrorMessage = "Informe um comprimento entre 0,01 e 30 metros.")]
         public decimal? ComprimentoCargaMetros { get; set; }
 
         [StringLength(50)]
         public string TipoCarga { get; set; } = "Carga Geral Seca";
 
         [Column(TypeName = "decimal(18,2)")]
+        [Range(typeof(decimal), "0", "100000000", ParseLimitsInInvariantCulture = true, ErrorMessage = "Informe um valor declarado entre 0 e 100.000.000 reais.")]
         [Display(Name = "Valor Total (R$)")]
         public decimal ValorTotal { get; set; }
 
         [Column(TypeName = "decimal(10,2)")]
+        [Range(typeof(decimal), "0.01", "1000000", ParseLimitsInInvariantCulture = true, ErrorMessage = "Informe um peso entre 0,01 e 1.000.000 kg.")]
         [Display(Name = "Peso (Kg)")]
         public decimal PesoKg { get; set; } = 1.0m;
 

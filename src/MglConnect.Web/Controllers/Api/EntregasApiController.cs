@@ -138,8 +138,9 @@ namespace MglConnect.Web.Controllers.Api
             if ((User.IsInRole("Cliente") && usuario.Perfil == "Cliente")
                 || (User.IsInRole("Intermediador") && usuario.Perfil == "Intermediador"))
             {
-                var clienteId = usuario.ClienteId ?? usuario.Cliente?.Id;
-                if (clienteId.HasValue && entrega.Pedido?.ClienteId == clienteId.Value)
+                if (usuario.Cliente is { Ativo: true } cliente
+                    && cliente.TenantId == usuario.TenantId
+                    && entrega.Pedido?.ClienteId == cliente.Id)
                     return true;
             }
 
@@ -375,12 +376,17 @@ namespace MglConnect.Web.Controllers.Api
 
         // POST: /api/entregas/{id}/pod
         [HttpPost("{id:int}/pod")]
+        [RequestSizeLimit(2 * 1024 * 1024)]
         public async Task<IActionResult> FinalizarPod(int id, [FromBody] FinalizarPodApiRequest request)
         {
+            if (!User.IsInRole("Admin") && !User.IsInRole("Administrador") && !User.IsInRole("Motorista"))
+                return Forbid();
             if (string.IsNullOrWhiteSpace(request.NomeRecebedor))
             {
                 return BadRequest(new { mensagem = "O nome do recebedor é obrigatório." });
             }
+            if (request.NomeRecebedor.Trim().Length > 100 || request.DocumentoRecebedor?.Trim().Length > 30)
+                return BadRequest(new { mensagem = "Nome ou documento excede o tamanho permitido." });
 
             var entrega = await _context.Entregas
                 .Include(e => e.Pedido)
@@ -392,9 +398,9 @@ namespace MglConnect.Web.Controllers.Api
                 return Forbid();
             if (entrega.StatusEntrega == "Entregue")
             {
-                return string.Equals(entrega.NomeRecebedor, request.NomeRecebedor.Trim(), StringComparison.Ordinal)
-                    ? Ok(new { sucesso = true, mensagem = "O POD já havia sido registrado." })
-                    : Conflict(new { mensagem = "A entrega já foi concluída com outro recebedor." });
+                return PodContent.Matches(entrega, request.NomeRecebedor, request.DocumentoRecebedor, request.AssinaturaBase64)
+                    ? Ok(new { sucesso = true, entregaId = id, status = "Entregue", mensagem = "O POD já havia sido registrado." })
+                    : Conflict(new { mensagem = "A entrega já foi concluída com outro conteúdo de comprovante." });
             }
             if (!await PodeModificarEntregaAsync(entrega))
                 return Forbid();
@@ -413,7 +419,7 @@ namespace MglConnect.Web.Controllers.Api
                 return Conflict(new { mensagem = "A entrega já foi concluída ou não está mais disponível para confirmação de POD." });
             }
 
-            return Ok(new { sucesso = true, mensagem = "Comprovante Digital de Entrega (POD) gravado com sucesso." });
+            return Ok(new { sucesso = true, entregaId = id, status = "Entregue", mensagem = "Comprovante Digital de Entrega (POD) gravado com sucesso." });
         }
 
         // GET: /api/entregas/{id}/trafego-eta

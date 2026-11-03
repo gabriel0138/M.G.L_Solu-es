@@ -1,0 +1,58 @@
+@model MglConnect.Web.ViewModels.FleetRosterViewModel
+@{ var br = System.Globalization.CultureInfo.GetCultureInfo("pt-BR"); }
+    <dl class="cc-roster-metrics" aria-label="Resumo da organização, antes dos filtros">
+        <div><dt>Veículos ativos no cadastro</dt><dd>@Model.VeiculosAtivos</dd><i class="bi bi-truck-front" aria-hidden="true"></i></div>
+        <div><dt>Veículos sem atribuição ativa</dt><dd>@Model.VeiculosSemAtribuicao</dd><i class="bi bi-key" aria-hidden="true"></i></div>
+        <div><dt>Motoristas ativos no cadastro</dt><dd>@Model.MotoristasAtivos</dd><i class="bi bi-person-badge" aria-hidden="true"></i></div>
+        <div><dt>Turnos ativos registrados</dt><dd>@Model.TotalTurnosAtivos</dd><i class="bi bi-clock" aria-hidden="true"></i></div>
+    </dl>
+    <form method="get" asp-action="Index" class="cc-filter-bar">
+        <div><label for="fleetRosterSearch" class="form-label">Encontrar veículo ou motorista</label><input id="fleetRosterSearch" name="termo" value="@Model.Termo" class="form-control" type="search" placeholder="Modelo, placa ou nome" maxlength="100" /></div>
+        <div><label for="fleetRosterStatus" class="form-label">Situação registrada</label><select id="fleetRosterStatus" name="status" class="form-select">
+            @foreach (var (value, text) in new[] { ("todos", "Todos os cadastros"), ("ativos", "Ativos no cadastro"), ("atribuidos", "Com atribuição ativa"), ("sem-atribuicao", "Ativos sem atribuição"), ("inativos", "Inativos no cadastro") })
+            { <option value="@value" selected="@(Model.Status == value)">@text</option> }
+        </select></div><button class="btn btn-primary" type="submit">Aplicar filtros</button><a asp-action="Index" class="btn btn-outline-secondary">Limpar filtros</a>
+    </form>
+    <div class="cc-data-note mb-4"><i class="bi bi-info-circle" aria-hidden="true"></i><p>Sem atribuição ativa indica ausência de vínculo com viagem pendente ou em transporte. A condição do veículo e a disponibilidade do motorista precisam ser confirmadas pela operação.</p></div>
+    <section class="cc-panel mb-4" aria-labelledby="fleetVehiclesTitle">
+        <header class="cc-panel-header"><div><h2 id="fleetVehiclesTitle">Veículos</h2><p>@Model.TotalVeiculos resultado(s) nos filtros atuais.</p></div><a asp-action="NovoVeiculo" class="btn btn-primary">Cadastrar veículo</a></header>
+        @if (Model.Veiculos.Count == 0) { <div class="cc-empty-state"><i class="bi bi-truck" aria-hidden="true"></i><h3>Nenhum veículo encontrado</h3><p>Confira os filtros e os cadastros da organização.</p></div> }
+        else
+        {
+            <div class="table-responsive cc-roster-table" role="region" aria-label="Veículos e atribuições" tabindex="0"><table class="table mb-0"><caption class="visually-hidden">Veículos da organização e suas atribuições ativas</caption><thead><tr><th scope="col">Veículo / placa</th><th scope="col">Capacidade cadastrada</th><th scope="col">Cadastro</th><th scope="col">Atribuições ativas</th></tr></thead><tbody>
+            @foreach (var vehicle in Model.Veiculos)
+            {
+                <tr><th scope="row"><a asp-action="Veiculo" asp-route-id="@vehicle.Id" class="cc-roster-resource"><strong>@vehicle.Modelo</strong><span class="visually-hidden"> — detalhes do veículo</span></a><small class="cc-roster-meta font-monospace">@vehicle.Placa</small></th><td>@(vehicle.CapacidadeKg > 0 ? $"{vehicle.CapacidadeKg.ToString("N2", br)} kg" : "Não informada")</td><td><span class="cc-status" data-status="@(vehicle.Ativo ? "delivered" : "neutral")">@(vehicle.Ativo ? "Ativo" : "Inativo")</span></td><td>
+                    @if (vehicle.Atribuicoes.Count == 0) { <span class="cc-roster-meta">Sem atribuição ativa</span> }
+                    else { <ul class="cc-roster-assignments">@foreach (var trip in vehicle.Atribuicoes) { <li><a asp-controller="Entregas" asp-action="Details" asp-route-id="@trip.EntregaId">@trip.Codigo <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a><partial name="_CommandStatus" model="trip.Status" /></li> }</ul> }
+                </td></tr>
+            }
+            </tbody></table></div>
+        }
+        <nav class="cc-roster-pagination" aria-label="Páginas dos veículos">
+            <span>Página @Model.PaginaVeiculos de @Model.PaginasVeiculos · @Model.TotalVeiculos cadastro(s)</span>
+            @if (Model.PaginaVeiculos > 1) { <a class="btn btn-outline-secondary" asp-action="Index" asp-route-termo="@Model.Termo" asp-route-status="@Model.Status" asp-route-paginaVeiculos="@(Model.PaginaVeiculos - 1)" asp-route-paginaMotoristas="@Model.PaginaMotoristas">Veículos anteriores</a> }
+            @if (Model.PaginaVeiculos < Model.PaginasVeiculos) { <a class="btn btn-outline-secondary" asp-action="Index" asp-route-termo="@Model.Termo" asp-route-status="@Model.Status" asp-route-paginaVeiculos="@(Model.PaginaVeiculos + 1)" asp-route-paginaMotoristas="@Model.PaginaMotoristas">Próximos veículos</a> }
+        </nav>
+    </section>
+    <section class="cc-panel" aria-labelledby="fleetDriversTitle">
+        <header class="cc-panel-header"><div><h2 id="fleetDriversTitle">Motoristas</h2><p>@Model.TotalMotoristas resultado(s) nos filtros atuais.</p></div><a asp-action="NovoMotorista" class="btn btn-primary">Cadastrar motorista</a></header>
+        @if (Model.Motoristas.Count == 0) { <div class="cc-empty-state"><i class="bi bi-person" aria-hidden="true"></i><h3>Nenhum motorista encontrado</h3><p>Confira os filtros e os cadastros da organização.</p></div> }
+        else
+        {
+            <div class="table-responsive cc-roster-table" role="region" aria-label="Motoristas, turnos e atribuições" tabindex="0"><table class="table mb-0"><caption class="visually-hidden">Motoristas da organização, turnos registrados e atribuições ativas</caption><thead><tr><th scope="col">Motorista</th><th scope="col">Cadastro</th><th scope="col">Turnos ativos</th><th scope="col">Atribuições ativas</th></tr></thead><tbody>
+            @foreach (var driver in Model.Motoristas)
+            {
+                <tr><th scope="row"><a asp-action="Motorista" asp-route-id="@driver.Id" class="cc-roster-resource"><strong>@driver.Nome</strong><span class="visually-hidden"> — detalhes do motorista</span></a></th><td><span class="cc-status" data-status="@(driver.Ativo ? "delivered" : "neutral")">@(driver.Ativo ? "Ativo" : "Inativo")</span></td><td>@driver.TurnosAtivos</td><td>
+                    @if (driver.Atribuicoes.Count == 0) { <span class="cc-roster-meta">Sem atribuição ativa</span> }
+                    else { <ul class="cc-roster-assignments">@foreach (var trip in driver.Atribuicoes) { <li><a asp-controller="Entregas" asp-action="Details" asp-route-id="@trip.EntregaId">@trip.Codigo <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a><partial name="_CommandStatus" model="trip.Status" /></li> }</ul> }
+                </td></tr>
+            }
+            </tbody></table></div>
+        }
+    </section>
+    <nav class="cc-roster-pagination" aria-label="Páginas dos motoristas">
+        <span>Página @Model.PaginaMotoristas de @Model.PaginasMotoristas · @Model.TotalMotoristas cadastro(s)</span>
+        @if (Model.PaginaMotoristas > 1) { <a class="btn btn-outline-secondary" asp-action="Index" asp-route-termo="@Model.Termo" asp-route-status="@Model.Status" asp-route-paginaVeiculos="@Model.PaginaVeiculos" asp-route-paginaMotoristas="@(Model.PaginaMotoristas - 1)">Motoristas anteriores</a> }
+        @if (Model.PaginaMotoristas < Model.PaginasMotoristas) { <a class="btn btn-outline-secondary" asp-action="Index" asp-route-termo="@Model.Termo" asp-route-status="@Model.Status" asp-route-paginaVeiculos="@Model.PaginaVeiculos" asp-route-paginaMotoristas="@(Model.PaginaMotoristas + 1)">Próximos motoristas</a> }
+    </nav>

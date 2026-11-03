@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Diagnostics;
 using MglConnect.Web.Data;
 
 namespace MglConnect.Web.Middleware;
@@ -25,6 +26,10 @@ public sealed class ActiveAccountMiddleware
                 : null;
             if (user == null || !user.Ativo || !HasExpectedRole(context.User, user.Perfil))
             {
+                // A status-page re-execution at /Home/Error would run this
+                // middleware again and turn an API 401 into a login redirect.
+                if (context.Features.Get<IStatusCodePagesFeature>() is { } pages)
+                    pages.Enabled = false;
                 await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
                 if (context.Request.Path.StartsWithSegments("/api")
                     || context.Request.Path.StartsWithSegments("/telemetryHub")

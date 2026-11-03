@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#103b46">
+<title>Sem conexão — M.G.L Connect</title>
+<style>
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:#eef3f5;color:#152c36;font:1rem/1.6 system-ui,sans-serif}
+main{max-width:32rem;margin:1rem;padding:2rem;background:white;border-radius:1rem;box-shadow:0 1rem 3rem #152c3614}
+small{color:#326471;font-weight:700}h1{line-height:1.2}button{padding:.8rem 1.2rem;border:0;border-radius:.5rem;background:#103b46;color:white;font:inherit;cursor:pointer}
+button:focus-visible{outline:3px solid #da8c12;outline-offset:3px}
+</style>
+<main><small>M.G.L CONNECT</small><h1>Você está sem conexão</h1>
+<p>Não foi possível consultar o sistema. Nenhuma operação foi confirmada por esta página.</p>
+<p>Reconecte o aparelho e confira o estado do pedido, turno ou comprovante antes de repetir uma ação.</p>
+<p id="offlineGpsStatus" role="status">Posições GPS já gravadas permanecem na fila do motorista. A sincronização exige conexão e a sessão do proprietário.</p>
+<p>A coleta GPS não continua nesta página. Reabra a navegação após reconectar; o navegador não garante captura em segundo plano.</p>
+<a href="/Account/Login">Entrar novamente</a>
+<button type="button" onclick="location.reload()">Tentar novamente</button></main>
+<script src="/js/driver-gps-queue.js"></script>
+<script src="/js/gps-offline-recovery.js"></script>
+</html>

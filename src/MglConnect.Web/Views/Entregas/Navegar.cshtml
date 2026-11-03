@@ -1,22 +1,33 @@
 @model MglConnect.Web.Models.Entrega
 @{
     bool isDriver = ViewBag.IsDriver is true;
-    ViewData["Title"] = isDriver ? "Navegação" : "GPS Cockpit • Navegação de Bordo " + Model.CodigoRastreio;
+    bool isFinalDelivery = Model.StatusEntrega is "Entregue" or "Cancelada";
+    ViewData["Title"] = isDriver ? "Navegação" : "Cockpit da viagem " + Model.CodigoRastreio;
     var plano = ViewBag.PlanoRota as MglConnect.Web.Services.TruckRoutePlan ?? new MglConnect.Web.Services.TruckRoutePlan();
     var custo = ViewBag.CustoViagem as MglConnect.Web.Services.TripCostResult ?? new MglConnect.Web.Services.TripCostResult();
+    var savedGps = new {
+        codigoRastreio = Model.CodigoRastreio,
+        latitude = Model.UltimaLatitudeGps,
+        longitude = Model.UltimaLongitudeGps,
+        accuracyMeters = Model.UltimaPrecisaoGps,
+        speedKmH = Model.UltimaVelocidadeGps,
+        heading = Model.UltimaDirecaoGps,
+        timestamp = (Model.UltimoGpsCapturadoEmUtc ?? Model.UltimoGpsRecebidoEmUtc) is {} captured
+            ? (DateTime?)DateTime.SpecifyKind(captured, DateTimeKind.Utc) : null,
+        isSimulated = false,
+        captureTimeKnown = Model.UltimoGpsCapturadoEmUtc.HasValue
+    };
 }
 
-<div class="cockpit-container position-relative min-vh-100 d-flex flex-column" style="background-color: #070D1F;">
+<div class="cockpit-container cc-cockpit position-relative min-vh-100 d-flex flex-column">
     
-    <!-- TOP FLOATING BANNER (TURN-BY-TURN HUD ESTILO WAZE) -->
-    <div class="position-absolute top-0 start-0 end-0 p-3 z-3" style="pointer-events: none;">
-        <div class="container-fluid" style="max-width: 680px; pointer-events: auto;">
-            <div class="card border-0 shadow-lg text-white rounded-4 overflow-hidden" 
-                 style="background: linear-gradient(135deg, rgba(10, 27, 43, 0.97), rgba(18, 51, 74, 0.95)); backdrop-filter: blur(12px); border-left: 6px solid var(--mgl-teal) !important;">
+    <!-- Instrução atual e contexto do trajeto planejado. -->
+    <div class="cc-cockpit-top position-absolute top-0 start-0 end-0 p-3 z-3">
+        <div class="container-fluid cc-cockpit-panel-width">
+            <div class="card cc-cockpit-hud cc-cockpit-instruction text-white rounded-4 overflow-hidden">
                 <div class="p-3 d-flex align-items-center gap-3">
                     <!-- Ícone Dinâmico da Próxima Manobra -->
-                    <div id="maneuverIconBox" class="d-flex align-items-center justify-content-center rounded-3 shadow" 
-                         style="width: 58px; height: 58px; background-color: var(--mgl-teal); color: #0B132B; font-size: 2rem;">
+                    <div id="maneuverIconBox" class="cc-cockpit-maneuver d-flex align-items-center justify-content-center rounded-3">
                         <i id="maneuverIcon" class="bi bi-arrow-up"></i>
                     </div>
 
@@ -34,7 +45,7 @@
                             }
                         </div>
                         <h5 id="maneuverRoad" class="fw-extrabold text-white mb-0 text-truncate">
-                            @(plano.PassosNavegacao.FirstOrDefault()?.NomeVia ?? (plano.RotaDisponivel ? "Aguardando posição do motorista" : "Rota indisponível"))
+                            @(plano.Confianca?.NavigationAllowed==true ? plano.PassosNavegacao.FirstOrDefault()?.NomeVia??"Aguardando GPS" : "Orientação suspensa")
                         </h5>
                         <div id="maneuverInstruction" class="text-white-50 fs-8 text-truncate">
                             @(plano.PassosNavegacao.FirstOrDefault()?.Instrucao ?? "Ative o GPS para visualizar sua posição e continuar.")
@@ -42,46 +53,45 @@
                         @if (!string.IsNullOrWhiteSpace(plano.AvisoRota))
                         {
                             <div class="small text-warning fw-semibold mt-1" role="status">
-                                @(isDriver ? "Rota genérica: confirme restrições do caminhão com a operação." : plano.AvisoRota)
+                                <span id="routeTrustBadge" data-confidence="@(plano.Confianca?.Confidence.ToString().ToUpperInvariant()??"NÃO AVALIADA")" data-navigation-allowed="@(plano.Confianca?.NavigationAllowed==true?"true":"false")">@(plano.Confianca?.Obsolete==true?"OBSOLETA":plano.Confianca?.Confidence.ToString().ToUpperInvariant()??"NÃO AVALIADA") · </span>
+                                @(isDriver ? plano.Confianca?.Checks.Any(c=>c.Outcome==MglConnect.Web.Services.RouteTrust.RestrictionOutcome.Incompativel)==true ? "Restrição incompatível. Orientação bloqueada; consulte a operação." : "Orientação suspensa: dados insuficientes ou de ensaio. Consulte a operação." : plano.AvisoRota)
                             </div>
                         }
                     </div>
 
                     <!-- Botão Voltar / Sair do Cockpit -->
-                    <a asp-action="@(isDriver ? "Index" : "Details")" asp-route-id="@(isDriver ? null : Model.Id)" class="btn btn-outline-light btn-sm rounded-circle p-2 text-white-50" title="@(isDriver ? "Voltar às viagens" : "Voltar aos detalhes")">
+                    <a asp-action="@(isDriver ? "Index" : "Details")" asp-route-id="@(isDriver ? null : Model.Id)" class="btn btn-outline-light cc-cockpit-close rounded-circle text-white-50" aria-label="@(isDriver ? "Voltar às viagens" : "Voltar aos detalhes")" title="@(isDriver ? "Voltar às viagens" : "Voltar aos detalhes")">
                         <i class="bi bi-x-lg"></i>
                     </a>
                 </div>
 
                 <!-- Barra de Progresso do Trajeto -->
-                <div class="progress" style="height: 4px; background-color: rgba(255,255,255,0.1);">
-                    <div id="tripProgressBar" class="progress-bar" style="width: 5%; background-color: var(--mgl-teal);"></div>
+                <div class="progress cc-cockpit-progress">
+                    <div id="tripProgressBar" class="progress-bar" role="progressbar" aria-label="Progresso estimado sobre o trajeto" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" style="width: 0%;"></div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- MAPA LEAFLET FULL-VIEWPORT (ESRI DARK GRAY WAZE HUD / GOOGLE MAPS / OSM) -->
-    <div id="cockpitMap" class="flex-grow-1 w-100" style="min-height: calc(100vh - 170px); z-index: 1;"></div>
+    <!-- A rota planejada não representa uma posição observada. -->
+    <div id="cockpitMap" class="flex-grow-1 w-100" role="region" aria-label="Mapa da viagem"></div>
 
     @if (!isDriver)
     {
         <div class="position-absolute top-50 start-0 translate-middle-y ms-3 d-flex flex-column gap-2 z-2" role="group" aria-label="Modo de visualização do mapa">
             <button id="btnModeOperational" class="btn btn-light btn-sm shadow fw-semibold" type="button">Mapa operacional</button>
             <button id="btnModeGps" class="btn btn-outline-light btn-sm shadow fw-semibold" type="button">Navegação GPS</button>
-            <button id="btnMode3d" class="btn btn-outline-warning btn-sm shadow fw-semibold" type="button"
-                    title="Requer mapa vetorial; Leaflet e tiles raster não oferecem perspectiva 3D">Visão 3D (indisponível)</button>
         </div>
     }
 
     <!-- CONTROLES FLUTUANTES LATERAIS (GPS, SIMULAÇÃO, DESVIO, CAMADA MAPA) -->
     <div class="position-absolute end-0 top-50 translate-middle-y me-3 d-flex flex-column gap-2 z-2">
         <button id="btnToggleGps" class="btn btn-dark border shadow @(isDriver ? "rounded-pill px-3 py-2 d-flex align-items-center gap-2" : "rounded-circle p-3")"
-                title="Ativar Rastreio GPS Real do Celular" style="background-color: rgba(11,19,43,0.9);">
+                type="button" disabled="@isFinalDelivery" aria-pressed="false" aria-label="Ativar GPS do aparelho" title="Ativar GPS do aparelho">
             <i id="gpsIcon" class="bi bi-geo-alt-fill text-warning fs-5"></i>
             @if (isDriver)
             {
-                <span>Ativar GPS</span>
+                <span id="gpsActionLabel">Ativar GPS</span>
             }
         </button>
         @if (User.IsInRole("Admin"))
@@ -89,50 +99,57 @@
             <button id="btnSimular" class="btn btn-teal border shadow rounded-circle p-3" title="Simulação administrativa; não representa uma posição real" style="background-color: var(--mgl-teal);">
                 <i id="simIcon" class="bi bi-play-fill text-dark fs-5"></i>
             </button>
-            <button id="btnSimularDesvio" class="btn btn-warning text-dark border shadow rounded-circle p-3" title="Simulação administrativa de desvio; não representa uma viagem real" style="background-color: #FF9F1C;">
+            <button id="btnSimularDesvio" class="btn btn-warning text-dark border shadow rounded-circle p-3" title="Simulação administrativa de desvio; não representa uma viagem real" >
                 <i class="bi bi-sign-turn-right-fill fs-5"></i>
             </button>
         }
         @if (!isDriver)
         {
-            <button id="btnCamada" class="btn btn-dark border shadow rounded-circle p-3" title="Alternar mapa de ruas, escuro e satélite" style="background-color: rgba(10,27,43,0.94);">
+            <button id="btnCamada" class="btn btn-dark border shadow rounded-circle p-3" title="Alternar mapa de ruas, escuro e satélite" aria-label="Alternar camada do mapa">
                 <i class="bi bi-layers-fill text-white fs-5"></i>
             </button>
         }
     </div>
 
     <!-- PAINEL INFERIOR DE BORDO (COCKPIT HUD FLUTUANTE) -->
-    <div class="position-absolute bottom-0 start-0 end-0 p-3 z-3" style="pointer-events: none;">
-        <div class="container-fluid" style="max-width: 680px; pointer-events: auto;">
-            <div class="card border-0 shadow-lg text-white rounded-4 p-3" 
-                 style="background: linear-gradient(135deg, rgba(11, 19, 43, 0.95), rgba(15, 23, 42, 0.95)); backdrop-filter: blur(12px); border-top: 2px solid rgba(255,255,255,0.1);">
-                @if (TempData["MensagemSucesso"] is string sucesso)
+    <div class="cc-cockpit-bottom position-absolute bottom-0 start-0 end-0 p-3 z-3">
+        <div class="container-fluid cc-cockpit-panel-width">
+            <div class="card cc-cockpit-hud text-white rounded-4 p-3">
+                <div class="cc-cockpit-connection"><i class="bi bi-broadcast" aria-hidden="true"></i><span id="telemetryConnectionState" role="status">Conectando à operação…</span></div>
+                <p id="cockpitMapStatus" class="cc-cockpit-map-status" role="status" hidden></p>
+                <p id="routePositionStatus" class="small text-warning mb-2" role="status" hidden></p>
+                @if (isDriver)
                 {
-                    <div class="alert alert-success py-2 mb-2" role="status">@sucesso</div>
-                }
-                @if (TempData["MensagemErro"] is string erro)
-                {
-                    <div class="alert alert-danger py-2 mb-2" role="alert">@erro</div>
+                    @if (TempData["MensagemSucesso"] is string driverMessage)
+                    {
+                        <p class="cc-cockpit-feedback text-success" role="status">@driverMessage</p>
+                    }
+                    @if (TempData["MensagemErro"] is string driverError)
+                    {
+                        <p class="cc-cockpit-feedback text-danger" role="alert">@driverError</p>
+                    }
+                    <partial name="_DriverOfflineQueueState" model="true" />
+                    <partial name="_DriverGpsSync" model="Model.Id" />
                 }
 
                 @if (isDriver)
                 {
                     <div class="driver-route-summary d-flex align-items-center justify-content-around gap-2 mb-3 text-center">
                         <div>
-                            <span id="positionSourceBadge" class="badge text-white fw-bold">Aguardando posição</span>
+                            <span id="positionSourceBadge" class="badge text-white fw-bold" role="status">Aguardando posição</span>
                             <span id="trafficStatusBadge" class="visually-hidden">Sem dados de trânsito ao vivo</span>
                             <span id="speedValue" class="visually-hidden">0</span>
                             <span id="fuelRemaining" class="visually-hidden">0</span>
-                            <div class="small text-white-50 mt-1">GPS do aparelho</div>
+                            <div class="small text-white-50 mt-1">Último sinal conhecido</div>
                         </div>
                         <div class="driver-route-metric">
                             <span class="fs-8 text-white-50 text-uppercase fw-semibold">Chegada estimada</span>
                             <h4 id="etaValue" class="fw-extrabold mb-0 text-white font-monospace">--:--</h4>
-                            <span id="etaMinutes" class="fs-8 text-teal">@plano.TempoEstimadoMinutos min</span>
+                            <span id="etaMinutes" class="fs-8 text-teal">@(plano.TempoEstimadoMinutos > 0 ? $"{plano.TempoEstimadoMinutos} min estimados" : "Sem estimativa")</span>
                         </div>
                         <div class="driver-route-metric">
                             <span class="fs-8 text-white-50 text-uppercase fw-semibold">Distância</span>
-                            <h4 id="distanceRemaining" class="fw-extrabold mb-0 text-white font-monospace">@plano.DistanciaKm.ToString("F1") km</h4>
+                            <h4 id="distanceRemaining" class="fw-extrabold mb-0 text-white font-monospace">@(plano.Confianca?.NavigationAllowed==true ? $"{plano.DistanciaKm:F1} km" : "—")</h4>
                             <span class="fs-8 text-white-50">estimativa</span>
                         </div>
                     </div>
@@ -146,10 +163,10 @@
                         <div class="d-flex flex-column align-items-center justify-content-center">
                             <span class="fs-8 text-white-50 text-uppercase fw-semibold">Velocidade</span>
                             <div class="d-flex align-items-baseline gap-1">
-                                <h2 id="speedValue" class="fw-extrabold mb-0" style="color: var(--mgl-teal); font-family: monospace;">58</h2>
+                                <h2 id="speedValue" class="fw-extrabold mb-0" style="color: var(--mgl-teal); font-family: monospace;">—</h2>
                                 <span class="fs-8 text-white-50">km/h</span>
                             </div>
-                            <span id="trafficStatusBadge" class="badge text-white fw-bold fs-9 py-0" style="background-color: #64748B;" title="O sistema ainda não tem dados de trânsito ao vivo configurados.">Sem trânsito ao vivo</span>
+                            <span id="trafficStatusBadge" class="badge text-white fw-bold fs-9 py-0"  title="O sistema ainda não tem dados de trânsito ao vivo configurados.">Sem trânsito ao vivo</span>
                             <span id="positionSourceBadge" class="badge text-white fw-bold fs-9 py-0">Aguardando posição</span>
                         </div>
                     </div>
@@ -158,7 +175,7 @@
                     <div class="col-3 border-end border-secondary">
                         <span class="fs-8 text-white-50 text-uppercase fw-semibold">Chegada Prevista</span>
                         <h4 id="etaValue" class="fw-extrabold mb-0 text-white font-monospace">--:--</h4>
-                        <span id="etaMinutes" class="fs-8 text-teal" style="color: var(--mgl-teal);">@plano.TempoEstimadoMinutos min</span>
+                        <span id="etaMinutes" class="fs-8 text-teal" style="color: var(--mgl-teal);">@(plano.TempoEstimadoMinutos > 0 ? $"{plano.TempoEstimadoMinutos} min estimados" : "Sem estimativa")</span>
                     </div>
 
                     <!-- Distância Restante -->
@@ -183,7 +200,7 @@
                     {
                         <div class="alert alert-success d-flex align-items-center justify-content-center gap-2 mb-0 py-2 rounded-3">
                             <i class="bi bi-patch-check-fill fs-5"></i>
-                            <strong>Esta remessa já foi entregue e homologada com POD.</strong>
+                            <strong>Entrega concluída. Comprovante registrado.</strong>
                         </div>
                     }
                     else
@@ -191,7 +208,7 @@
                         <button type="button" class="btn btn-warning btn-lg fw-extrabold py-3 rounded-3 shadow-lg d-flex align-items-center justify-content-center gap-2 fs-6 text-dark @(isDriver ? "driver-pod-button" : "")"
                                 data-bs-toggle="modal" data-bs-target="#modalPODNavegacao" style="min-height: 52px;">
                             <i class="bi bi-patch-check-fill fs-5"></i>
-                            <span>CHEGUEI AO DESTINO / COLETAR ASSINATURA (POD)</span>
+                            <span>Confirmar entrega · Coletar assinatura</span>
                         </button>
                     }
                 </div>
@@ -258,35 +275,40 @@
                 <div class="d-flex align-items-center gap-2">
                     <i class="bi bi-patch-check-fill fs-4 text-warning"></i>
                     <div>
-                        <h5 class="modal-title fw-bold mb-0">Comprovante Digital de Entrega (POD)</h5>
+                        <h5 id="modalPODLabel" class="modal-title fw-bold mb-0">Comprovante Digital de Entrega (POD)</h5>
                         <span class="fs-8 text-white-50">@(isDriver ? "Confirmação de recebimento" : $"Remessa {Model.CodigoRastreio} • Destinatário: {Model.DestinatarioNome}")</span>
                     </div>
                 </div>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar comprovante"></button>
             </div>
 
-            <form asp-action="FinalizarEntregaPOD" method="post" id="formPODNavegacao">
+            <form asp-action="FinalizarEntregaPOD" method="post" id="formPODNavegacao"
+                  data-offline-enabled="@(isDriver ? "true" : "false")" data-delivery-id="@Model.Id"
+                  data-offline-user="@User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value"
+                  data-offline-tenant="@User.FindFirst("TenantId")?.Value">
                 <input type="hidden" name="entregaId" value="@Model.Id" />
                 <input type="hidden" name="assinaturaBase64" id="assinaturaBase64Nav" />
 
                 <div class="modal-body p-4">
+                    <p id="podOfflineStatus" class="alert alert-info" role="status" hidden></p>
+                    <button id="retryOfflinePod" type="button" class="btn btn-outline-secondary mb-3" hidden>Tentar sincronizar comprovante</button>
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
-                            <label class="form-label fs-7 fw-semibold">Nome de Quem Recebeu *</label>
+                            <label for="nomeRecebedorNav" class="form-label fs-7 fw-semibold">Nome de Quem Recebeu *</label>
                             <input type="text" name="nomeRecebedor" id="nomeRecebedorNav" 
                                    class="form-control form-control-lg fs-7" 
                                    value="@(isDriver ? "" : Model.DestinatarioNome)" required />
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label fs-7 fw-semibold">Documento (RG ou CPF) *</label>
-                            <input type="text" name="documentoRecebedor" class="form-control form-control-lg fs-7" 
+                            <label for="documentoRecebedorNav" class="form-label fs-7 fw-semibold">Documento (RG ou CPF) *</label>
+                            <input type="text" id="documentoRecebedorNav" name="documentoRecebedor" class="form-control form-control-lg fs-7"
                                    placeholder="000.000.000-00" required />
                         </div>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fs-7 fw-semibold">Localidade de Confirmação</label>
-                        <input type="text" name="localidade" class="form-control fs-7" 
+                        <label for="localidadePodNav" class="form-label fs-7 fw-semibold">Localidade de Confirmação</label>
+                        <input type="text" id="localidadePodNav" name="localidade" class="form-control fs-7"
                                value="@Model.CidadeDestino - @Model.EstadoDestino" />
                     </div>
 
@@ -299,7 +321,7 @@
                             </button>
                         </div>
                         <div class="signature-pad-container border rounded-3 p-1 bg-white shadow-inner text-center">
-                            <canvas id="sigCanvasNav" width="560" height="200" style="touch-action: none; max-width: 100%; border: 1px dashed #CBD5E1; border-radius: 8px;"></canvas>
+                            <canvas id="sigCanvasNav" aria-label="Desenho da assinatura do recebedor" width="560" height="200" ></canvas>
                         </div>
                         <span class="fs-8 text-muted">Solicite que o recebedor assine com o dedo ou caneta touch no quadro acima.</span>
                     </div>
@@ -317,6 +339,7 @@
 </div>
 
 @section Scripts {
+    <script src="~/js/pod-signature.js" asp-append-version="true"></script>
     <script src="~/js/tracker.js" asp-append-version="true"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
@@ -328,14 +351,24 @@
             }
 
             // 1. CARREGAMENTO DOS DADOS GEOGRÁFICOS E PASSOS TURN-BY-TURN
-            const rawCoords = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(plano.TrajetoCoordenadas ?? new List<MglConnect.Web.Services.RouteCoordinate>()));
+            const navigationValidUntil = @Json.Serialize(plano.Confianca?.ValidUntilUtc);
+            const navigationAllowed = @Json.Serialize(plano.Confianca is { NavigationAllowed:true, Obsolete:false, Synthetic:false });
+            const rawCoords = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(plano.Confianca is { NavigationAllowed:true, Obsolete:false, Synthetic:false } ? plano.TrajetoCoordenadas : new List<MglConnect.Web.Services.RouteCoordinate>()));
             const steps = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(plano.PassosNavegacao ?? new List<MglConnect.Web.Services.RouteStep>()));
             const isDriver = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(isDriver));
+            const isFinalDelivery = @Json.Serialize(isFinalDelivery);
             const totalDistKm = @plano.DistanciaKm.ToString(System.Globalization.CultureInfo.InvariantCulture);
             const totalFuelLiters = @(isDriver ? "0" : custo.LitrosCombustivel.ToString(System.Globalization.CultureInfo.InvariantCulture));
             const tempoBaseMin = @plano.TempoEstimadoMinutos;
 
             const coordinates = rawCoords.map(c => [c.Latitude, c.Longitude]);
+            const mapStatus = document.getElementById('cockpitMapStatus');
+            const reconcileMapStatus = () => {
+                mapStatus.textContent = mapElement.dataset.mapStatus || '';
+                mapStatus.hidden = !mapStatus.textContent;
+            };
+            const mapStatusObserver = new MutationObserver(reconcileMapStatus);
+            mapStatusObserver.observe(mapElement, { attributes: true, attributeFilter: ['data-map-status'] });
 
             // Mapa de ruas como padrão para manter nomes de vias visíveis no cockpit.
             const esriDark = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
@@ -355,10 +388,8 @@
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
             });
 
-            const mapCenter = coordinates.length > 0 ? coordinates[0] : [-23.5505, -46.6333];
+            // Sem centro fictício: o mapa será enquadrado pela rota ou pelo primeiro GPS válido.
             const map = L.map('cockpitMap', {
-                center: mapCenter,
-                zoom: coordinates.length > 0 ? 11 : 6,
                 layers: [osmStandard],
                 zoomControl: false,
                 attributionControl: true
@@ -384,14 +415,16 @@
             }
 
             if (coordinates.length === 0) {
-                map.getContainer().dataset.mapStatus = 'Rota indisponível. Ative o GPS para visualizar sua posição; confira o endereço antes de sair.';
+                map.getContainer().dataset.mapStatus = 'Trajeto indisponível. Distância e chegada não calculadas.';
             }
 
             const tracker = new MglCockpitTracker({
                 map: map,
                 entregaId: @Model.Id,
-                codigoRastreio: '@Model.CodigoRastreio',
+                codigoRastreio: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.CodigoRastreio)),
                 coordinates: coordinates,
+                navigationAllowed: navigationAllowed,
+                navigationValidUntil: navigationValidUntil,
                 steps: steps,
                 totalDistKm: totalDistKm,
                 totalFuelLiters: totalFuelLiters,
@@ -400,20 +433,14 @@
                 activeLayerName: "OpenStreetMap (ruas)"
             });
 
+            const savedGps = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(savedGps));
+            tracker.applyTelemetryPosition(savedGps, { snap: true });
+
             let viewMode = isDriver ? 'gps' : 'operational';
             const btnModeOperational = document.getElementById('btnModeOperational');
             const btnModeGps = document.getElementById('btnModeGps');
-            const btnMode3d = document.getElementById('btnMode3d');
 
             function setMapMode(mode) {
-                if (mode === '3d') {
-                    tracker.showToastAlert(
-                        'Visão 3D indisponível: Leaflet com tiles raster não oferece inclinação nem edifícios vetoriais.',
-                        'bi-exclamation-triangle-fill',
-                        '#FFB020');
-                    return;
-                }
-
                 viewMode = mode;
                 tracker.setFollowVehicle(mode === 'gps');
                 if (!isDriver) {
@@ -436,8 +463,8 @@
             if (!isDriver) {
                 btnModeOperational.addEventListener('click', () => setMapMode('operational'));
                 btnModeGps.addEventListener('click', () => setMapMode('gps'));
-                btnMode3d.addEventListener('click', () => setMapMode('3d'));
             }
+            setMapMode(viewMode);
 
             // Alternador rápido de camadas via botão flutuante touch do Cockpit HUD
                 const btnCamada = document.getElementById('btnCamada');
@@ -457,7 +484,7 @@
                     const m = String(agora.getMinutes()).padStart(2, '0');
                     return `${h}:${m}`;
                 }
-                if (tempoBaseMin > 0) {
+                if (navigationAllowed && tempoBaseMin > 0) {
                     document.getElementById('etaValue').textContent = calcularEta(tempoBaseMin);
                 }
 
@@ -470,8 +497,8 @@
                 const simIcon = document.getElementById('simIcon');
                 const btnSimularDesvio = document.getElementById('btnSimularDesvio');
                 const simulationBadge = document.getElementById('positionSourceBadge');
-                if (btnSimular) btnSimular.disabled = coordinates.length < 2;
-                if (btnSimularDesvio) btnSimularDesvio.disabled = coordinates.length < 2;
+                if (btnSimular) btnSimular.disabled = isFinalDelivery || coordinates.length < 2;
+                if (btnSimularDesvio) btnSimularDesvio.disabled = isFinalDelivery || coordinates.length < 2;
 
                 function pararSimulacao() {
                     if (simInterval) clearInterval(simInterval);
@@ -499,7 +526,7 @@
                         simulationBadge.classList.remove('text-success');
                         simulationBadge.classList.add('text-warning');
                         simIcon.className = 'bi bi-pause-fill text-white fs-5';
-                        btnSimular.style.backgroundColor = '#EF4444';
+                        btnSimular.style.backgroundColor = 'var(--mgl-error)';
 
                         simInterval = setInterval(function () {
                             if (simIdx >= coordinates.length - 1) {
@@ -511,7 +538,7 @@
                                 tracker.showToastAlert(
                                     'Simulação encerrada. Nenhum POD foi registrado; uma entrega real exige confirmação independente.',
                                     'bi-info-circle-fill',
-                                    '#00C9B7');
+                                    'var(--mgl-accent-primary)');
                                 return;
                             }
 
@@ -527,7 +554,7 @@
                             const rndSpeed = pct > 0.85 ? Math.floor(35 + Math.random() * 10) : Math.floor(62 + Math.random() * 14);
 
                             // Atualiza posição suavizada via requestAnimationFrame no tracker
-                            tracker.updateVehiclePosition(currentPos[0], currentPos[1], rndSpeed, heading);
+                            tracker.applyTelemetryPosition({ latitude: currentPos[0], longitude: currentPos[1], speedKmH: rndSpeed, heading, timestamp: new Date().toISOString(), isSimulated: true });
                             map.panTo(currentPos, { animate: true, duration: 0.4 });
 
                             // Emite streaming de telemetria SignalR para o backend
@@ -571,7 +598,7 @@
                         const offLng = curPos.lng + 0.00075;
                         const offHeading = (tracker.currentHeading + 55) % 360;
 
-                        tracker.updateVehiclePosition(offLat, offLng, 55, offHeading);
+                        tracker.applyTelemetryPosition({ latitude: offLat, longitude: offLng, speedKmH: 55, heading: offHeading, timestamp: new Date().toISOString(), isSimulated: true });
                         map.panTo([offLat, offLng], { animate: true, duration: 0.5 });
                         tracker.showToastAlert('⚠️ Forçando desvio lateral de ~80m para teste de histerese (3 frames)...');
 
@@ -581,11 +608,11 @@
                             frameCount++;
                             const stepLat = offLat + (frameCount * 0.0001);
                             const stepLng = offLng + (frameCount * 0.0001);
-                            tracker.updateVehiclePosition(stepLat, stepLng, 58, offHeading);
+                            tracker.applyTelemetryPosition({ latitude: stepLat, longitude: stepLng, speedKmH: 58, heading: offHeading, timestamp: new Date().toISOString(), isSimulated: true });
                             if (tracker.hubConnection && tracker.hubConnection.state === signalR.HubConnectionState.Connected) {
                                 tracker.hubConnection.invoke(
                                     'SendVehicleTelemetry',
-                                    '@Model.CodigoRastreio',
+                                    tracker.codigoRastreio,
                                     stepLat,
                                     stepLng,
                                     58,
@@ -610,36 +637,50 @@
                 const btnGps = document.getElementById('btnToggleGps');
                 const gpsIcon = document.getElementById('gpsIcon');
 
+                window.addEventListener('mgl:gps-scope-unavailable', () => {
+                    if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+                    btnGps.disabled = true; btnGps.setAttribute('aria-pressed', 'false');
+                    const label = document.getElementById('gpsActionLabel'); if (label) label.textContent = 'Reabra a viagem';
+                });
                 btnGps.addEventListener('click', function () {
                     if (watchId !== null) {
                         navigator.geolocation.clearWatch(watchId);
                         watchId = null;
                         tracker.setFollowVehicle(false);
                         gpsIcon.className = 'bi bi-geo-alt text-warning fs-5';
-                        alert('GPS em tempo real desativado.');
+                        btnGps.setAttribute('aria-pressed', 'false');
+                        btnGps.setAttribute('aria-label', 'Ativar GPS do aparelho');
+                        const label = document.getElementById('gpsActionLabel');
+                        if (label) label.textContent = 'Ativar GPS';
+                        mapElement.dataset.mapStatus = 'GPS do aparelho desativado. Exibindo somente o último sinal conhecido.';
                     } else {
                         if (!('geolocation' in navigator)) {
                             alert('Geolocalização não é suportada neste navegador.');
                             return;
                         }
 
-                        gpsIcon.className = 'bi bi-broadcast text-success fs-5 animate__animated animate__flash';
+                        gpsIcon.className = 'bi bi-broadcast text-success fs-5';
+                        btnGps.setAttribute('aria-pressed', 'true');
+                        btnGps.setAttribute('aria-label', 'Desativar GPS do aparelho');
+                        const label = document.getElementById('gpsActionLabel');
+                        if (label) label.textContent = 'Desativar GPS';
                         watchId = navigator.geolocation.watchPosition(
                             function (pos) {
-                                if (pos.coords.accuracy > 50) {
-                                    tracker.showToastAlert(
-                                        `Precisão GPS insuficiente (${Math.round(pos.coords.accuracy)}m); posição ignorada.`,
-                                        'bi-geo-alt-fill',
-                                        '#FFB020');
-                                    return;
-                                }
-
                                 const lat = pos.coords.latitude;
                                 const lng = pos.coords.longitude;
-                                const speed = pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0;
-                                const heading = Number.isFinite(pos.coords.heading)
+                                const speed = Number.isFinite(pos.coords.speed) && pos.coords.speed >= 0 ? pos.coords.speed * 3.6 : null;
+                                const heading = Number.isFinite(pos.coords.heading) && pos.coords.heading >= 0 && pos.coords.heading < 360
                                     ? pos.coords.heading
-                                    : tracker.currentHeading;
+                                    : null;
+                                const timestamp = new Date(pos.timestamp).toISOString();
+                                if (pos.coords.accuracy > 50) {
+                                    tracker.emitTelemetry(lat,lng,speed,heading,pos.coords.accuracy,false,timestamp);
+                                    tracker.showToastAlert('Leitura imprecisa: não usada para navegação; o histórico pode preservá-la para auditoria.', 'bi-geo-alt-fill','var(--mgl-warning)');
+                                    return;
+                                }
+                                if (!tracker.applyTelemetryPosition({ latitude: lat, longitude: lng, speedKmH: speed,
+                                    heading, accuracyMeters: pos.coords.accuracy, timestamp, isSimulated: false },
+                                    { snap: !hasGpsFix, localOnly: true })) return;
                                 emergencyPosition = {
                                     latitude: lat,
                                     longitude: lng,
@@ -647,9 +688,11 @@
                                     capturedAt: new Date(pos.timestamp).toISOString()
                                 };
 
-                                tracker.updateVehiclePosition(lat, lng, speed, heading, !hasGpsFix);
                                 hasGpsFix = true;
-                                tracker.emitTelemetry(lat, lng, speed, heading, pos.coords.accuracy);
+                                if (mapElement.dataset.mapStatus?.startsWith('Aguardando uma posição GPS')) {
+                                    delete mapElement.dataset.mapStatus;
+                                }
+                                tracker.emitTelemetry(lat, lng, speed, heading, pos.coords.accuracy, false, timestamp);
                                 if (viewMode === 'gps') {
                                     map.setView([lat, lng], Math.max(map.getZoom(), 15), { animate: true });
                                 }
@@ -658,12 +701,50 @@
                                 console.warn('Erro GPS:', err.message);
                                 gpsIcon.className = 'bi bi-geo-alt text-danger fs-5';
                                 mapElement.dataset.mapStatus = `Não foi possível obter o GPS: ${err.message}`;
+                                if (err.code === 1) {
+                                    if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+                                    watchId = null;
+                                    btnGps.setAttribute('aria-pressed', 'false');
+                                    btnGps.setAttribute('aria-label', 'Ativar GPS do aparelho');
+                                    const label = document.getElementById('gpsActionLabel');
+                                    if (label) label.textContent = 'Ativar GPS';
+                                }
                             },
                             { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 }
                         );
                         setMapMode('gps');
                     }
                 });
+
+                function finishNavigation(status = 'Entregue') {
+                    if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+                    watchId = null;
+                    pararSimulacao();
+                    tracker.completeDelivery(status);
+                    document.querySelectorAll('.cc-cockpit-feedback').forEach(message => message.remove());
+                    mapElement.dataset.mapStatus = 'Viagem encerrada. Sem novas atualizações GPS.';
+                    gpsIcon.className = 'bi bi-geo-alt text-secondary fs-5';
+                    btnGps.disabled = true;
+                    btnGps.setAttribute('aria-pressed', 'false');
+                    btnGps.setAttribute('aria-label', 'GPS encerrado');
+                    const label = document.getElementById('gpsActionLabel');
+                    if (label) label.textContent = 'GPS encerrado';
+                    const podTrigger = document.querySelector('[data-bs-target="#modalPODNavegacao"]');
+                    if (podTrigger) { podTrigger.disabled = true; podTrigger.textContent = status === 'Cancelada' ? 'Entrega cancelada' : 'Entrega confirmada'; }
+                }
+                const deliveryConfirmed = event => {
+                    if (Number(event.detail?.deliveryId) === @Model.Id) finishNavigation();
+                };
+                window.addEventListener('mgl:delivery-confirmed', deliveryConfirmed);
+                if (isFinalDelivery) finishNavigation(@Json.Serialize(Model.StatusEntrega));
+
+                window.addEventListener('pagehide', () => {
+                    window.removeEventListener('mgl:delivery-confirmed', deliveryConfirmed);
+                    if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+                    pararSimulacao();
+                    mapStatusObserver.disconnect();
+                    tracker.destroy();
+                }, { once: true });
 
                 const emergencyForm = document.getElementById('emergencyAlertForm');
                 if (emergencyForm) {
@@ -702,68 +783,7 @@
                     });
                 }
 
-            // 7. CANVAS DE ASSINATURA DIGITAL (POD) DO MODAL MOBILE
-            const canvasNav = document.getElementById('sigCanvasNav');
-            if (canvasNav) {
-                const ctx = canvasNav.getContext('2d');
-                let isDrawing = false;
-                let hasSignature = false;
 
-                ctx.strokeStyle = "#0B132B";
-                ctx.lineWidth = 2.5;
-                ctx.lineCap = "round";
-
-                function getPos(e) {
-                    const rect = canvasNav.getBoundingClientRect();
-                    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                    return {
-                        x: (clientX - rect.left) * (canvasNav.width / rect.width),
-                        y: (clientY - rect.top) * (canvasNav.height / rect.height)
-                    };
-                }
-
-                function startDraw(e) {
-                    isDrawing = true;
-                    hasSignature = true;
-                    const pos = getPos(e);
-                    ctx.beginPath();
-                    ctx.moveTo(pos.x, pos.y);
-                    if (e.type === 'touchstart') e.preventDefault();
-                }
-
-                function draw(e) {
-                    if (!isDrawing) return;
-                    const pos = getPos(e);
-                    ctx.lineTo(pos.x, pos.y);
-                    ctx.stroke();
-                    if (e.type === 'touchmove') e.preventDefault();
-                }
-
-                function stopDraw() {
-                    isDrawing = false;
-                }
-
-                canvasNav.addEventListener('mousedown', startDraw);
-                canvasNav.addEventListener('mousemove', draw);
-                canvasNav.addEventListener('mouseup', stopDraw);
-                canvasNav.addEventListener('mouseleave', stopDraw);
-
-                canvasNav.addEventListener('touchstart', startDraw, { passive: false });
-                canvasNav.addEventListener('touchmove', draw, { passive: false });
-                canvasNav.addEventListener('touchend', stopDraw);
-
-                document.getElementById('btnClearSigNav').addEventListener('click', function () {
-                    ctx.clearRect(0, 0, canvasNav.width, canvasNav.height);
-                    hasSignature = false;
-                });
-
-                document.getElementById('formPODNavegacao').addEventListener('submit', function (e) {
-                    if (hasSignature) {
-                        document.getElementById('assinaturaBase64Nav').value = canvasNav.toDataURL('image/png');
-                    }
-                });
-            }
         });
     </script>
 }

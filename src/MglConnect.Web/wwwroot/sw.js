@@ -1,86 +1,66 @@
-// M.G.L Connect — Service Worker PWA (Offline-First)
-const CACHE_NAME = 'mgl-connect-v1';
-const STATIC_ASSETS = [
-    '/',
-    '/css/site.css',
-    '/js/site.js',
-    '/manifest.json',
-    'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css',
-    'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
-    'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
-];
+// Only public, application-owned static resources may be cached.
+const CACHE_NAME = 'mgl-static-v4';
+const STATIC_ASSETS = ['/css/site.css', '/js/site.js', '/manifest.json', '/offline.html', '/js/driver-gps-queue.js', '/js/gps-offline-recovery.js'];
 
-self.addEventListener('install', (event) => {
-    event.waitUntil(
-        caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_ASSETS.filter(url => url.startsWith('/'))))
-    );
+self.addEventListener('install', event => {
+    event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_ASSETS)));
     self.skipWaiting();
 });
 
-self.addEventListener('activate', (event) => {
-    event.waitUntil(
-        caches.keys().then(keys =>
-            Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
-        )
-    );
-    self.clients.claim();
+self.addEventListener('activate', event => {
+    event.waitUntil(Promise.all([
+        // The old root-page cache could contain authenticated HTML. Never read it.
+        caches.delete('mgl-connect-v1'),
+        caches.delete('mgl-static-v2'),
+        caches.delete('mgl-static-v3'),
+        self.clients.claim()
+    ]));
 });
 
-self.addEventListener('fetch', (event) => {
-    // Network-first para APIs, Cache-first para estáticos
-    if (event.request.url.includes('/api/') || event.request.url.includes('/trackingHub') || event.request.url.includes('/telemetryHub')) {
-        event.respondWith(
-            fetch(event.request).catch(() =>
-                new Response(JSON.stringify({ erro: 'Sem conexão. Dados serão sincronizados em breve.' }),
-                    { headers: { 'Content-Type': 'application/json' } })
-            )
-        );
-    } else {
-        event.respondWith(
-            caches.match(event.request).then(cached => cached || fetch(event.request))
-        );
-    }
+self.addEventListener('fetch', event => {
+    const url = new URL(event.request.url);
+    if (url.origin !== self.location.origin) return;
+    event.respondWith(handleRequest(event.request, url));
 });
 
-// Background Sync — Sincroniza entregas e PODs offline
-self.addEventListener('sync', (event) => {
-    if (event.tag === 'sync-entregas') {
-        event.waitUntil(syncEntregasOffline());
-    }
-});
-
-async function syncEntregasOffline() {
-    const db = await openIndexedDB();
-    const tx = db.transaction('pendingSync', 'readwrite');
-    const store = tx.objectStore('pendingSync');
-    const items = await new Promise((resolve, reject) => {
-        const req = store.getAll();
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-    });
-
-    for (const item of items) {
+async function handleRequest(request, url) {
+    const isStatic = request.method === 'GET' && STATIC_ASSETS.includes(url.pathname);
+    if (isStatic) {
+        const cache = await caches.open(CACHE_NAME);
+        const cached = await cache.match(url.pathname);
+        if (cached) return cached;
         try {
-            await fetch(item.url, {
-                method: item.method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(item.data)
+            const response = await fetch(request);
+            if (response.ok && !response.redirected) await cache.put(url.pathname, response.clone());
+            return response;
+        } catch { return unavailable(); }
+    }
+    // Mutations, APIs and authenticated HTML always require a network response.
+    try { return await fetch(request); }
+    catch {
+        if (request.mode === 'navigate') {
+            const cache = await caches.open(CACHE_NAME);
+            const page = await cache.match('/offline.html');
+            if (page) return new Response(await page.text(), {
+                status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }
             });
-            store.delete(item.id);
-        } catch (e) {
-            console.warn('[SW] Sync falhou para item', item.id, e);
         }
+        return unavailable();
     }
 }
 
-function openIndexedDB() {
-    return new Promise((resolve, reject) => {
-        const req = indexedDB.open('mgl-offline-db', 1);
-        req.onupgradeneeded = () => {
-            req.result.createObjectStore('pendingSync', { keyPath: 'id', autoIncrement: true });
-            req.result.createObjectStore('gpsQueue', { keyPath: 'id', autoIncrement: true });
-        };
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
+function unavailable() {
+    return new Response(JSON.stringify({ sucesso: false, erro: 'Sem conexão. A operação não foi confirmada pelo servidor.' }), {
+        status: 503, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
     });
 }
+
+self.addEventListener('sync', event => {
+    if (event.tag === 'sync-entregas' || event.tag === 'sync-gps') {
+        // Legacy queues have no reliable actor/organization scope. Preserve them;
+        // an authenticated page must validate ownership before any future replay.
+        event.waitUntil(self.clients.matchAll({ type: 'window' }).then(clients => {
+            for (const client of clients) client.postMessage({ type: 'MGL_SYNC_REQUIRED' });
+        }));
+    }
+});

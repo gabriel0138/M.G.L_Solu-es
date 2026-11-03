@@ -20,9 +20,12 @@ namespace MglConnect.Web.Controllers
             _context = context;
         }
 
-        public async Task<IActionResult> Index(string? status)
+        public async Task<IActionResult> Index(string? status = null, string? termo = null)
         {
+            status = status?.Trim();
+            termo = termo?.Trim();
             var query = _context.Pedidos
+                .AsNoTracking()
                 .Include(p => p.Cliente)
                 .Include(p => p.Entrega)
                 .AsQueryable();
@@ -32,7 +35,17 @@ namespace MglConnect.Web.Controllers
                 query = query.Where(p => p.Status == status);
             }
 
+            if (!string.IsNullOrWhiteSpace(termo))
+            {
+                var busca = termo.ToLowerInvariant();
+                query = query.Where(p => p.NumeroPedido.ToLower().Contains(busca)
+                    || p.Descricao.ToLower().Contains(busca)
+                    || (p.Cliente != null && (p.Cliente.RazaoSocial.ToLower().Contains(busca)
+                        || (p.Cliente.NomeFantasia != null && p.Cliente.NomeFantasia.ToLower().Contains(busca)))));
+            }
+
             ViewBag.StatusSelecionado = status;
+            ViewBag.TermoBusca = termo;
             var pedidos = await query.OrderByDescending(p => p.DataPedido).ToListAsync();
             return View(pedidos);
         }
@@ -40,13 +53,12 @@ namespace MglConnect.Web.Controllers
         public async Task<IActionResult> Create()
         {
             ViewBag.ClienteId = new SelectList(await _context.Clientes.Where(c => c.Ativo).OrderBy(c => c.RazaoSocial).ToListAsync(), "Id", "RazaoSocial");
-            var proximoNumero = $"PED-{DateTime.UtcNow.Year}-{(await _context.Pedidos.CountAsync() + 1):D4}";
-            return View(new Pedido { NumeroPedido = proximoNumero });
+            return View(new Pedido());
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create(Pedido pedido)
+        public async Task<IActionResult> Create([Bind("ClienteId,Descricao,ValorTotal,PesoKg,TipoCarga,OrigemEndereco,OrigemNumero,OrigemBairro,OrigemCidade,OrigemEstado,OrigemCep,DestinoEndereco,DestinoNumero,DestinoBairro,DestinoCidade,DestinoEstado,DestinoCep,AlturaCargaMetros,LarguraCargaMetros,ComprimentoCargaMetros")] Pedido pedido)
         {
             ModelState.Remove(nameof(Pedido.NumeroPedido));
             var clienteValido = await _context.Clientes
@@ -95,6 +107,11 @@ namespace MglConnect.Web.Controllers
         {
             var pedido = await _context.Pedidos.FirstOrDefaultAsync(item => item.Id == id);
             if (pedido == null) return NotFound();
+            if (await _context.Entregas.AnyAsync(entrega => entrega.PedidoId == id))
+            {
+                TempData["MensagemErro"] = "O pedido já possui entrega vinculada. Gerencie o estado pela operação da entrega.";
+                return RedirectToAction(nameof(Details), new { id });
+            }
 
             var allowed = (pedido.Status, status) switch
             {

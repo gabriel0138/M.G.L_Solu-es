@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MglConnect.Web.Data;
 using MglConnect.Web.Models;
+using MglConnect.Web.Services;
 using MglConnect.Web.ViewModels;
 
 namespace MglConnect.Web.Controllers
@@ -143,30 +144,33 @@ namespace MglConnect.Web.Controllers
 
         [HttpGet("")]
         [HttpGet("Dashboard")]
+        [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
         public async Task<IActionResult> Index()
         {
             var cliente = await ObterClienteAtualAsync();
-            if (cliente == null)
-            {
-                return View("SemCliente");
-            }
+            if (cliente == null) return View("SemCliente");
+            return View(await CarregarPainelAsync(cliente));
+        }
 
-            var pedidos = await _context.Pedidos
-                .Include(p => p.Entrega)
-                    .ThenInclude(e => e!.EventosRastreio)
-                .Where(p => p.ClienteId == cliente.Id)
-                .AsNoTracking()
-                .OrderByDescending(p => p.DataPedido)
-                .ToListAsync();
+        [HttpGet("Painel")]
+        [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+        public async Task<IActionResult> Painel()
+        {
+            var cliente = await ObterClienteAtualAsync();
+            if (cliente == null) return Forbid();
+            return PartialView("_ClientOperationsPanel", await CarregarPainelAsync(cliente));
+        }
 
+        private async Task<List<Pedido>> CarregarPainelAsync(Cliente cliente)
+        {
+            var query = _context.Pedidos.AsNoTracking().Where(p => p.ClienteId == cliente.Id);
             ViewBag.Cliente = cliente;
-            ViewBag.TotalPedidos = pedidos.Count;
-            ViewBag.EmTransito = pedidos.Count(p => p.Entrega != null && p.Entrega.StatusEntrega == "Em transporte");
-            ViewBag.Entregues = pedidos.Count(p => p.Entrega != null && p.Entrega.StatusEntrega == "Entregue");
-            ViewBag.Pendentes = pedidos.Count(p => p.Entrega == null || p.Entrega.StatusEntrega == "Pendente");
-            ViewBag.ValorTotal = pedidos.Any() ? pedidos.Sum(p => p.ValorTotal) : 0m;
-
-            return View(pedidos);
+            ViewBag.TotalPedidos = await query.CountAsync();
+            ViewBag.EmTransito = await query.CountAsync(p => p.Entrega != null && p.Entrega.StatusEntrega == "Em transporte");
+            ViewBag.Entregues = await query.CountAsync(p => p.Entrega != null && p.Entrega.StatusEntrega == "Entregue");
+            ViewBag.Pendentes = await query.CountAsync(p => p.Status == "Registrado" || p.Status == "EmProcessamento" || (p.Entrega != null && p.Entrega.StatusEntrega == "Pendente"));
+            ViewBag.ValorTotal = Math.Round((decimal)(await query.Where(p => p.Status != "Cancelado").SumAsync(p => (double?)p.ValorTotal) ?? 0), 2);
+            return await query.Include(p => p.Entrega).OrderByDescending(p => p.DataPedido).Take(5).ToListAsync();
         }
 
         [HttpGet("Pedidos")]
@@ -234,6 +238,23 @@ namespace MglConnect.Web.Controllers
 
             ViewBag.Cliente = cliente;
             return View(pedido);
+        }
+
+        [HttpGet("Pedido/{id:int}/Comprovante")]
+        [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+        public async Task<IActionResult> Comprovante(int id, [FromServices] IPodPdfService podPdfService)
+        {
+            var cliente = await ObterClienteAtualAsync();
+            if (cliente == null) return Forbid();
+
+            var pedido = await _context.Pedidos.AsNoTracking()
+                .Include(p => p.Entrega)
+                .FirstOrDefaultAsync(p => p.Id == id && p.ClienteId == cliente.Id);
+            if (pedido?.Entrega is not { StatusEntrega: "Entregue" } entrega
+                || string.IsNullOrWhiteSpace(entrega.NomeRecebedor)) return NotFound();
+
+            var bytes = await podPdfService.GerarPodPdfAsync(entrega);
+            return File(bytes, "application/pdf", $"Comprovante-Pedido-{id}.pdf");
         }
 
         private static string GerarNumeroPedido() =>

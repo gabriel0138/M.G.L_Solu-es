@@ -1,0 +1,68 @@
+/* Navigation panels share Command Center tokens; the map remains an observation surface. */
+.cc-cockpit { background: var(--mgl-bg-primary); isolation: isolate; height: max(46rem, calc(100dvh - 8rem)); }
+.cc-cockpit #cockpitMap { min-height: 40rem; z-index: 1; border: 0; border-radius: var(--mgl-radius-lg); }
+.cc-cockpit-top, .cc-cockpit-bottom { pointer-events: none; }
+.cc-cockpit-panel-width { max-width: 680px; pointer-events: auto; }
+.cc-cockpit .cc-cockpit-hud { background: var(--mgl-bg-surface); border: 1px solid var(--mgl-border-strong); box-shadow: var(--mgl-shadow-lg); color: var(--mgl-text-main); }
+.cc-cockpit .cc-cockpit-instruction { border-inline-start: 4px solid var(--mgl-accent-primary); }
+.cc-cockpit .text-white { color: var(--mgl-text-main) !important; }
+.cc-cockpit .text-white-50 { color: var(--mgl-text-secondary) !important; }
+.cc-cockpit .text-warning { color: var(--mgl-warning) !important; }
+.cc-cockpit #maneuverDist { background: var(--mgl-warning-solid); color: var(--mgl-text-inverse) !important; }
+.cc-cockpit .cc-cockpit-maneuver { flex-shrink: 0; width: 54px; height: 54px; background: var(--mgl-button-primary); color: var(--mgl-text-inverse); font-size: 1.8rem; }
+.cc-cockpit .cc-cockpit-close { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; min-width: 44px; min-height: 44px; padding: .6rem; }
+.cc-cockpit .btn { min-height: 44px; }
+.cc-cockpit .btn-outline-light { color: var(--mgl-text-main); border-color: var(--mgl-border-strong); background: var(--mgl-bg-surface); }
+.cc-cockpit .btn-outline-light:hover { background: var(--mgl-bg-hover); }
+.cc-cockpit .btn-dark { background: var(--mgl-bg-surface); color: var(--mgl-text-main); border-color: var(--mgl-border-strong) !important; }
+.cc-cockpit-progress { height: 4px; background: var(--mgl-bg-elevated); }
+.cc-cockpit-progress .progress-bar { background: var(--mgl-accent-primary); }
+.cc-cockpit-connection { display: flex; align-items: center; gap: .5rem; margin-bottom: .65rem; color: var(--mgl-text-secondary); font-size: .68rem; }
+.cc-cockpit-connection > i { color: var(--mgl-color-link); }
+.cc-cockpit-map-status { margin: 0 0 .5rem; font-size: .63rem; line-height: 1.4; color: var(--mgl-text-secondary); }
+.cc-cockpit-feedback, .cc-cockpit-queue-state { margin: 0 0 .5rem; font-size: .68rem; line-height: 1.4; }
+.cc-cockpit-queue-state { color: var(--mgl-warning); }
+.cc-cockpit-queue-state[data-state="confirmed"] { color: var(--mgl-success); }
+.cc-cockpit-queue-state[data-state="conflict"] { color: var(--mgl-error); }
+.cc-cockpit #cockpitMap[data-map-status]::after { display: none; }
+.cc-cockpit [data-state="connected"], .cc-cockpit #positionSourceBadge[data-state="received"] { color: var(--mgl-success) !important; }
+.cc-cockpit [data-state="closed"], .cc-cockpit [data-state="reconnecting"], .cc-cockpit #positionSourceBadge:is([data-state="stale"], [data-state="simulated"]) { color: var(--mgl-warning) !important; }
+.cc-cockpit #positionSourceBadge { display: inline-block; white-space: normal; line-height: 1.5; padding: 0; font-size: .68rem; }
+.cc-cockpit .driver-route-summary { display: grid !important; grid-template-columns: 1.15fr 1fr 1fr; min-height: 0; }
+.cc-cockpit .driver-route-summary > div { min-width: 0; }
+.cc-cockpit .driver-route-summary h4 { margin-block: .25rem !important; font-size: clamp(1rem, 2.5vw, 1.4rem); }
+.cc-cockpit .driver-route-summary .fs-8 { font-size: .65rem !important; }
+.cc-cockpit .driver-route-summary .small { font-size: .63rem; }
+.cc-cockpit .leaflet-control-layers { max-width: 12rem; }
+.cc-cockpit .leaflet-control-attribution { font-size: .56rem; }
+#modalPODNavegacao .signature-pad-container { background: var(--mgl-on-solid) !important; }
+#sigCanvasNav { touch-action: none; width: 100%; max-width: 100%; height: 200px; background: var(--mgl-on-solid); border: 1px dashed var(--mgl-border-strong); border-radius: var(--mgl-radius-sm); }
+#modalPODNavegacao .modal-header .text-white-50 { color: var(--mgl-text-secondary) !important; }
+@media (max-width: 575.98px) {
+    .cc-cockpit-top, .cc-cockpit-bottom { padding-inline: .65rem !important; }
+    .cc-cockpit-panel-width { padding-inline: 0; }
+    .cc-cockpit .cc-cockpit-instruction > .p-3 { padding: .7rem !important; gap: .6rem !important; }
+    .cc-cockpit .cc-cockpit-maneuver { width: 42px; height: 48px; font-size: 1.45rem; }
+    .cc-cockpit #maneuverRoad { font-size: .94rem; }
+    .cc-cockpit .cc-cockpit-close { min-width: 40px; padding: .5rem; }
+    .cc-cockpit .driver-route-summary { gap: .4rem !important; }
+    .cc-cockpit .driver-route-summary .fs-8 { font-size: .58rem !important; }
+    .cc-cockpit .driver-route-summary h4 { font-size: .95rem; }
+    .cc-cockpit #positionSourceBadge { font-size: .6rem; }
+    .cc-cockpit #btnToggleGps { max-width: calc(100vw - 2rem); font-size: .75rem; }
+    #modalPODNavegacao .modal-body { padding: 1rem !important; }
+    #modalPODNavegacao .modal-title { font-size: 1rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .cc-cockpit .progress-bar { transition: none; }
+}
+.mgl-hud-toast { position: fixed; z-index: 1090; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(360px, calc(100vw - 2rem)); padding: 1rem; border: 1px solid var(--mgl-border-strong); border-radius: var(--mgl-radius-lg); background: var(--mgl-bg-surface); color: var(--mgl-text-main); box-shadow: var(--mgl-shadow-lg); text-align: center; transition: opacity var(--mgl-transition); }
+.mgl-hud-toast p { color: var(--mgl-text-secondary); }
+@media (prefers-reduced-motion: reduce) { .mgl-hud-toast { transition: none; } }
+.cc-gps-sync { margin-bottom: .5rem; padding: .5rem .65rem; border: 1px solid var(--mgl-border-subtle); border-radius: var(--mgl-radius-md); color: var(--mgl-text-secondary); font-size: .68rem; }
+.cc-gps-sync-line { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.cc-gps-sync small { display: block; margin-top: .2rem; }
+.cc-gps-sync .btn { min-height: 44px; flex-shrink: 0; }
+.cc-gps-sync summary { cursor: pointer; padding-block: .35rem; }
+.cc-gps-sync details p { margin: .4rem 0 0; line-height: 1.5; }
+.cc-gps-sync[data-state="storage-error"], .cc-gps-sync[data-state="account-mismatch"] { border-color: var(--mgl-error); }

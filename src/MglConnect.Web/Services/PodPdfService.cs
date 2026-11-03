@@ -63,7 +63,7 @@ namespace MglConnect.Web.Services
                                     inner.Item().Text("Comprovante Digital de Entrega — PROOF OF DELIVERY (POD)")
                                         .FontSize(9).FontColor("#5BC0BE").Bold();
 
-                                    inner.Item().Text("Documento com validade jurídica — Lei 13.874/2019 | MP 2.200-2/2001")
+                                    inner.Item().Text("Registro operacional de recebimento e assinatura coletada no sistema")
                                         .FontSize(7).FontColor("#64748B");
                                 });
 

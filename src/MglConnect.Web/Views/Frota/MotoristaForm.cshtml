@@ -1,0 +1,17 @@
+@model MglConnect.Web.ViewModels.FleetDriverForm
+@{ var edit = Model.Id > 0; ViewData["Title"] = edit ? "Editar motorista" : "Cadastrar motorista"; }
+@section Styles { <link rel="stylesheet" href="~/css/command-roster.css" asp-append-version="true" /> }
+<div class="cc-roster">
+<header class="cc-section-heading cc-page-heading"><div><span class="cc-eyebrow">COMMAND CENTER / MOTORISTAS</span><h1>@ViewData["Title"]</h1><p>Conta de acesso e contato operacional da sua organização.</p></div><a asp-action="Index" class="btn btn-outline-secondary">Frota e motoristas</a></header>
+<form method="post" asp-action="@(edit ? "EditarMotorista" : "NovoMotorista")" asp-route-id="@(edit ? Model.Id : (int?)null)" class="cc-roster-form" id="fleetDriverForm">
+<input asp-for="Id" type="hidden" /><input asp-for="Selo" type="hidden" />
+<div asp-validation-summary="All" class="alert alert-danger" role="alert"></div>
+<section class="cc-panel"><header class="cc-panel-header"><div><h2>Dados de acesso e contato</h2><p>O perfil Motorista e o vínculo à organização são definidos pelo sistema.</p></div></header><div class="cc-panel-body"><div class="row g-3">
+<div class="col-md-7"><label asp-for="Nome" class="form-label">Nome</label><input asp-for="Nome" class="form-control" maxlength="100" autocomplete="name" required /><span asp-validation-for="Nome" class="text-danger"></span></div>
+<div class="col-md-5"><label asp-for="Telefone" class="form-label">Telefone operacional (opcional)</label><input asp-for="Telefone" class="form-control" type="tel" maxlength="20" autocomplete="tel" /><span asp-validation-for="Telefone" class="text-danger"></span></div>
+<div class="col-md-6"><label asp-for="Login" class="form-label">Login de acesso</label><input asp-for="Login" class="form-control" maxlength="50" minlength="3" autocomplete="off" readonly="@edit" required aria-describedby="loginHelp" /><small id="loginHelp" class="cc-roster-meta">@(edit ? "O login e a senha são preservados na edição cadastral." : "Use de 3 a 50 caracteres: letras, números, ponto, hífen ou sublinhado.")</small><span asp-validation-for="Login" class="text-danger"></span></div>
+@if (!edit) { <div class="col-md-6"><label asp-for="SenhaInicial" class="form-label">Senha inicial</label><input asp-for="SenhaInicial" class="form-control" type="password" minlength="10" maxlength="128" autocomplete="new-password" required aria-describedby="passwordHelp" /><small id="passwordHelp" class="cc-roster-meta">De 10 a 128 caracteres. A senha não será exibida após o cadastro.</small><span asp-validation-for="SenhaInicial" class="text-danger"></span></div> }
+</div></div></section>
+<div class="cc-data-note"><i class="bi bi-info-circle" aria-hidden="true"></i><p>Editar nome ou contato preserva as atribuições e os códigos de turno. A inativação é bloqueada enquanto houver atribuição ou turno ativo.</p></div>
+<div class="cc-roster-actions">@if (edit) { <a asp-action="EditarMotorista" asp-route-id="@Model.Id" class="btn btn-outline-secondary">Reabrir dados atuais</a> }<a asp-action="Index" class="btn btn-outline-secondary">Cancelar</a><button type="submit" class="btn btn-primary">Salvar motorista</button></div>
+</form></div>

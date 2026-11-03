@@ -1,0 +1,9 @@
+@model MglConnect.Web.ViewModels.FleetRosterViewModel
+@{ ViewData["Title"] = "Frota e motoristas"; }
+@section Styles { <link rel="stylesheet" href="~/css/command-roster.css" asp-append-version="true" /> }
+<div class="cc-roster">
+    <header class="cc-section-heading cc-page-heading"><div><span class="cc-eyebrow">COMMAND CENTER / RECURSOS DA OPERAÇÃO</span><h1 id="fleetRosterTitle">Frota e motoristas</h1><p>Cadastros, atribuições de viagens e turnos registrados na sua organização.</p></div><div class="cc-quick-actions"><a asp-controller="Operacoes" asp-action="Index" class="btn btn-outline-secondary"><i class="bi bi-map" aria-hidden="true"></i> Mapa operacional</a><a asp-controller="Entregas" asp-action="Create" class="btn btn-primary"><i class="bi bi-truck" aria-hidden="true"></i> Preparar despacho</a></div></header>
+    <p id="operationalRefreshStatus" class="cc-refresh-status" role="status" aria-live="polite">Atualização automática a cada 20 segundos enquanto esta tela estiver visível.</p>
+    <div id="operationalPanel" data-refresh-url="@Url.Action("Painel", new { termo = Model.Termo, status = Model.Status, paginaVeiculos = Model.PaginaVeiculos, paginaMotoristas = Model.PaginaMotoristas })"><partial name="_RosterPanel" model="Model" /></div>
+</div>
+@section Scripts { <script src="~/js/operational-dashboard.js" asp-append-version="true"></script> }

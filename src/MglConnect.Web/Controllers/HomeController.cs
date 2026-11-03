@@ -27,7 +27,7 @@ public class HomeController : Controller
             if (User.IsInRole("Motorista"))
                 return RedirectToAction("Index", "Entregas");
 
-            if (User.IsInRole("Cliente"))
+            if (User.IsInRole("Cliente") || User.IsInRole("Intermediador"))
                 return Redirect("/Cliente");
         }
 
@@ -43,6 +43,6 @@ public class HomeController : Controller
     [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
     public IActionResult Error()
     {
-        return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
+        return View(new ErrorViewModel { RequestId = HttpContext.Items["Mgl.CorrelationId"] as string ?? Activity.Current?.TraceId.ToHexString() ?? HttpContext.TraceIdentifier });
     }
 }

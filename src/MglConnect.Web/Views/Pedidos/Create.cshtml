@@ -1,124 +1,36 @@
 @model MglConnect.Web.Models.Pedido
-@{
-    ViewData["Title"] = "Novo Pedido";
-}
-
-<div class="container py-4">
-    <div class="row justify-content-center">
-        <div class="col-lg-7">
-            <div class="card border-0 shadow-sm rounded-4 bg-white p-4 p-md-5">
-                <div class="d-flex align-items-center justify-content-between border-bottom pb-3 mb-4">
-                    <div>
-                        <h4 class="fw-bold text-dark mb-1">
-                            <i class="bi bi-cart-plus text-warning me-2"></i> Registrar Pedido de Expedição
-                        </h4>
-                        <p class="text-muted small mb-0">Crie uma nova ordem de distribuição de mercadorias com análise de demanda veicular.</p>
-                    </div>
-                    <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
-                        <i class="bi bi-arrow-left me-1"></i> Voltar
-                    </a>
-                </div>
-
-                <form asp-action="Create" method="post">
-                    @if (!ViewData.ModelState.IsValid)
-                    {
-                        <div class="alert alert-danger py-2 fs-7 mb-4" asp-validation-summary="All"></div>
-                    }
-
-                    <div class="mb-3">
-                        <label asp-for="NumeroPedido" class="form-label fs-7 fw-semibold"></label>
-                        <input asp-for="NumeroPedido" class="form-control font-monospace" readonly />
-                    </div>
-
-                    <div class="mb-3">
-                        <label asp-for="ClienteId" class="form-label fs-7 fw-semibold">Cliente Solicitante</label>
-                        <select asp-for="ClienteId" asp-items="ViewBag.ClienteId" class="form-select" required>
-                            <option value="">-- Selecione o Cliente --</option>
-                        </select>
-                        <span asp-validation-for="ClienteId" class="text-danger fs-8"></span>
-                    </div>
-
-                    <div class="mb-3">
-                        <label asp-for="Descricao" class="form-label fs-7 fw-semibold"></label>
-                        <textarea asp-for="Descricao" class="form-control" rows="3" 
-                                  placeholder="Ex: Lote de 30 caixas contendo materiais de informática e roteadores..." required></textarea>
-                        <span asp-validation-for="Descricao" class="text-danger fs-8"></span>
-                    </div>
-
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-6">
-                            <label asp-for="ValorTotal" class="form-label fs-7 fw-semibold"></label>
-                            <div class="input-group">
-                                <span class="input-group-text bg-light">R$</span>
-                                <input asp-for="ValorTotal" type="number" step="0.01" class="form-control" placeholder="0,00" required />
-                            </div>
-                            <span asp-validation-for="ValorTotal" class="text-danger fs-8"></span>
-                        </div>
-                        <div class="col-md-6">
-                            <label asp-for="PesoKg" class="form-label fs-7 fw-semibold"></label>
-                            <div class="input-group">
-                                <input asp-for="PesoKg" id="inputPesoKg" type="number" step="0.1" class="form-control" placeholder="1.0" required />
-                                <span class="input-group-text bg-light">Kg</span>
-                            </div>
-                            <span asp-validation-for="PesoKg" class="text-danger fs-8"></span>
-                        </div>
-                    </div>
-
-                    <!-- Sugestão Inteligente de Veículo (Módulo 3) -->
-                    <div id="boxSugestaoVeiculo" class="p-3 rounded-3 mb-4 border transition-all" style="background-color: rgba(91, 192, 190, 0.1); border-color: var(--mgl-teal) !important;">
-                        <div class="d-flex align-items-center gap-2 mb-1">
-                            <span id="iconeSugestao" class="fs-5" style="color: var(--mgl-teal);"><i class="bi bi-car-front-fill"></i></span>
-                            <strong id="tituloSugestao" class="fs-7 text-dark">Sugestão Automática de Frota: Van / Utilitário Leve</strong>
-                        </div>
-                        <p id="descSugestao" class="fs-8 text-secondary mb-0">
-                            Carga até 3.500 kg liberada para vias urbanas centrais de SP, sem restrição de ZMRC e isenta de balança de pesagem rodoviária PBT.
-                        </p>
-                    </div>
-
-                    <div class="d-flex justify-content-end gap-2">
-                        <a asp-action="Index" class="btn btn-outline-secondary px-4">Cancelar</a>
-                        <button type="submit" class="btn btn-warning fw-bold px-4">
-                            <i class="bi bi-check-lg me-1"></i> Salvar Pedido
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
+@{ ViewData["Title"] = "Novo pedido"; }
+@section Styles { <link rel="stylesheet" href="~/css/command-orders.css" asp-append-version="true" /> }
+<div class="cc-orders">
+    <header class="cc-section-heading cc-page-heading"><div><span class="cc-eyebrow">COMMAND CENTER / PEDIDOS</span><h1>Uma nova operação</h1><p>Cadastre a carga e os endereços para preparar o despacho.</p></div><a asp-action="Index" class="btn btn-outline-secondary"><i class="bi bi-arrow-left" aria-hidden="true"></i> Todos os pedidos</a></header>
+    <form asp-action="Create" method="post" id="adminOrderForm" class="cc-order-form">
+        <div asp-validation-summary="All" class="alert alert-danger" role="alert"></div>
+        <section class="cc-panel"><header class="cc-panel-header"><div><h2>1. Carga e cliente</h2><p>O código do pedido será gerado ao registrar a solicitação.</p></div></header><div class="cc-panel-body"><div class="row g-3">
+            <div class="col-md-7"><label asp-for="ClienteId" class="form-label">Cliente solicitante</label><select asp-for="ClienteId" asp-items="ViewBag.ClienteId" class="form-select" required><option value="">Selecione um cliente ativo</option></select><span asp-validation-for="ClienteId" class="text-danger"></span></div>
+            <div class="col-md-5"><label asp-for="TipoCarga" class="form-label">Tipo de carga</label><input asp-for="TipoCarga" class="form-control" maxlength="50" required /><span asp-validation-for="TipoCarga" class="text-danger"></span></div>
+            <div class="col-12"><label asp-for="Descricao" class="form-label"></label><textarea asp-for="Descricao" class="form-control" rows="3" maxlength="255" required placeholder="Itens, quantidades e características da carga"></textarea><span asp-validation-for="Descricao" class="text-danger"></span></div>
+            <div class="col-sm-6"><label asp-for="ValorTotal" class="form-label">Valor declarado da mercadoria (R$)</label><input asp-for="ValorTotal" type="number" min="0" max="100000000" step="0.01" inputmode="decimal" class="form-control" required /><span asp-validation-for="ValorTotal" class="text-danger"></span></div>
+            <div class="col-sm-6"><label asp-for="PesoKg" class="form-label">Peso da carga (kg)</label><input asp-for="PesoKg" type="number" min="0.01" max="1000000" step="0.01" inputmode="decimal" class="form-control" required /><span asp-validation-for="PesoKg" class="text-danger"></span></div>
+<div class="col-sm-4"><label asp-for="AlturaCargaMetros" class="form-label">Altura (m · opcional)</label><input asp-for="AlturaCargaMetros" class="form-control" type="number" step="0.01" min="0.01" max="20" inputmode="decimal" /><span asp-validation-for="AlturaCargaMetros" class="text-danger"></span></div>
+<div class="col-sm-4"><label asp-for="LarguraCargaMetros" class="form-label">Largura (m · opcional)</label><input asp-for="LarguraCargaMetros" class="form-control" type="number" step="0.01" min="0.01" max="20" inputmode="decimal" /><span asp-validation-for="LarguraCargaMetros" class="text-danger"></span></div>
+<div class="col-sm-4"><label asp-for="ComprimentoCargaMetros" class="form-label">Comprimento (m · opcional)</label><input asp-for="ComprimentoCargaMetros" class="form-control" type="number" step="0.01" min="0.01" max="30" inputmode="decimal" /><span asp-validation-for="ComprimentoCargaMetros" class="text-danger"></span></div>
+</div><p class="cc-order-hint">A atribuição de veículo acontece no despacho, conforme capacidade e condições da operação.</p></div></section>
+<section class="cc-panel"><header class="cc-panel-header"><div><h2>2. Coleta</h2><p>Dados opcionais nesta etapa. Complete as informações disponíveis.</p></div></header><div class="cc-panel-body"><div class="row g-3">
+<div class="col-sm-8"><label asp-for="OrigemEndereco" class="form-label">Logradouro</label><input asp-for="OrigemEndereco" class="form-control" maxlength="200" /><span asp-validation-for="OrigemEndereco" class="text-danger"></span></div>
+<div class="col-sm-4"><label asp-for="OrigemNumero" class="form-label">Número</label><input asp-for="OrigemNumero" class="form-control" maxlength="20" /><span asp-validation-for="OrigemNumero" class="text-danger"></span></div>
+<div class="col-sm-6"><label asp-for="OrigemBairro" class="form-label">Bairro</label><input asp-for="OrigemBairro" class="form-control" maxlength="80" /><span asp-validation-for="OrigemBairro" class="text-danger"></span></div>
+<div class="col-sm-6"><label asp-for="OrigemCidade" class="form-label">Cidade</label><input asp-for="OrigemCidade" class="form-control" maxlength="80" /><span asp-validation-for="OrigemCidade" class="text-danger"></span></div>
+<div class="col-sm-4"><label asp-for="OrigemEstado" class="form-label">UF</label><input asp-for="OrigemEstado" class="form-control" maxlength="2" pattern="[A-Za-z]{2}" /><span asp-validation-for="OrigemEstado" class="text-danger"></span></div>
+<div class="col-sm-8"><label asp-for="OrigemCep" class="form-label">CEP</label><input asp-for="OrigemCep" class="form-control" maxlength="10" inputmode="numeric" /><span asp-validation-for="OrigemCep" class="text-danger"></span></div>
+</div></div></section>
+<section class="cc-panel"><header class="cc-panel-header"><div><h2>3. Destino</h2><p>Dados opcionais nesta etapa. Complete as informações disponíveis.</p></div></header><div class="cc-panel-body"><div class="row g-3">
+<div class="col-sm-8"><label asp-for="DestinoEndereco" class="form-label">Logradouro</label><input asp-for="DestinoEndereco" class="form-control" maxlength="200" /><span asp-validation-for="DestinoEndereco" class="text-danger"></span></div>
+<div class="col-sm-4"><label asp-for="DestinoNumero" class="form-label">Número</label><input asp-for="DestinoNumero" class="form-control" maxlength="20" /><span asp-validation-for="DestinoNumero" class="text-danger"></span></div>
+<div class="col-sm-6"><label asp-for="DestinoBairro" class="form-label">Bairro</label><input asp-for="DestinoBairro" class="form-control" maxlength="80" /><span asp-validation-for="DestinoBairro" class="text-danger"></span></div>
+<div class="col-sm-6"><label asp-for="DestinoCidade" class="form-label">Cidade</label><input asp-for="DestinoCidade" class="form-control" maxlength="80" /><span asp-validation-for="DestinoCidade" class="text-danger"></span></div>
+<div class="col-sm-4"><label asp-for="DestinoEstado" class="form-label">UF</label><input asp-for="DestinoEstado" class="form-control" maxlength="2" pattern="[A-Za-z]{2}" /><span asp-validation-for="DestinoEstado" class="text-danger"></span></div>
+<div class="col-sm-8"><label asp-for="DestinoCep" class="form-label">CEP</label><input asp-for="DestinoCep" class="form-control" maxlength="10" inputmode="numeric" /><span asp-validation-for="DestinoCep" class="text-danger"></span></div>
+</div></div></section>
+<div class="cc-order-actions"><a asp-action="Index" class="btn btn-outline-secondary">Cancelar</a><button type="submit" class="btn btn-primary"><i class="bi bi-check2" aria-hidden="true"></i> Registrar pedido</button></div>
+    </form>
 </div>
-
-@section Scripts {
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const pesoInput = document.getElementById('inputPesoKg');
-            const box = document.getElementById('boxSugestaoVeiculo');
-            const icone = document.getElementById('iconeSugestao');
-            const titulo = document.getElementById('tituloSugestao');
-            const desc = document.getElementById('descSugestao');
-
-            function atualizarSugestao() {
-                const peso = parseFloat(pesoInput.value) || 0;
-                if (peso > 3500) {
-                    box.style.backgroundColor = 'rgba(255, 159, 28, 0.12)';
-                    box.style.borderColor = '#FF9F1C';
-                    icone.style.color = '#D97706';
-                    icone.innerHTML = '<i class="bi bi-truck-front-fill"></i>';
-                    titulo.textContent = 'Sugestão Automática de Frota: Caminhão Pesado (Truck / Carreta)';
-                    desc.textContent = 'Carga superior a 3.500 kg (3,5 toneladas). Exige rota pesada via Rodoanel Mário Covas e Rodovia dos Imigrantes, pesagem em balança de eixos e contorno de viadutos baixos do centro de SP.';
-                } else {
-                    box.style.backgroundColor = 'rgba(91, 192, 190, 0.1)';
-                    box.style.borderColor = '#5BC0BE';
-                    icone.style.color = '#0F766E';
-                    icone.innerHTML = '<i class="bi bi-car-front-fill"></i>';
-                    titulo.textContent = 'Sugestão Automática de Frota: Van / Utilitário Leve';
-                    desc.textContent = 'Carga até 3.500 kg liberada para vias urbanas centrais de SP (Marginal Tietê ➔ Corredor Central ➔ Anchieta), sem restrição de ZMRC e isenta de balança PBT.';
-                }
-            }
-
-            if (pesoInput) {
-                pesoInput.addEventListener('input', atualizarSugestao);
-                atualizarSugestao();
-            }
-        });
-    </script>
-}

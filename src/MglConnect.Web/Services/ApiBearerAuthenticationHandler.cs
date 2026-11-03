@@ -25,7 +25,8 @@ public static class MglConnectApiBearerDefaults
         }
 
         if (context.Request.Method == HttpMethods.Get
-            && context.Request.Path.Value?.EndsWith("/trafego-eta", StringComparison.OrdinalIgnoreCase) == true
+            && (context.Request.Path.Value?.EndsWith("/trafego-eta", StringComparison.OrdinalIgnoreCase) == true
+                || context.Request.Path.StartsWithSegments("/api/gps/historico"))
             && context.Request.Cookies.ContainsKey(CookieName))
         {
             return CookieAuthenticationDefaults.AuthenticationScheme;

@@ -1,268 +1,47 @@
 @model MglConnect.Web.ViewModels.DashboardViewModel
 @{
-    ViewData["Title"] = "Dashboard Operacional";
+    ViewData["Title"] = "Central operacional";
 }
-
-<div class="container py-4">
-    <!-- Cabeçalho do Dashboard -->
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+<div class="cc-dashboard">
+    <header class="cc-section-heading cc-page-heading">
         <div>
-            <h3 class="fw-bold mb-1" style="color: var(--mgl-dark-primary);">
-                <i class="bi bi-speedometer2 me-2" style="color: var(--mgl-teal);"></i> Painel de Controle Operacional
-            </h3>
-            <p class="text-muted small mb-0">Visão consolidada da distribuidora e centro logístico M.G.L Logística Integrada S.A.</p>
+            <span class="cc-eyebrow">M.G.L CONNECT / COMMAND CENTER</span>
+            <h1>Visão geral da operação</h1>
+            <p>Pedidos, viagens e prioridades da sua organização em um só lugar.</p>
         </div>
-        <div class="d-flex flex-wrap gap-2">
-            <a asp-controller="Roteamento" asp-action="Index" class="btn btn-mgl-primary btn-sm shadow-sm">
-                <i class="bi bi-map-fill me-1"></i> Roteamento Pesado
+        <div class="cc-quick-actions">
+            <a asp-controller="Pedidos" asp-action="Create" class="btn btn-outline-secondary">
+                <i class="bi bi-plus-lg" aria-hidden="true"></i> Novo pedido
             </a>
-            <a asp-controller="Pedidos" asp-action="Create" class="btn btn-outline-secondary btn-sm shadow-sm">
-                <i class="bi bi-plus-lg me-1"></i> Novo Pedido
-            </a>
-            <a asp-controller="Entregas" asp-action="Create" class="btn btn-mgl-teal btn-sm fw-bold shadow-sm">
-                <i class="bi bi-truck me-1"></i> Despachar Carga
+            <a asp-controller="Entregas" asp-action="Create" class="btn btn-mgl-primary">
+                <i class="bi bi-send" aria-hidden="true"></i> Despachar carga
             </a>
         </div>
-    </div>
+    </header>
 
-    <!-- ═══════════ SEÇÃO 1 — KPIs OPERACIONAIS ═══════════ -->
-    <section class="mb-4">
-        <h6 class="fw-bold text-uppercase mb-3" style="color: var(--mgl-teal); letter-spacing: .08em;">
-            <i class="bi bi-activity me-2"></i>KPIs Operacionais
-        </h6>
-        <div class="row g-3">
-            <div class="col-12 col-sm-6 col-xl-3">
-                <div class="card-mgl p-3 h-100">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div>
-                            <div class="text-muted fs-8 text-uppercase fw-bold">Clientes</div>
-                            <h4 class="fw-bold mb-0" style="color: var(--mgl-dark-primary);">@Model.TotalClientes</h4>
-                            <small class="text-muted">Contratos corporativos ativos</small>
-                        </div>
-                        <div class="kpi-icon-box" style="background-color: rgba(91,192,190,0.15); color: var(--mgl-teal);">
-                            <i class="bi bi-buildings"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-12 col-sm-6 col-xl-3">
-                <div class="card-mgl p-3 h-100">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div>
-                            <div class="text-muted fs-8 text-uppercase fw-bold">Pedidos</div>
-                            <h4 class="fw-bold mb-0" style="color: var(--mgl-dark-primary);">@Model.TotalPedidos</h4>
-                            <small class="text-muted">@Model.EntregasPendentes pendente(s) de despacho</small>
-                        </div>
-                        <div class="kpi-icon-box" style="background-color: rgba(30,58,138,0.35); color: #93C5FD;">
-                            <i class="bi bi-box-seam"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-12 col-sm-6 col-xl-3">
-                <div class="card-mgl p-3 h-100">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div>
-                            <div class="text-muted fs-8 text-uppercase fw-bold">Em Trânsito</div>
-                            <h4 class="fw-bold mb-0" style="color: var(--mgl-teal);">@Model.EntregasEmTransporte</h4>
-                            <small class="text-muted">@Model.EntregasEntregues entrega(s) concluída(s)</small>
-                        </div>
-                        <div class="kpi-icon-box" style="background-color: rgba(91,192,190,0.15); color: var(--mgl-teal);">
-                            <i class="bi bi-truck"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-12 col-sm-6 col-xl-3">
-                <div class="card-mgl p-3 h-100">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div>
-                            <div class="text-muted fs-8 text-uppercase fw-bold">Receita Total</div>
-                            <h4 class="fw-bold mb-0" style="color: var(--mgl-green);">R$ @Model.ValorTotalPedidos.ToString("N0")</h4>
-                            <small class="text-muted">Faturamento consolidado</small>
-                        </div>
-                        <div class="kpi-icon-box" style="background-color: rgba(16,185,129,0.15); color: var(--mgl-green);">
-                            <i class="bi bi-cash-stack"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
+    <form method="get" class="cc-filter-bar" aria-label="Filtrar período operacional">
+        <div>
+            <label for="periodoDe" class="form-label">Criados a partir de (UTC)</label>
+            <input type="date" id="periodoDe" name="de" value="@(Model.PeriodoInicio?.ToString("yyyy-MM-dd"))" class="form-control" />
         </div>
-    </section>
-
-    <!-- ═══════════ SEÇÃO 2 — CUSTOS E MARGEM ANTT ═══════════ -->
-    <section class="mb-4">
-        <h6 class="fw-bold text-uppercase mb-3" style="color: var(--mgl-teal); letter-spacing: .08em;">
-            <i class="bi bi-fuel-pump me-2"></i>Custos e Margem ANTT
-        </h6>
-        <div class="row g-3">
-            <div class="col-12 col-sm-6 col-xl-3">
-                <div class="card-mgl p-3 h-100">
-                    <div class="text-muted fs-8 text-uppercase fw-bold">Combustível</div>
-                    <h5 class="fw-bold mt-1 mb-0" style="color: var(--mgl-amber);">R$ @Model.CustoTotalCombustivel.ToString("N2")</h5>
-                    <small class="text-muted">@Model.TotalLitrosCombustivel.ToString("N0") L de diesel</small>
-                </div>
-            </div>
-            <div class="col-12 col-sm-6 col-xl-3">
-                <div class="card-mgl p-3 h-100">
-                    <div class="text-muted fs-8 text-uppercase fw-bold">Pedágios</div>
-                    <h5 class="fw-bold mt-1 mb-0" style="color: #93C5FD;">R$ @Model.CustoTotalPedagios.ToString("N2")</h5>
-                    <small class="text-muted">Custo total de praças</small>
-                </div>
-            </div>
-            <div class="col-12 col-sm-6 col-xl-3">
-                <div class="card-mgl p-3 h-100" style="border-left: 4px solid var(--mgl-teal) !important;">
-                    <div class="text-muted fs-8 text-uppercase fw-bold">Custo Total</div>
-                    <h5 class="fw-bold mt-1 mb-0" style="color: var(--mgl-dark-primary);">R$ @Model.CustoTotalFrota.ToString("N2")</h5>
-                    <small class="text-muted">Operacional consolidado</small>
-                </div>
-            </div>
-            <div class="col-12 col-sm-6 col-xl-3">
-                <div class="card-mgl p-3 h-100" style="border-left: 4px solid var(--mgl-green) !important;">
-                    <div class="text-muted fs-8 text-uppercase fw-bold">Margem Líquida</div>
-                    <h5 class="fw-bold mt-1 mb-0" style="color: var(--mgl-green);">R$ @Model.MargemLucroLiquida.ToString("N2")</h5>
-                    <small class="text-muted">@Model.MargemLucroPercentual.ToString("N1")% sobre receita</small>
-                </div>
-            </div>
+        <div>
+            <label for="periodoAte" class="form-label">Até (UTC)</label>
+            <input type="date" id="periodoAte" name="ate" value="@(Model.PeriodoFim?.ToString("yyyy-MM-dd"))" class="form-control" />
         </div>
-    </section>
+        <button type="submit" class="btn btn-mgl-primary"><i class="bi bi-funnel" aria-hidden="true"></i> Aplicar período</button>
+        <a asp-action="Index" class="btn btn-link">Todo o histórico</a>
+        <p class="cc-filter-help">O período considera a criação dos pedidos e das viagens.</p>
+    </form>
 
-    <!-- ═══════════ SEÇÃO 3 — ENTREGAS RECENTES & DESPACHO ═══════════ -->
-    <section class="mb-4">
-        <h6 class="fw-bold text-uppercase mb-3" style="color: var(--mgl-teal); letter-spacing: .08em;">
-            <i class="bi bi-clock-history me-2"></i>Entregas Recentes &amp; Despacho
-        </h6>
-        <div class="row g-3">
-            <div class="col-12 col-lg-7">
-                <div class="card-mgl p-4 h-100">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h6 class="fw-bold mb-0" style="color: var(--mgl-dark-primary);">
-                            <i class="bi bi-truck me-2" style="color: var(--mgl-teal);"></i>Entregas Recentes
-                        </h6>
-                        <a asp-controller="Entregas" asp-action="Index" class="btn btn-sm btn-outline-secondary">Ver todas</a>
-                    </div>
-                    @if (!Model.EntregasRecentes.Any())
-                    {
-                        <p class="text-muted small">Nenhuma entrega registrada ainda.</p>
-                    }
-                    else
-                    {
-                        <div class="table-responsive">
-                            <table class="table table-sm table-hover align-middle mb-0">
-                                <thead>
-                                    <tr>
-                                        <th class="fs-8">Rastreio</th>
-                                        <th class="fs-8">Destinatário</th>
-                                        <th class="fs-8">Status</th>
-                                        <th class="fs-8">Motorista</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var entrega in Model.EntregasRecentes)
-                                    {
-                                        var badgeClass = entrega.StatusEntrega switch {
-                                            "Entregue" => "success",
-                                            "Em transporte" => "info",
-                                            "Cancelada" => "danger",
-                                            _ => "warning"
-                                        };
-                                        <tr>
-                                            <td>
-                                                <a asp-controller="Rastreio" asp-action="Index"
-                                                   asp-route-codigo="@entrega.CodigoRastreio"
-                                                   class="font-monospace text-decoration-none fw-bold fs-8" style="color: var(--mgl-teal);">
-                                                    @entrega.CodigoRastreio
-                                                </a>
-                                            </td>
-                                            <td class="fs-8">@entrega.DestinatarioNome</td>
-                                            <td><span class="badge bg-@badgeClass fs-8">@entrega.StatusEntrega</span></td>
-                                            <td class="fs-8 text-muted">@(entrega.Motorista?.Nome ?? "—")</td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                        </div>
-                    }
-                </div>
-            </div>
-
-            <div class="col-12 col-lg-5">
-                <div class="card-mgl p-4 h-100">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h6 class="fw-bold mb-0" style="color: var(--mgl-dark-primary);">
-                            <i class="bi bi-exclamation-triangle me-2" style="color: var(--mgl-amber);"></i>Aguardando Despacho
-                        </h6>
-                        <a asp-controller="Pedidos" asp-action="Index" class="btn btn-sm btn-outline-secondary">Ver todos</a>
-                    </div>
-                    @if (!Model.PedidosSemEntrega.Any())
-                    {
-                        <p class="text-muted small">Todos os pedidos foram despachados.</p>
-                    }
-                    else
-                    {
-                        <div class="d-flex flex-column gap-2">
-                            @foreach (var ped in Model.PedidosSemEntrega)
-                            {
-                                <div class="p-3 rounded-3" style="background: rgba(255,159,28,0.06); border: 1px solid rgba(255,159,28,0.18);">
-                                    <div class="d-flex justify-content-between align-items-center mb-1">
-                                        <strong class="font-monospace" style="color: var(--mgl-dark-primary);">@ped.NumeroPedido</strong>
-                                        <span class="badge bg-light">R$ @ped.ValorTotal.ToString("N2")</span>
-                                    </div>
-                                    <div class="text-muted fs-8 mb-2">
-                                        Cliente: @(ped.Cliente?.NomeFantasia ?? ped.Cliente?.RazaoSocial)
-                                    </div>
-                                    <a asp-controller="Entregas" asp-action="Create" asp-route-pedidoId="@ped.Id"
-                                       class="btn btn-mgl-teal btn-sm w-100 fw-bold fs-8">
-                                        <i class="bi bi-truck me-1"></i> Despachar &amp; Gerar Rastreio
-                                    </a>
-                                </div>
-                            }
-                        </div>
-                    }
-                </div>
-            </div>
+    <div asp-validation-summary="All" class="text-danger" role="alert"></div>
+    <p id="operationalRefreshStatus" class="cc-refresh-status" role="status" aria-live="polite">Atualização automática a cada 20 segundos enquanto esta tela estiver visível.</p>
+    @if (ViewData.ModelState.IsValid)
+    {
+        <div id="operationalPanel" data-refresh-url="@Url.Action("Painel")">
+            <partial name="_OperationalPanel" model="Model" />
         </div>
-    </section>
-
-    <!-- ═══════════ SEÇÃO 4 — PAINEL ESG ═══════════ -->
-    <section class="mb-4">
-        <h6 class="fw-bold text-uppercase mb-3" style="color: var(--mgl-green); letter-spacing: .08em;">
-            <i class="bi bi-tree me-2"></i>Painel ESG — Pegada de Carbono (CO₂)
-        </h6>
-        <div class="row g-3">
-            <div class="col-12 col-md-4">
-                <div class="card-mgl p-4 h-100 text-center">
-                    <div class="kpi-icon-box mx-auto mb-3" style="background-color: rgba(16,185,129,0.15); color: var(--mgl-green);">
-                        <i class="bi bi-cloud-haze2"></i>
-                    </div>
-                    <div class="text-muted fs-8 text-uppercase fw-bold">Emissão de CO₂</div>
-                    <h2 class="fw-bold mt-2 mb-0" style="color: var(--mgl-green);">@Model.EmissaoCo2TotalKg.ToString("N1") <span class="fs-5">kg</span></h2>
-                    <small class="text-muted">Frota completa — estimativa anual</small>
-                </div>
-            </div>
-            <div class="col-12 col-md-4">
-                <div class="card-mgl p-4 h-100 text-center">
-                    <div class="kpi-icon-box mx-auto mb-3" style="background-color: rgba(91,192,190,0.15); color: var(--mgl-teal);">
-                        <i class="bi bi-check2-circle"></i>
-                    </div>
-                    <div class="text-muted fs-8 text-uppercase fw-bold">Rota Concluída</div>
-                    <h2 class="fw-bold mt-2 mb-0" style="color: var(--mgl-teal);">@Model.TotalEntregasConcluidas</h2>
-                    <small class="text-muted">Entregas finalizadas com POD</small>
-                </div>
-            </div>
-            <div class="col-12 col-md-4">
-                <div class="card-mgl p-4 h-100 text-center">
-                    <div class="kpi-icon-box mx-auto mb-3" style="background-color: rgba(255,159,28,0.15); color: var(--mgl-amber);">
-                        <i class="bi bi-tree-fill"></i>
-                    </div>
-                    <div class="text-muted fs-8 text-uppercase fw-bold">Árvores Equivalentes</div>
-                    <h2 class="fw-bold mt-2 mb-0" style="color: var(--mgl-amber);">@((Model.EmissaoCo2TotalKg / 21.77).ToString("N0"))</h2>
-                    <small class="text-muted">Para neutralizar a emissão (21,77 kg CO₂/árvore/ano)</small>
-                </div>
-            </div>
-        </div>
-    </section>
+    }
 </div>
+@section Scripts {
+    <script src="~/js/operational-dashboard.js" asp-append-version="true"></script>
+}

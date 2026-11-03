@@ -1,0 +1,17 @@
+@model string
+@{
+    var (label, state) = Model switch
+    {
+        "Registrado" => ("Registrado", "pending"),
+        "EmProcessamento" => ("Em processamento", "pending"),
+        "ComEntregaAtribuida" => ("Em despacho", "transit"),
+        "Concluido" => ("Concluído", "delivered"),
+        "Cancelado" => ("Cancelado", "cancelled"),
+        "Pendente" => ("Pendente", "pending"),
+        "Em transporte" => ("Em transporte", "transit"),
+        "Entregue" => ("Entregue", "delivered"),
+        "Cancelada" => ("Cancelada", "cancelled"),
+        _ => (string.IsNullOrWhiteSpace(Model) ? "Não informado" : Model, "neutral")
+    };
+}
+<span class="cc-status" data-status="@state">@label</span>

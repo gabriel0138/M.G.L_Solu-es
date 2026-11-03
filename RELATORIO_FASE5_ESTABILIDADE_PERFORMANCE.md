@@ -249,7 +249,7 @@ Aprovado! – Com falha: 0, Aprovado: 30, Ignorado: 0, Total: 30, Duração: ~0.
 ### 5.1 Build
 
 ```
-$ dotnet build /home/gabriel/projetos/src/MglConnect.Web
+$ dotnet build src/MglConnect.Web
 Compilação com êxito.
     0 Erro(s)
     2 Aviso(s)  ← Avisos pré-existentes (CS8602, CS8603 de referências possivelmente nulas)
@@ -260,7 +260,7 @@ Compilação com êxito.
 ### 5.2 Testes Unitários e de Integração
 
 ```
-$ dotnet test /home/gabriel/projetos/src/MglConnect.Tests
+$ dotnet test src/MglConnect.Tests
 Aprovado! – Com falha: 0, Aprovado: 30, Ignorado: 0, Total: 30, Duração: 587 ms
 ```
 

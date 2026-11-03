@@ -31,7 +31,7 @@ namespace MglConnect.Web.Controllers
                 {
                     return RedirectToAction("Index", "Entregas");
                 }
-                if (User.IsInRole("Cliente"))
+                if (User.IsInRole("Cliente") || User.IsInRole("Intermediador"))
                 {
                     return Redirect("/Cliente");
                 }
@@ -98,7 +98,8 @@ namespace MglConnect.Web.Controllers
                 return RedirectToAction("Index", "Entregas");
             }
 
-            if (perfil.Equals("Cliente", System.StringComparison.OrdinalIgnoreCase))
+            if (perfil.Equals("Cliente", System.StringComparison.OrdinalIgnoreCase)
+                || perfil.Equals("Intermediador", System.StringComparison.OrdinalIgnoreCase))
             {
                 return Redirect("/Cliente");
             }

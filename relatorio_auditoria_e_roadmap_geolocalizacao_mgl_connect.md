@@ -7,21 +7,21 @@
 O projeto **M.G.L Connect** é uma solução corporativa de logística integrada (3PL & Cargas Pesadas) desenvolvida em **ASP.NET Core 6 (MVC + REST API)**, com **Entity Framework Core** operando em modelo híbrido (SQLite para desenvolvimento local ágil e PostgreSQL/Npgsql para produção em nuvem), além de **SignalR** para comunicação duplex via WebSockets.
 
 ### 1.1. Arquitetura e Recursos Já Implementados
-A análise dos arquivos do projeto ([src/MglConnect.Web](file:///home/gabriel/projetos/src/MglConnect.Web)) revela uma base sólida com módulos avançados:
+A análise dos arquivos do projeto ([src/MglConnect.Web](src/MglConnect.Web)) revela uma base sólida com módulos avançados:
 
-1. **Roteamento de Carga Pesada vs. Leve ([TruckRoutingService.cs](file:///home/gabriel/projetos/src/MglConnect.Web/Services/TruckRoutingService.cs)):**
+1. **Roteamento de Carga Pesada vs. Leve ([TruckRoutingService.cs](src/MglConnect.Web/Services/TruckRoutingService.cs)):**
    - Lógica de bifurcação entre veículo pesado (caminhões/carretas) e leve (vans/utilitários).
    - Verificação de gabarito de altura (ex: viadutos baixos do centro de SP desviados para o Rodoanel Mário Covas SP-021 com vão de 5,50m).
    - Alertas georreferenciados de balanças de pesagem dinâmica PBT (ex: SP-160 km 41), ZMRC (Zona de Máxima Restrição de Circulação) e restrições de produtos perigosos em túneis.
-   - Cálculo de pedágios com base na quantidade de eixos do veículo e telemetria financeira de combustível ([FuelCostService.cs](file:///home/gabriel/projetos/src/MglConnect.Web/Services/FuelCostService.cs)).
+   - Cálculo de pedágios com base na quantidade de eixos do veículo e telemetria financeira de combustível ([FuelCostService.cs](src/MglConnect.Web/Services/FuelCostService.cs)).
    - Integração com **OSRM (Open Source Routing Machine)** online com passos *turn-by-turn* (`steps=true`) e malha densa de fallback com 34 coordenadas geodésicas reais de Cajamar até o Porto de Santos.
 
-2. **Cockpit HUD de Bordo Estilo Waze ([Views/Entregas/Navegar.cshtml](file:///home/gabriel/projetos/src/MglConnect.Web/Views/Entregas/Navegar.cshtml)):**
+2. **Cockpit HUD de Bordo Estilo Waze ([Views/Entregas/Navegar.cshtml](src/MglConnect.Web/Views/Entregas/Navegar.cshtml)):**
    - Interface imersiva para o motorista com indicação visual de manobras, distância para a próxima conversão, velocímetro dinâmico, estimativa de consumo de diesel e ETA.
    - Suporte à API nativa de geolocalização do dispositivo (`navigator.geolocation.watchPosition`) e modo de simulação assistida ao longo da polilinha.
    - Coleta de assinatura digital biométrica (*Proof of Delivery — POD*) via HTML5 Canvas integrada ao cockpit.
 
-3. **Portal do Cliente e Rastreamento Público Estilo Mercado Livre ([Views/Rastreio/Index.cshtml](file:///home/gabriel/projetos/src/MglConnect.Web/Views/Rastreio/Index.cshtml)):**
+3. **Portal do Cliente e Rastreamento Público Estilo Mercado Livre ([Views/Rastreio/Index.cshtml](src/MglConnect.Web/Views/Rastreio/Index.cshtml)):**
    - Stepper visual de progresso da encomenda em 5 etapas.
    - Timeline de eventos em tempo real conectada via SignalR (`JoinTrackingGroup(codigoRastreio)`).
 
@@ -33,9 +33,9 @@ Apesar do alto nível das funcionalidades já construídas, foram identificadas 
 
 | Ponto de Análise | Situação Atual | Impacto Operacional |
 | :--- | :--- | :--- |
-| **Comunicação em Tempo Real** | O [TrackingHub.cs](file:///home/gabriel/projetos/src/MglConnect.Web/Hubs/TrackingHub.cs) transmite apenas **eventos pontuais de status** (ex: "Saiu para entrega", "Mercadoria conferida"). | Não existe um fluxo de streaming de coordenadas GPS contínuo entre o veículo em campo e o mapa da central de monitoramento. |
+| **Comunicação em Tempo Real** | O [TrackingHub.cs](src/MglConnect.Web/Hubs/TrackingHub.cs) transmite apenas **eventos pontuais de status** (ex: "Saiu para entrega", "Mercadoria conferida"). | Não existe um fluxo de streaming de coordenadas GPS contínuo entre o veículo em campo e o mapa da central de monitoramento. |
 | **Recálculo de Rota (Rerouting)** | A polilinha de rota é gerada estaticamente na carga inicial da página via OSRM. Se o caminhoneiro entrar em uma via paralela, o sistema não recalcula a trajetória. | O mapa torna-se obsoleto imediatamente após qualquer conversão não planejada, gerando falhas em ETAs e desorientação do condutor. |
-| **Camada de Mapas (Tiles)** | Em [Navegar.cshtml:225](file:///home/gabriel/projetos/src/MglConnect.Web/Views/Entregas/Navegar.cshtml#L225), há uma chamada direta `https://{s}.google.com/vt/lyrs=m...` via Leaflet. | **Violação direta dos Termos de Serviço do Google Maps Platform** (seção 3.2.4: *proibição de tile scraping/reverse engineering*), sujeita a bloqueio de IP e indisponibilidade do mapa sem aviso. |
+| **Camada de Mapas (Tiles)** | Em [Navegar.cshtml:225](src/MglConnect.Web/Views/Entregas/Navegar.cshtml#L225), há uma chamada direta `https://{s}.google.com/vt/lyrs=m...` via Leaflet. | **Violação direta dos Termos de Serviço do Google Maps Platform** (seção 3.2.4: *proibição de tile scraping/reverse engineering*), sujeita a bloqueio de IP e indisponibilidade do mapa sem aviso. |
 | **Demarcação da Trilha GPS** | Leitura crua do `pos.coords.latitude/longitude`. | O "GPS Jitter" (ruído natural de 5 a 15 metros) faz o marcador do veículo flutuar lateralmente, atravessar canteiros e quarteirões por falta de *Map Matching*. |
 
 ---
@@ -577,7 +577,7 @@ gantt
 
 ### Síntese das Fases:
 1. **Fase 1 (Imediata — Conformidade & Fundação Real-Time):**
-   - Corrigir a chamada de tiles do Google Maps em [Navegar.cshtml](file:///home/gabriel/projetos/src/MglConnect.Web/Views/Entregas/Navegar.cshtml), migrando para camadas oficiais (OpenStreetMap, CartoDB Positron/Dark Matter ou Google Maps JavaScript SDK licenciado).
+   - Corrigir a chamada de tiles do Google Maps em [Navegar.cshtml](src/MglConnect.Web/Views/Entregas/Navegar.cshtml), migrando para camadas oficiais (OpenStreetMap, CartoDB Positron/Dark Matter ou Google Maps JavaScript SDK licenciado).
    - Expandir o SignalR com o `TelemetryHub` para transmitir coordenadas de forma leve.
 2. **Fase 2 (Curto Prazo — Inteligência de Rota & Rerouting):**
    - Incorporar o `RouteDeviationEngine` no backend. Quando o desvio for verificado por mais de 3 leituras consecutivas, o backend solicita uma nova rota ao `TruckRoutingService` e publica a nova polilinha para a central e o cliente.

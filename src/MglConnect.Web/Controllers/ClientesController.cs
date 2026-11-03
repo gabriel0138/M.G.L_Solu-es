@@ -12,6 +12,7 @@ namespace MglConnect.Web.Controllers
     [Authorize(Roles = "Admin")]
     public class ClientesController : Controller
     {
+        private const string EditableFields = "RazaoSocial,NomeFantasia,Cnpj,Email,Telefone,Cep,Logradouro,Numero,Complemento,Bairro,Cidade,Estado,Ativo";
         private readonly MglDbContext _context;
 
         public ClientesController(MglDbContext context)
@@ -44,7 +45,7 @@ namespace MglConnect.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create(Cliente cliente)
+        public async Task<IActionResult> Create([Bind(EditableFields)] Cliente cliente)
         {
             if (ModelState.IsValid)
             {
@@ -75,9 +76,14 @@ namespace MglConnect.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, Cliente cliente)
+        public async Task<IActionResult> Edit(int id, [Bind("Id," + EditableFields)] Cliente cliente)
         {
             if (id != cliente.Id) return NotFound();
+
+            // Query filters protect reads, not an UPDATE of a detached posted entity.
+            // Load the authorized record first; never take ownership from the form.
+            var existing = await _context.Clientes.FirstOrDefaultAsync(c => c.Id == id);
+            if (existing == null) return NotFound();
 
             if (ModelState.IsValid)
             {
@@ -89,7 +95,19 @@ namespace MglConnect.Web.Controllers
 
                 try
                 {
-                    _context.Update(cliente);
+                    existing.RazaoSocial = cliente.RazaoSocial;
+                    existing.NomeFantasia = cliente.NomeFantasia;
+                    existing.Cnpj = cliente.Cnpj;
+                    existing.Email = cliente.Email;
+                    existing.Telefone = cliente.Telefone;
+                    existing.Cep = cliente.Cep;
+                    existing.Logradouro = cliente.Logradouro;
+                    existing.Numero = cliente.Numero;
+                    existing.Complemento = cliente.Complemento;
+                    existing.Bairro = cliente.Bairro;
+                    existing.Cidade = cliente.Cidade;
+                    existing.Estado = cliente.Estado;
+                    existing.Ativo = cliente.Ativo;
                     await _context.SaveChangesAsync();
                     TempData["MensagemSucesso"] = "Cliente atualizado com sucesso!";
                 }

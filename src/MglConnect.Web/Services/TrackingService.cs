@@ -29,12 +29,9 @@ namespace MglConnect.Web.Services
 
         public string GenerateTrackingCode()
         {
-            // Padrão inspirado em Mercado Livre / Correios: MGL- + 8 dígitos + BR
-            var randomBytes = new byte[4];
-            using var rng = RandomNumberGenerator.Create();
-            rng.GetBytes(randomBytes);
-            var number = Math.Abs(BitConverter.ToInt32(randomBytes, 0)) % 100000000;
-            return $"MGL-{number:D8}BR";
+            // 80 random bits within the existing 20-character schema limit.
+            // Previously issued decimal, GUID and prefixed codes remain valid.
+            return Convert.ToHexString(RandomNumberGenerator.GetBytes(10));
         }
 
         public async Task<EventoRastreio> AddCheckpointAsync(int entregaId, string titulo, string? descricao, string localidade, string status, string icone)
@@ -77,18 +74,19 @@ namespace MglConnect.Web.Services
             // TRANSMISSÃO WEBSOCKET SIGNALR EM TEMPO REAL
             try
             {
+                var publicEvent = PublicTrackingProjection.Event(evento.DataHora, evento.StatusAssociado);
                 var payload = new
                 {
-                    codigoRastreio = entrega.CodigoRastreio,
-                    status = entrega.StatusEntrega,
-                    titulo = evento.Titulo,
-                    descricao = evento.Descricao,
-                    localidade = evento.Localidade,
-                    icone = evento.Icone,
-                    dataHora = evento.DataHora.ToString("dd/MM/yyyy HH:mm")
+                    codigoRastreio = entrega.CodigoRastreio.ToUpperInvariant(),
+                    status = PublicTrackingProjection.Status(entrega.StatusEntrega),
+                    titulo = publicEvent.Titulo,
+                    descricao = publicEvent.Descricao,
+                    localidade = publicEvent.Localidade,
+                    icone = publicEvent.Icone,
+                    dataHora = evento.DataHora
                 };
 
-                await _hubContext.Clients.Group(entrega.CodigoRastreio).SendAsync("ReceiveCheckpointUpdate", payload);
+                await _hubContext.Clients.Group(entrega.CodigoRastreio.ToUpperInvariant()).SendAsync("ReceiveCheckpointUpdate", payload);
             }
             catch (Exception exception)
             {
@@ -99,19 +97,27 @@ namespace MglConnect.Web.Services
             return evento;
         }
 
-        public async Task<Entrega?> GetTrackingDetailsAsync(string codigoRastreio)
+        public async Task<PublicTrackingDetails?> GetTrackingDetailsAsync(string codigoRastreio)
         {
-            if (string.IsNullOrWhiteSpace(codigoRastreio)) return null;
+            var cleanCode = PublicTrackingProjection.NormalizeCode(codigoRastreio);
+            if (cleanCode == null) return null;
 
-            var cleanCode = codigoRastreio.Trim().ToUpper();
-
-            return await _context.Entregas
-                .Include(e => e.Pedido)
-                    .ThenInclude(p => p!.Cliente)
-                .Include(e => e.Motorista)
-                .Include(e => e.Veiculo)
-                .Include(e => e.EventosRastreio.OrderByDescending(ev => ev.DataHora))
-                .FirstOrDefaultAsync(e => e.CodigoRastreio == cleanCode);
+            var row = await _context.Entregas.AsNoTracking()
+                .Where(e => e.CodigoRastreio.ToUpper() == cleanCode)
+                .Select(e => new
+                {
+                    e.StatusEntrega, e.DestinatarioNome, e.CidadeDestino, e.EstadoDestino,
+                    e.DataCriacao, e.DataPrevisaoEntrega, e.DataEntregaRealizada,
+                    CidadeOrigem = e.Pedido != null ? e.Pedido.OrigemCidade : null,
+                    EstadoOrigem = e.Pedido != null ? e.Pedido.OrigemEstado : null,
+                    Eventos = e.EventosRastreio.OrderByDescending(ev => ev.DataHora)
+                        .Select(ev => new { ev.DataHora, ev.StatusAssociado }).ToList()
+                }).FirstOrDefaultAsync();
+            if (row == null) return null;
+            return new(cleanCode, PublicTrackingProjection.Status(row.StatusEntrega),
+                PublicTrackingProjection.FirstName(row.DestinatarioNome), row.CidadeOrigem, row.EstadoOrigem,
+                row.CidadeDestino, row.EstadoDestino, row.DataCriacao, row.DataPrevisaoEntrega, row.DataEntregaRealizada,
+                row.Eventos.Select(ev => PublicTrackingProjection.Event(ev.DataHora, ev.StatusAssociado)).ToArray());
         }
 
         public async Task<bool> FinalizarEntregaPODAsync(int entregaId, string nomeRecebedor, string? documentoRecebedor, string? assinaturaBase64, string? fotoPath, string localidade)
@@ -120,7 +126,7 @@ namespace MglConnect.Web.Services
             if (entrega == null) return false;
             if (entrega.StatusEntrega == "Entregue")
             {
-                return string.Equals(entrega.NomeRecebedor, nomeRecebedor, StringComparison.Ordinal);
+                return PodContent.Matches(entrega, nomeRecebedor, documentoRecebedor, assinaturaBase64, fotoPath);
             }
             if (entrega.StatusEntrega != "Em transporte")
             {
@@ -133,9 +139,9 @@ namespace MglConnect.Web.Services
             entrega.Versao++;
             entrega.DataEntregaRealizada = agora;
             entrega.DataHoraRecebimento = agora;
-            entrega.NomeRecebedor = nomeRecebedor;
-            entrega.DocumentoRecebedor = documentoRecebedor;
-            entrega.AssinaturaDigitalBase64 = assinaturaBase64;
+            entrega.NomeRecebedor = PodContent.Normalize(nomeRecebedor);
+            entrega.DocumentoRecebedor = PodContent.Normalize(documentoRecebedor);
+            entrega.AssinaturaDigitalBase64 = PodContent.Normalize(assinaturaBase64);
             entrega.FotoComprovantePath = fotoPath;
 
             var evento = new EventoRastreio
@@ -189,19 +195,19 @@ namespace MglConnect.Web.Services
             // Notificação SignalR em tempo real
             try
             {
+                var publicEvent = PublicTrackingProjection.Event(evento.DataHora, evento.StatusAssociado);
                 var payload = new
                 {
-                    codigoRastreio = entrega.CodigoRastreio,
+                    codigoRastreio = entrega.CodigoRastreio.ToUpperInvariant(),
                     status = "Entregue",
-                    titulo = evento.Titulo,
-                    descricao = evento.Descricao,
-                    localidade = evento.Localidade,
-                    icone = evento.Icone,
-                    nomeRecebedor = nomeRecebedor,
-                    dataHora = agora.ToString("dd/MM/yyyy HH:mm")
+                    titulo = publicEvent.Titulo,
+                    descricao = publicEvent.Descricao,
+                    localidade = publicEvent.Localidade,
+                    icone = publicEvent.Icone,
+                    dataHora = agora
                 };
 
-                await _hubContext.Clients.Group(entrega.CodigoRastreio).SendAsync("ReceiveCheckpointUpdate", payload);
+                await _hubContext.Clients.Group(entrega.CodigoRastreio.ToUpperInvariant()).SendAsync("ReceiveCheckpointUpdate", payload);
             }
             catch (Exception exception)
             {

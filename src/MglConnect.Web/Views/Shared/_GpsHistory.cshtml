@@ -1,0 +1,15 @@
+@model int
+@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
+@{ bool adminHistory = ViewData["GpsHistoryAdmin"] is true; }
+<section class="cc-panel cc-gps-history mb-4" id="gpsHistory-@Model" data-gps-history data-delivery="@Model" data-admin="@(adminHistory?"true":"false")"
+         data-endpoint="@(adminHistory?Url.Action("Dados","GpsHistorico",new{entregaId=Model}):$"/api/gps/historico/{Model}")"
+         data-period-start="@ViewData["GpsHistoryDe"]" data-period-end="@ViewData["GpsHistoryAte"]"
+         data-tile-url="@(Configuration["Maps:TileUrl"] ?? "https://tile.openstreetmap.org/{z}/{x}/{y}.png")"
+         data-attribution="@(Configuration["Maps:Attribution"] ?? "© OpenStreetMap contributors")" aria-label="Histórico GPS confirmado">
+    <header class="cc-panel-header"><div><h2>Histórico GPS confirmado</h2><p>Somente amostras aceitas pelo servidor. Pontos não reconstituem as vias percorridas.</p></div><button type="button" class="btn btn-outline-secondary" data-gps-history-reload>Atualizar GPS</button></header>
+    <div class="cc-panel-body"><p data-gps-history-status role="status" aria-live="polite">Consultando as posições confirmadas…</p>
+        <div data-gps-history-map class="cc-gps-history-map" role="region" aria-label="Mapa das posições confirmadas" hidden></div>
+        <div data-gps-history-table class="table-responsive cc-gps-history-table" role="region" aria-label="Capturas GPS confirmadas, em ordem cronológica" tabindex="0" hidden></div>
+        <nav class="cc-gps-history-pagination" aria-label="Páginas das posições"><button type="button" class="btn btn-outline-secondary" data-gps-history-prev hidden>Capturas mais recentes</button><span data-gps-history-page></span><button type="button" class="btn btn-outline-secondary" data-gps-history-next hidden>Capturas anteriores</button></nav>
+    </div>
+</section>

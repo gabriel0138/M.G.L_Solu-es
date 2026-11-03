@@ -1,0 +1,149 @@
+@model MglConnect.Web.ViewModels.DashboardViewModel
+@{
+    var br = System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
+}
+<section class="cc-stat-grid" aria-label="Indicadores operacionais do período">
+    <article class="cc-stat-card">
+        <div class="cc-stat-label"><span>Pedidos</span><span class="cc-stat-icon"><i class="bi bi-box-seam" aria-hidden="true"></i></span></div>
+        <strong class="cc-stat-value" data-metric="total-pedidos">@Model.TotalPedidos</strong>
+        <span class="cc-stat-meta">@Model.PedidosAguardandoDespacho pendente(s) de despacho</span>
+    </article>
+    <article class="cc-stat-card" data-status="transit">
+        <div class="cc-stat-label"><span>Em transporte</span><span class="cc-stat-icon"><i class="bi bi-truck" aria-hidden="true"></i></span></div>
+        <strong class="cc-stat-value">@Model.EntregasEmTransporte</strong>
+        <span class="cc-stat-meta">@Model.EntregasPendentes aguardando início de turno</span>
+    </article>
+    <article class="cc-stat-card" data-status="delivered">
+        <div class="cc-stat-label"><span>Entregas concluídas</span><span class="cc-stat-icon"><i class="bi bi-check2-circle" aria-hidden="true"></i></span></div>
+        <strong class="cc-stat-value">@Model.EntregasEntregues</strong>
+        <span class="cc-stat-meta">Entregas com estado concluído</span>
+    </article>
+    <article class="cc-stat-card" data-status="@(Model.EntregasAtrasadas > 0 ? "warning" : "pending")">
+        <div class="cc-stat-label"><span>Fora da previsão</span><span class="cc-stat-icon"><i class="bi bi-clock-history" aria-hidden="true"></i></span></div>
+        <strong class="cc-stat-value" data-metric="atrasadas">@Model.EntregasAtrasadas</strong>
+        <span class="cc-stat-meta">Em aberto, com previsão vencida</span>
+    </article>
+</section>
+
+<section class="cc-operations-strip" aria-label="Situação atual da organização">
+    <div><i class="bi bi-truck-front" aria-hidden="true"></i><span><strong>@Model.VeiculosEmUso / @Model.VeiculosAtivos</strong><small>Veículos atribuídos / ativos</small></span></div>
+    <div><i class="bi bi-buildings" aria-hidden="true"></i><span><strong>@Model.TotalClientes</strong><small>Clientes ativos</small></span></div>
+    <div><i class="bi bi-exclamation-triangle" aria-hidden="true"></i><span><strong>@Model.AlertasAbertos</strong><small>Emergências abertas ou em atendimento</small></span></div>
+    <div><i class="bi bi-boxes" aria-hidden="true"></i><span><strong>@Model.ValorTotalPedidos.ToString("C", br)</strong><small>Mercadorias · exceto pedidos cancelados</small></span></div>
+</section>
+<p class="cc-data-footer">Frota, clientes e emergências mostram a situação atual, independentemente do período selecionado.</p>
+
+<div class="row g-4 cc-operational-grid">
+    <section class="col-12 col-xl-7" aria-labelledby="recentTripsHeading">
+        <div class="cc-panel h-100">
+            <header class="cc-panel-header">
+                <div><span class="cc-eyebrow">ACOMPANHAMENTO</span><h2 id="recentTripsHeading">Viagens recentes</h2></div>
+                <a asp-controller="Entregas" asp-action="Index">Ver todas <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
+            </header>
+            @if (!Model.EntregasRecentes.Any())
+            {
+                <div class="cc-empty-state">
+                    <i class="bi bi-signpost-split" aria-hidden="true"></i>
+                    <h3>Nenhuma viagem neste período</h3>
+                    <p>Os pedidos disponíveis aparecem na fila de despacho. Crie uma viagem quando houver carga para enviar.</p>
+                    <a asp-controller="Entregas" asp-action="Create" class="btn btn-outline-secondary">Despachar carga</a>
+                </div>
+            }
+            else
+            {
+                <div class="cc-trip-list">
+                    @foreach (var entrega in Model.EntregasRecentes)
+                    {
+                        var status = entrega.StatusEntrega switch
+                        {
+                            "Em transporte" => "transit",
+                            "Entregue" => "delivered",
+                            "Cancelada" => "cancelled",
+                            _ => "pending"
+                        };
+                        var overdue = (entrega.StatusEntrega == "Pendente" || entrega.StatusEntrega == "Em transporte")
+                            && entrega.DataPrevisaoEntrega.HasValue
+                            && entrega.DataPrevisaoEntrega.Value < Model.UltimaAtualizacaoUtc;
+                        <article class="cc-trip-item">
+                            <div class="cc-trip-identity">
+                                <span class="cc-trip-icon"><i class="bi bi-truck" aria-hidden="true"></i></span>
+                                <div>
+                                    <h3><a asp-controller="Entregas" asp-action="Details" asp-route-id="@entrega.Id">@entrega.CodigoRastreio</a></h3>
+                                    <p>@(entrega.Pedido?.Cliente?.NomeFantasia ?? "Cliente não informado")</p>
+                                </div>
+                                <span class="cc-status" data-status="@status">@entrega.StatusEntrega</span>
+                            </div>
+                            <div class="cc-trip-details">
+                                <span><i class="bi bi-geo-alt" aria-hidden="true"></i> @(string.IsNullOrWhiteSpace(entrega.CidadeDestino) ? "Destino não informado" : $"{entrega.CidadeDestino} / {entrega.EstadoDestino}")</span>
+                                <span><i class="bi bi-person" aria-hidden="true"></i> @(entrega.Motorista?.Nome ?? "Sem motorista atribuído")</span>
+                                @if (entrega.DataPrevisaoEntrega.HasValue)
+                                {
+                                    <span><i class="bi bi-calendar-event" aria-hidden="true"></i> Previsão <time datetime="@entrega.DataPrevisaoEntrega.Value.ToString("O")">@entrega.DataPrevisaoEntrega.Value.ToString("dd/MM HH:mm") UTC</time></span>
+                                }
+                                else
+                                {
+                                    <span><i class="bi bi-calendar-event" aria-hidden="true"></i> Sem previsão informada</span>
+                                }
+                                @if (overdue)
+                                {
+                                    <span class="cc-status" data-status="warning"><i class="bi bi-clock" aria-hidden="true"></i> Fora da previsão</span>
+                                }
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+        </div>
+    </section>
+    <section class="col-12 col-xl-5" aria-labelledby="dispatchQueueHeading">
+        <div class="cc-panel h-100">
+            <header class="cc-panel-header">
+                <div><span class="cc-eyebrow">PRÓXIMAS AÇÕES</span><h2 id="dispatchQueueHeading">Fila de despacho</h2></div>
+                <a asp-controller="Pedidos" asp-action="Index">Ver pedidos <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
+            </header>
+            @if (!Model.PedidosSemEntrega.Any())
+            {
+                <div class="cc-empty-state">
+                    <i class="bi bi-inbox" aria-hidden="true"></i>
+                    <h3>Fila de despacho em dia</h3>
+                    <p>Não há pedidos registrados aguardando despacho neste período.</p>
+                    <a asp-controller="Pedidos" asp-action="Create" class="btn btn-outline-secondary">Criar pedido</a>
+                </div>
+            }
+            else
+            {
+                <div class="cc-dispatch-list">
+                    @foreach (var pedido in Model.PedidosSemEntrega)
+                    {
+                        <article class="cc-dispatch-item">
+                            <div class="cc-dispatch-copy">
+                                <a asp-controller="Pedidos" asp-action="Details" asp-route-id="@pedido.Id" class="fw-semibold">@pedido.NumeroPedido</a>
+                                <p>@pedido.Descricao</p>
+                                <small>@pedido.Cliente?.NomeFantasia · <time datetime="@pedido.DataPedido.ToString("O")">@pedido.DataPedido.ToString("dd/MM/yyyy") UTC</time></small>
+                            </div>
+                            <a asp-controller="Entregas" asp-action="Create" asp-route-pedidoId="@pedido.Id" class="btn btn-sm btn-outline-secondary" aria-label="Despachar pedido @pedido.NumeroPedido">Despachar <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+                        </article>
+                    }
+                </div>
+            }
+        </div>
+    </section>
+</div>
+
+<nav class="cc-quick-actions cc-dashboard-shortcuts" aria-label="Atalhos da operação">
+    <a asp-controller="Entregas" asp-action="Index" asp-route-status="Em transporte"><i class="bi bi-truck" aria-hidden="true"></i> Viagens em transporte <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
+    <a asp-controller="Clientes" asp-action="Index"><i class="bi bi-buildings" aria-hidden="true"></i> Clientes <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
+    <a asp-controller="Roteamento" asp-action="Index"><i class="bi bi-signpost-2" aria-hidden="true"></i> Planejar rota e estimar custos <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
+</nav>
+
+<section class="cc-data-note" aria-label="Qualidade dos dados financeiros">
+    <i class="bi bi-info-circle" aria-hidden="true"></i>
+    <div>
+        <strong>Sem despesas registradas</strong>
+        <p>Valor de mercadoria não representa receita de frete. Custos, margem e emissões não são medidos por este painel. <a asp-controller="Roteamento" asp-action="Index">Abrir simulador de rota e custos estimados</a>.</p>
+    </div>
+</section>
+<div class="cc-data-footer">
+    <span><i class="bi bi-database-check" aria-hidden="true"></i> Dados consultados no banco da organização</span>
+    <span>Última consulta: <time datetime="@Model.UltimaAtualizacaoUtc.ToString("O")">@Model.UltimaAtualizacaoUtc.ToString("dd/MM/yyyy HH:mm:ss") UTC</time></span>
+</div>

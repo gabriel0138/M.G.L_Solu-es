@@ -1,161 +1,151 @@
 @model IEnumerable<MglConnect.Web.Models.Entrega>
 @{
-    ViewData["Title"] = "Gestão de Entregas & Rastreio";
+    ViewData["Title"] = "Entregas e despacho";
+    var entregas = Model.ToList();
+    var termo = ViewBag.TermoBusca as string;
+    var status = ViewBag.StatusSelecionado as string;
+    var temFiltros = !string.IsNullOrWhiteSpace(termo) || !string.IsNullOrWhiteSpace(status);
 }
 
-<div class="container py-4">
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+<section aria-labelledby="deliveriesHeading">
+    <header class="cc-section-heading">
         <div>
-            <h3 class="fw-bold text-dark mb-1">
-                <i class="bi bi-truck text-primary me-2"></i> Entregas & Rastreamento
-            </h3>
-            <p class="text-muted small mb-0">Gerencie códigos de rastreio, motoristas e movimentações operacionais.</p>
+            <span class="cc-eyebrow">COMMAND CENTER / DESPACHO</span>
+            <h1 id="deliveriesHeading">Entregas em operação</h1>
+            <p>Conecte pedidos, motoristas e movimentações em uma única visão da sua organização.</p>
         </div>
-        <div>
+        <div class="cc-quick-actions">
+            <a asp-controller="Operacoes" asp-action="Index" class="btn btn-outline-secondary"><i class="bi bi-map" aria-hidden="true"></i> Mapa operacional</a>
             @if (User.IsInRole("Admin"))
             {
-                <div class="d-flex flex-wrap gap-2">
-                    <a asp-action="AlertasEmergencia" class="btn btn-outline-danger fw-bold shadow-sm">
-                        <i class="bi bi-exclamation-triangle me-1"></i> Alertas de emergência
-                    </a>
-                    <a asp-action="Create" class="btn btn-warning fw-bold shadow-sm">
-                        <i class="bi bi-plus-lg me-1"></i> Despachar Nova Entrega
-                    </a>
-                </div>
-            }
-            else if (User.IsInRole("Motorista"))
-            {
-                <span class="badge bg-primary-subtle text-primary border border-primary-subtle p-2 fs-7">
-                    <i class="bi bi-person-badge me-1"></i> Rota do Motorista: <strong>@User.Identity?.Name</strong>
-                </span>
+                <a asp-action="AlertasEmergencia" class="btn btn-outline-danger"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Emergências</a>
+                <a asp-action="Create" class="btn btn-mgl-primary"><i class="bi bi-plus-lg" aria-hidden="true"></i> Nova entrega</a>
             }
         </div>
-    </div>
+    </header>
 
-    <!-- Barra de Filtro e Busca -->
-    <div class="card border-0 shadow-sm p-3 mb-4 rounded-4 bg-white">
-        <form method="get" class="row g-2 align-items-center">
-            <div class="col-md-7">
-                <div class="input-group">
-                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-search text-muted"></i></span>
-                    <input type="text" name="termo" value="@ViewBag.TermoBusca" 
-                           class="form-control border-start-0" 
-                           placeholder="Buscar por código de rastreio, destinatário, cidade..." />
-                </div>
-            </div>
-            <div class="col-md-3">
-                <select name="status" class="form-select">
-                    <option value="">-- Todos os Status --</option>
-                    <option value="Pendente" selected="@(ViewBag.StatusSelecionado == "Pendente")">Pendente (No CD)</option>
-                    <option value="Em transporte" selected="@(ViewBag.StatusSelecionado == "Em transporte")">Em transporte</option>
-                    <option value="Entregue" selected="@(ViewBag.StatusSelecionado == "Entregue")">Entregue</option>
-                </select>
-            </div>
-            <div class="col-md-2 d-grid">
-                <button type="submit" class="btn btn-outline-primary">Filtrar</button>
-            </div>
-        </form>
-    </div>
+    <form method="get" asp-action="Index" class="cc-filter-bar" role="search" aria-label="Filtrar entregas">
+        <div class="flex-grow-1">
+            <label for="deliverySearch" class="form-label">Buscar entrega</label>
+            <input id="deliverySearch" type="search" name="termo" value="@termo" class="form-control" placeholder="Código, pedido, destinatário ou cidade" />
+        </div>
+        <div>
+            <label for="deliveryStatus" class="form-label">Estado da entrega</label>
+            <select id="deliveryStatus" name="status" class="form-select">
+                <option value="">Todos os estados</option>
+                <option value="Pendente" selected="@(status == "Pendente")">Pendente</option>
+                <option value="Em transporte" selected="@(status == "Em transporte")">Em transporte</option>
+                <option value="Entregue" selected="@(status == "Entregue")">Entregue</option>
+                <option value="Cancelada" selected="@(status == "Cancelada")">Cancelada</option>
+            </select>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <button type="submit" class="btn btn-mgl-primary"><i class="bi bi-funnel" aria-hidden="true"></i> Filtrar</button>
+            @if (temFiltros)
+            {
+                <a asp-action="Index" class="btn btn-outline-secondary">Limpar filtros</a>
+            }
+        </div>
+    </form>
 
-    <!-- Tabela de Entregas -->
-    <div class="card border-0 shadow-sm rounded-4 bg-white p-4">
-        <div class="table-responsive">
+    <section class="cc-panel" aria-labelledby="deliveriesListHeading">
+        <header class="cc-panel-header">
+            <div>
+                <h2 id="deliveriesListHeading">Controle de viagens</h2>
+                <p>@entregas.Count @(entregas.Count == 1 ? "entrega exibida" : "entregas exibidas")@(temFiltros ? " com os filtros selecionados" : "")</p>
+            </div>
+            <a asp-controller="Pedidos" asp-action="Index">Consultar pedidos <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
+        </header>
+        <div class="table-responsive" role="region" aria-label="Lista de entregas; deslize para consultar todas as colunas" tabindex="0">
             <table class="table table-hover align-middle mb-0">
-                <thead class="table-light fs-8 text-uppercase text-secondary">
+                <caption>Abra a operação para gerenciar atribuições e eventos; o rastreio público exibe somente os dados autorizados.</caption>
+                <thead>
                     <tr>
-                        <th>Código Rastreio</th>
-                        <th>Destinatário / Endereço</th>
-                        <th>Pedido Vinculado</th>
-                        <th>Motorista</th>
-                        <th>Status</th>
-                        <th>Último Checkpoint</th>
-                        <th class="text-end">Ações</th>
+                        <th scope="col">Entrega</th>
+                        <th scope="col">Destino</th>
+                        <th scope="col">Pedido e cliente</th>
+                        <th scope="col">Motorista</th>
+                        <th scope="col">Estado</th>
+                        <th scope="col">Último evento</th>
+                        <th scope="col" class="text-end">Ações</th>
                     </tr>
                 </thead>
-                <tbody class="fs-7">
-                    @if (!Model.Any())
+                <tbody>
+                    @if (entregas.Count == 0)
                     {
                         <tr>
-                            <td colspan="7" class="text-center py-4 text-muted">
-                                Nenhuma remessa encontrada para os filtros selecionados.
+                            <td colspan="7">
+                                <div class="cc-empty-state">
+                                    <i class="bi bi-truck" aria-hidden="true"></i>
+                                    <strong>@(temFiltros ? "Nenhuma entrega para estes filtros" : "Nenhuma entrega registrada")</strong>
+                                    <p>@(temFiltros ? "Altere a busca ou limpe os filtros para consultar as demais operações." : "Crie uma entrega para atribuir motorista, veículo e acompanhar a viagem.")</p>
+                                    @if (temFiltros)
+                                    {
+                                        <a asp-action="Index" class="btn btn-outline-secondary btn-sm">Limpar filtros</a>
+                                    }
+                                    else if (User.IsInRole("Admin"))
+                                    {
+                                        <a asp-action="Create" class="btn btn-mgl-primary btn-sm">Criar entrega</a>
+                                    }
+                                </div>
                             </td>
                         </tr>
                     }
-                    @foreach (var e in Model)
+                    @foreach (var entrega in entregas)
                     {
-                        var ultimoEvento = e.EventosRastreio.OrderByDescending(ev => ev.DataHora).FirstOrDefault();
+                        var ultimoEvento = entrega.EventosRastreio.OrderByDescending(ev => ev.DataHora).FirstOrDefault();
                         <tr>
+                            <th scope="row">
+                                <a asp-action="Details" asp-route-id="@entrega.Id" class="font-monospace text-decoration-none">@entrega.CodigoRastreio</a>
+                                <small class="d-block text-muted fw-normal">Criada em @entrega.DataCriacao.ToString("dd/MM/yyyy")</small>
+                            </th>
                             <td>
-                                <a asp-controller="Rastreio" asp-action="Index" asp-route-codigo="@e.CodigoRastreio" 
-                                   class="fw-bold text-primary font-monospace text-decoration-none">
-                                    <i class="bi bi-box-seam me-1"></i> @e.CodigoRastreio
-                                </a>
-                                <div class="fs-8 text-muted">Criado: @e.DataCriacao.ToString("dd/MM/yyyy")</div>
+                                <span class="fw-semibold d-block">@entrega.DestinatarioNome</span>
+                                <small class="text-muted d-block">@entrega.CidadeDestino/@entrega.EstadoDestino</small>
+                                <small class="text-muted">CEP: @entrega.CepDestino</small>
                             </td>
                             <td>
-                                <strong class="text-dark d-block">@e.DestinatarioNome</strong>
-                                <span class="text-muted fs-8">@e.CidadeDestino/@e.EstadoDestino • CEP: @e.CepDestino</span>
-                            </td>
-                            <td>
-                                @if (e.Pedido != null)
+                                @if (entrega.Pedido != null)
                                 {
-                                    <span class="font-monospace fw-semibold text-secondary">@e.Pedido.NumeroPedido</span>
-                                    <div class="fs-8 text-muted">@(e.Pedido.Cliente?.NomeFantasia ?? e.Pedido.Cliente?.RazaoSocial)</div>
-                                }
-                            </td>
-                            <td>
-                                @if (e.Motorista != null)
-                                {
-                                    <span class="badge bg-light text-dark border"><i class="bi bi-person me-1"></i> @e.Motorista.Nome</span>
+                                    <a asp-controller="Pedidos" asp-action="Details" asp-route-id="@entrega.Pedido.Id" class="font-monospace text-decoration-none">@entrega.Pedido.NumeroPedido</a>
+                                    <small class="d-block text-muted">@(entrega.Pedido.Cliente?.NomeFantasia ?? entrega.Pedido.Cliente?.RazaoSocial)</small>
                                 }
                                 else
                                 {
-                                    <span class="badge bg-secondary-subtle text-secondary">Sem motorista</span>
+                                    <small class="text-muted">Sem pedido vinculado</small>
                                 }
                             </td>
                             <td>
-                                @if (e.StatusEntrega == "Entregue")
+                                @if (entrega.Motorista != null)
                                 {
-                                    <span class="badge bg-success-subtle text-success border border-success-subtle">
-                                        <i class="bi bi-check-circle-fill"></i> Entregue
-                                    </span>
-                                }
-                                else if (e.StatusEntrega == "Em transporte")
-                                {
-                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
-                                        <i class="bi bi-truck"></i> Em transporte
-                                    </span>
+                                    <span class="d-block"><i class="bi bi-person" aria-hidden="true"></i> @entrega.Motorista.Nome</span>
                                 }
                                 else
                                 {
-                                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">
-                                        <i class="bi bi-hourglass-split"></i> Pendente
-                                    </span>
+                                    <span class="cc-status" data-status="warning">Sem motorista</span>
                                 }
                             </td>
+                            <td><partial name="_CommandStatus" model="entrega.StatusEntrega" /></td>
                             <td>
                                 @if (ultimoEvento != null)
                                 {
-                                    <div class="fw-semibold text-dark fs-8">@ultimoEvento.Titulo</div>
-                                    <div class="text-muted fs-8">@ultimoEvento.Localidade • @ultimoEvento.DataHora.ToString("dd/MM HH:mm")</div>
+                                    <span class="fw-semibold d-block">@ultimoEvento.Titulo</span>
+                                    <small class="text-muted d-block">@ultimoEvento.Localidade</small>
+                                    <small class="text-muted">@ultimoEvento.DataHora.ToString("dd/MM/yyyy HH:mm")</small>
                                 }
                                 else
                                 {
-                                    <span class="text-muted fs-8">Sem movimentações</span>
+                                    <small class="text-muted">Sem movimentações registradas</small>
                                 }
                             </td>
                             <td class="text-end">
-                                <div class="btn-group btn-group-sm">
-                                    <a asp-action="Navegar" asp-route-id="@e.Id" class="btn btn-warning text-dark fw-bold" title="Navegação GPS / Cockpit Waze">
-                                        <i class="bi bi-compass"></i>
-                                    </a>
-                                    <a asp-action="Details" asp-route-id="@e.Id" class="btn btn-outline-secondary" title="Gerenciar Checkpoints">
-                                        <i class="bi bi-gear"></i>
-                                    </a>
-                                    <a asp-controller="Rastreio" asp-action="Index" asp-route-codigo="@e.CodigoRastreio" 
-                                       class="btn btn-outline-info text-dark" title="Visualização Cliente (Mercado Livre)">
-                                        <i class="bi bi-geo-alt-fill"></i>
-                                    </a>
+                                <div class="d-flex flex-wrap justify-content-end gap-2">
+                                    <a asp-action="Details" asp-route-id="@entrega.Id" class="btn btn-outline-secondary btn-sm text-nowrap" aria-label="Abrir operação @entrega.CodigoRastreio">Abrir operação</a>
+                                    @if (entrega.StatusEntrega is "Pendente" or "Em transporte")
+                                    {
+                                        <a asp-action="Navegar" asp-route-id="@entrega.Id" class="btn btn-outline-secondary btn-sm" aria-label="Abrir navegação da entrega @entrega.CodigoRastreio" title="Navegação"><i class="bi bi-compass" aria-hidden="true"></i></a>
+                                    }
+                                    <a asp-controller="Rastreio" asp-action="Index" asp-route-codigo="@entrega.CodigoRastreio" class="btn btn-outline-secondary btn-sm" aria-label="Abrir rastreio público da entrega @entrega.CodigoRastreio" title="Rastreio público"><i class="bi bi-geo-alt" aria-hidden="true"></i></a>
                                 </div>
                             </td>
                         </tr>
@@ -163,5 +153,5 @@
                 </tbody>
             </table>
         </div>
-    </div>
-</div>
+    </section>
+</section>

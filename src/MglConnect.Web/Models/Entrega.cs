@@ -14,6 +14,7 @@ namespace MglConnect.Web.Models
 
         // ── Multi-Tenancy ──
         public Guid TenantId { get; set; } = Guid.Empty;
+        public Guid? RotaCalculoAtualId { get; set; }
 
         [Required]
         [Display(Name = "Pedido")]
@@ -89,6 +90,19 @@ namespace MglConnect.Web.Models
 
         public bool AtribuicaoAtiva { get; set; }
         public int Versao { get; set; }
+        // Declaration belongs to this trip, never to the next trip of this vehicle.
+        public string? PerfilViagemJson { get; set; }
+        public int PerfilViagemVersao { get; set; }
+
+        // Last accepted non-simulated GPS sample. The timestamp records server
+        // receipt, not a verified capture time or a complete position history.
+        public double? UltimaLatitudeGps { get; set; }
+        public double? UltimaLongitudeGps { get; set; }
+        public double? UltimaPrecisaoGps { get; set; }
+        public double? UltimaVelocidadeGps { get; set; }
+        public double? UltimaDirecaoGps { get; set; }
+        public DateTime? UltimoGpsCapturadoEmUtc { get; set; }
+        public DateTime? UltimoGpsRecebidoEmUtc { get; set; }
 
         [Display(Name = "Data de Emissão")]
         public DateTime DataCriacao { get; set; } = DateTime.UtcNow;

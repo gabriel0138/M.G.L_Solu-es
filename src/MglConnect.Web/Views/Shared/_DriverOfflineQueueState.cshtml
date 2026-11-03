@@ -1,0 +1,4 @@
+@model bool
+<div id="driverOfflineQueueState" class="@(Model ? "cc-cockpit-queue-state" : "alert alert-warning m-3")" role="status" hidden
+     data-offline-user="@User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value"
+     data-offline-tenant="@User.FindFirst("TenantId")?.Value"></div>

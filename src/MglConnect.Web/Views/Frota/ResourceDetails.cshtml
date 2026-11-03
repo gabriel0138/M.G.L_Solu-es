@@ -1,0 +1,33 @@
+@model MglConnect.Web.ViewModels.FleetResourceDetailsViewModel
+@{ var vehicle = Model.Veiculo != null; var br = System.Globalization.CultureInfo.GetCultureInfo("pt-BR"); ViewData["Title"] = vehicle ? "Detalhes do veículo" : "Detalhes do motorista"; }
+@section Styles { <link rel="stylesheet" href="~/css/command-roster.css" asp-append-version="true" /> }
+<div class="cc-roster">
+<header class="cc-section-heading cc-page-heading"><div><span class="cc-eyebrow">COMMAND CENTER / @(vehicle ? "FROTA" : "MOTORISTAS")</span><h1>@Model.Nome</h1><p>Cadastro e histórico operacional da sua organização.</p></div><div class="cc-quick-actions"><a asp-action="Index" class="btn btn-outline-secondary">Frota e motoristas</a><a asp-action="@(vehicle ? "EditarVeiculo" : "EditarMotorista")" asp-route-id="@Model.Id" class="btn btn-primary">Editar cadastro</a></div></header>
+<section class="cc-panel mb-4"><header class="cc-panel-header"><h2>Cadastro</h2><span class="cc-status" data-status="@(Model.Ativo ? "delivered" : "neutral")">@(Model.Ativo ? "Ativo" : "Inativo")</span></header><div class="cc-panel-body"><dl class="cc-roster-details">
+@if (Model.Veiculo is {} v) {
+<div><dt>Placa</dt><dd class="font-monospace">@v.Placa</dd></div><div><dt>Capacidade de carga</dt><dd>@(v.CapacidadeCargaKg > 0 ? $"{v.CapacidadeCargaKg.ToString("N2", br)} kg" : "Não informada")</dd></div>
+<div><dt>Dimensões totais (altura × largura × comprimento)</dt><dd>@v.AlturaMetros.ToString("N2", br) × @v.LarguraMetros.ToString("N2", br) × @v.ComprimentoMetros.ToString("N2", br) m</dd></div>
+<div><dt>Peso cadastrado (sem classificação PBT/PBTC)</dt><dd>@(v.PesoToneladas > 0 ? $"{v.PesoToneladas.ToString("N2", br)} t" : "Não informado")</dd></div><div><dt>Eixos</dt><dd>@v.QtdEixos</dd></div><div><dt>Tipo de carga</dt><dd>@v.TipoCarga</dd></div>
+} else { <div><dt>Login</dt><dd>@Model.Motorista!.Login</dd></div><div><dt>Telefone operacional</dt><dd>@(Model.Motorista.Telefone ?? "Não informado")</dd></div> }
+<div><dt>Vínculo operacional</dt><dd>@(Model.Comprometido ? "Atribuição ou turno ativo" : "Sem atribuição ou turno ativo registrado")</dd></div>
+</dl>
+<div class="cc-data-note"><i class="bi bi-info-circle" aria-hidden="true"></i><p>@(vehicle ? "Características cadastrais não homologam rotas para caminhões. Alterações operacionais e inativação são bloqueadas durante atribuições ou turnos ativos." : "O cadastro utiliza a conta de acesso existente. Nome e contato podem ser editados sem alterar a autorização de turno.")</p></div>
+<form method="post" asp-action="@(vehicle ? "SituacaoVeiculo" : "SituacaoMotorista")" class="cc-roster-actions" id="fleetStatusForm">
+<input type="hidden" name="id" value="@Model.Id" /><input type="hidden" name="selo" value="@Model.Selo" /><input type="hidden" name="ativo" value="@((!Model.Ativo).ToString().ToLowerInvariant())" />
+@if (Model.Ativo && Model.Comprometido) { <p class="cc-roster-meta mb-0">Encerre ou remova as atribuições e turnos ativos antes de inativar.</p><button class="btn btn-outline-secondary" type="submit" disabled>Inativação bloqueada</button> }
+else { <p class="cc-roster-meta mb-0">@(Model.Ativo ? "A inativação preserva o histórico e impede novas operações." : "Reativar permite novas atribuições, após as verificações de despacho.")</p><button class="btn btn-outline-secondary" type="submit">@(Model.Ativo ? "Inativar cadastro" : "Reativar cadastro")</button> }
+</form></div></section>
+<section class="cc-panel mb-4"><header class="cc-panel-header"><div><h2>Viagens vinculadas</h2><p>@Model.TotalViagens registro(s). Histórico de vínculos atuais das entregas.</p></div></header>
+@if (Model.Viagens.Count == 0) { <div class="cc-empty-state"><h3>Nenhuma viagem nesta página</h3><p>As entregas vinculadas aparecerão aqui após o despacho.</p></div> }
+else { <div class="table-responsive cc-roster-table" role="region" aria-label="Histórico de viagens" tabindex="0"><table class="table mb-0"><caption class="visually-hidden">Entregas vinculadas ao cadastro</caption><thead><tr><th scope="col">Entrega</th><th scope="col">Estado</th><th scope="col">Atribuição</th></tr></thead><tbody>
+@foreach (var trip in Model.Viagens) { <tr><th scope="row"><a asp-controller="Entregas" asp-action="Details" asp-route-id="@trip.Id">@trip.Codigo</a></th><td><partial name="_CommandStatus" model="trip.Status" /></td><td>@(trip.AtribuicaoAtiva ? "Ativa" : "Sem reserva ativa")</td></tr> }
+</tbody></table></div> }</section>
+<section class="cc-panel"><header class="cc-panel-header"><div><h2>Turnos registrados</h2><p>@Model.TotalTurnos registro(s). Horários em UTC; códigos de acesso não são exibidos.</p></div></header>
+@if (Model.Turnos.Count == 0) { <div class="cc-empty-state"><h3>Nenhum turno nesta página</h3><p>Os turnos efetivamente iniciados são registrados nesta consulta.</p></div> }
+else { <div class="table-responsive cc-roster-table" role="region" aria-label="Histórico de turnos" tabindex="0"><table class="table mb-0"><caption class="visually-hidden">Turnos registrados, com horários em UTC</caption><thead><tr><th scope="col">Entrega</th><th scope="col">Início (UTC)</th><th scope="col">Encerramento (UTC)</th><th scope="col">Situação</th></tr></thead><tbody>
+@foreach (var shift in Model.Turnos) { <tr><th scope="row"><a asp-controller="Entregas" asp-action="Details" asp-route-id="@shift.EntregaId">Entrega #@shift.EntregaId</a></th><td>@shift.Inicio.ToString("dd/MM/yyyy HH:mm", br)</td><td>@(shift.Fim?.ToString("dd/MM/yyyy HH:mm", br) ?? "Não registrado")</td><td>@(shift.Ativo ? "Ativo" : "Encerrado")</td></tr> }
+</tbody></table></div> }</section>
+<nav class="cc-roster-pagination" aria-label="Páginas do histórico"><span>Página @Model.Pagina de @Model.Paginas</span>
+@if (Model.Pagina > 1) { <a class="btn btn-outline-secondary" asp-action="@(vehicle ? "Veiculo" : "Motorista")" asp-route-id="@Model.Id" asp-route-pagina="@(Model.Pagina - 1)">Histórico anterior</a> }
+@if (Model.Pagina < Model.Paginas) { <a class="btn btn-outline-secondary" asp-action="@(vehicle ? "Veiculo" : "Motorista")" asp-route-id="@Model.Id" asp-route-pagina="@(Model.Pagina + 1)">Próximo histórico</a> }
+</nav></div>
