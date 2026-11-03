@@ -1,7 +1,7 @@
 # Handoff — M.G.L Connect
 
 **Atualizado em:** 2026-11-03
-**Estado:** snapshot de desenvolvimento reconstruído e validado por build/testes iniciais; publicação autorizada, sujeita à auditoria final. Não é homologado nem pronto para produção.
+**Estado:** snapshot de desenvolvimento validado por build/testes iniciais e auditoria final; publicação autorizada, ainda não enviada ao GitHub. Não é homologado nem pronto para produção.
 
 ## Branch e commits
 
@@ -13,7 +13,8 @@
   - `78e296c` — testes de regressão.
   - `043dcff` — script de esquema SQL Server.
   - `d6dcce0` — documentação técnica revisada e sanitizada.
-  - O commit atual adiciona coordenação de agentes, conformidade e registro final da publicação.
+  - `a7783ba` — coordenação de agentes e metodologia de conformidade.
+  - Dois commits adicionais registram as contagens e o resultado final da auditoria documental.
 - Ainda não publicado; o push da branch foi autorizado após aprovação das verificações finais.
 
 ## Escopo incluído e excluído
@@ -34,7 +35,7 @@ Excluídos: documentação de continuidade acadêmica com identificadores de est
 - Swagger e política de privacidade usam endereços `.invalid`, reservados para demonstrações e não destinados a entrega real de mensagens.
 - `appsettings*.json` não foram modificados em relação à base pública; a connection string é SQLite relativa e não contém usuário/senha.
 - O dado de cobertura derivado de OSM contém origem e atribuição ODbL. Não foi encontrado arquivo LICENSE de nível raiz; revisar as licenças de terceiros antes de redistribuição, sem confundir essa pendência com segredo ou afirmar licença própria.
-- Gitleaks não encontrou segredos nas verificações da árvore e do histórico até o commit anterior; a auditoria final incluirá este registro documental. O diff contém 222 arquivos (163 adicionados, 59 modificados), sem PDFs/DOCX/ZIP, bancos, backups, chaves ou binários privados.
+- Gitleaks não encontrou segredos na árvore e no histórico dos commits da branch. O diff contém 222 arquivos (163 adicionados, 59 modificados), sem PDFs/DOCX/ZIP, bancos, backups, chaves ou binários privados.
 
 ## Validação desta árvore
 
@@ -47,7 +48,7 @@ Excluídos: documentação de continuidade acadêmica com identificadores de est
 
 ## Próximos passos
 
-1. Repetir e registrar Gitleaks e verificação de caminhos/artefatos sobre o commit documental final.
+1. Repetir uma última vez Gitleaks e verificação de caminhos/artefatos sobre este registro documental.
 2. Executar somente o push autorizado da branch de publicação; não alterar nem fazer merge em `main`.
 3. Ampliar depois os testes unitários seguros, limitando-os a fixtures locais/InMemory/SQLite e adaptadores simulados.
 4. Fazer revisão técnica cruzada em worktree independente e analisar licenças de terceiros.
