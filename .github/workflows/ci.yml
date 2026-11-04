@@ -1,6 +1,7 @@
 name: MGL safe local-fixture validation
-# Prepared only. No workflow runs automatically on publication or PR creation.
 on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 permissions:
   contents: read
@@ -12,20 +13,46 @@ jobs:
       TMPDIR: ${{ runner.temp }}/mgl-fixtures
       MGLCONNECT_POSTGRES_TEST_CONNECTION: ''
       MGLCONNECT_SQLSERVER_TEST_CONNECTION: ''
+      PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           dotnet-version: '10.0.403'
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '24'
+          node-version: '24.21.0'
       - name: Private disposable fixture directory
         run: mkdir -m 700 -p "$TMPDIR"
       - run: dotnet restore MglConnect.sln
       - run: dotnet build MglConnect.sln --no-restore -c Debug
       - run: dotnet test MglConnect.sln --no-build --no-restore -c Debug
       - run: node --test src/MglConnect.Tests/JavaScript/*.test.cjs
-      - run: git diff --check
+      - name: Install pinned Gitleaks
+        run: |
+          set -euo pipefail
+          version=8.30.1
+          archive="$RUNNER_TEMP/gitleaks_${version}_linux_x64.tar.gz"
+          curl --fail --location --silent --show-error \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_x64.tar.gz" \
+            --output "$archive"
+          printf '%s  %s\n' \
+            '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb' "$archive" \
+            | sha256sum --check --status
+          tar -xzf "$archive" -C "$RUNNER_TEMP" gitleaks
+          "$RUNNER_TEMP/gitleaks" version
+      - name: Scan pull request commits for secrets
+        run: |
+          set -euo pipefail
+          if [ -n "$PR_BASE_SHA" ]; then
+            "$RUNNER_TEMP/gitleaks" git --log-opts "$PR_BASE_SHA..HEAD" --redact --no-banner
+          else
+            "$RUNNER_TEMP/gitleaks" dir --redact --no-banner .
+          fi
+      - name: Check pull request diff whitespace
+        if: github.event_name == 'pull_request'
+        run: git diff --check "$PR_BASE_SHA...HEAD"

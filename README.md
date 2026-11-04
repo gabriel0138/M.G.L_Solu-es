@@ -35,7 +35,7 @@ O script compila e inicia a aplicação em loopback, com banco/chaves de demonst
 | Motorista | Conta individual, atribuições, turno, GPS, emergência e POD; interface Razor/PWA, não aplicativo Flutter |
 | GPS/offline | Filas IndexedDB de GPS/POD, recibos e histórico persistente; não garante coleta com aplicativo fechado ou tela bloqueada |
 | POD | Imagem de assinatura e PDF autorizado; não é assinatura criptográfica nem certificação jurídica automática; POD privado não integra a projeção pública |
-| Rastreio público | Projeção mínima por código; não expõe o grafo privado da entrega |
+| Rastreio público | Códigos novos de alta entropia mantêm a projeção mínima e o SignalR; códigos legados de baixa entropia exibem somente status, sem detalhes pessoais ou atualização ao vivo |
 | Decimais de frota/perfil | Ponto invariável, até duas casas, sem milhares ou interpretação pela cultura do servidor; lista por eixo com o mesmo contrato |
 | Custos/frete/CO2 | Estimativas com parâmetros locais; não são despesas efetivas, piso legal vigente comprovado ou inventário certificado |
 | Equipamentos/manutenção | Sem módulo completo equivalente localizado; não acrescentado nesta consolidação |
@@ -48,7 +48,7 @@ Photon/OSRM públicos são demonstrações sem SLA. Leaflet exibe mapas e não h
 
 [Dockerfile](./Dockerfile), [Compose](./docker-compose.yml) e [configurações de demonstração](./deploy/) foram recuperados seletivamente. Uso Docker, SQL Server, scripts de browser e serviços externos exige autorização própria. A imagem, volumes, PDF no container, TLS externo e implantação não foram homologados nesta missão.
 
-O [workflow](./.github/workflows/ci.yml) é manual (`workflow_dispatch`), com ações fixadas por SHA, build/testes locais e sem Docker/PostgreSQL/SQL Server. Não dispara automaticamente no push/PR e não foi executado remotamente nesta entrega.
+O [workflow](./.github/workflows/ci.yml) executa em pull requests e também pode ser iniciado manualmente (`workflow_dispatch`). As ações são fixadas por SHA; a validação inclui restore/build/testes locais .NET, testes JavaScript, verificação do diff e Gitleaks, sem Docker/PostgreSQL/SQL Server. O check remoto só pode ser confirmado após publicar a atualização da branch.
 
 Documentos acadêmicos privados, backups, bancos e chaves ficam fora do conteúdo versionado atual. Arquivos acadêmicos já existentes no histórico público anterior não foram expurgados: esta missão não reescreve histórico. Avaliar eventual exposição anterior separadamente.
 
