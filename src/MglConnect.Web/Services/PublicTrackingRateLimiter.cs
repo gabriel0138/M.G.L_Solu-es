@@ -2,9 +2,8 @@ using System.Threading.RateLimiting;
 
 namespace MglConnect.Web.Services;
 
-// One budget per remote IP, shared by page/API requests and public hub joins.
-// This budget is local to the application instance; forwarded headers are not
-// trusted here. A proxy/cluster needs its own explicitly configured policy.
+// The per-IP budget is shared by page/API requests and public hub joins. It is
+// local to this application instance; a cluster needs shared edge rate limiting.
 public sealed class PublicTrackingRateLimiter : IDisposable
 {
     private readonly PartitionedRateLimiter<string> _limiter;

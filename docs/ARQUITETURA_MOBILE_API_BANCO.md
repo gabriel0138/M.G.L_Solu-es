@@ -44,6 +44,14 @@ O cliente móvel **não acessa SQL diretamente**. A separação em camadas é l�
 
 Implementação: [Program](../src/MglConnect.Web/Program.cs), [AuthController](../src/MglConnect.Web/Controllers/Api/AuthController.cs), [bearer](../src/MglConnect.Web/Services/ApiBearerAuthenticationHandler.cs), [conta ativa](../src/MglConnect.Web/Middleware/ActiveAccountMiddleware.cs), [contexto offline](../src/MglConnect.Web/Controllers/DriverOfflineController.cs), [contexto EF](../src/MglConnect.Web/Data/MglDbContext.cs).
 
+### Códigos públicos de rastreamento
+
+Novos códigos usam 80 bits aleatórios. Códigos antigos no formato de oito dígitos (`########`) ou `MGL-########BR` não são substituídos em massa: permanecem consultáveis somente para obter o status operacional genérico. Nome, localidades, datas, eventos e SignalR são omitidos para esses códigos de baixa entropia. Um administrador pode rotacionar um código individualmente; o código anterior deixa de funcionar, e o novo deve ser comunicado ao destinatário por canal autorizado. A rotação não exige migração de schema nem atualiza banco operacional automaticamente.
+
+Página, API e ingresso no hub compartilham um limite por endereço IP, configurável por `PublicTracking:PermitLimit` e `PublicTracking:WindowSeconds` (padrões: 30 operações por 60 segundos). Não há orçamento global nem contador por código legado: tentativas contra códigos inexistentes não consomem um pequeno orçamento compartilhado que possa bloquear todos os usuários, e a aplicação não mantém cache de chaves de código fornecidas pelo cliente. O limite local por IP não impede enumeração distribuída e não é compartilhado entre instâncias; implantações com réplicas precisam de rate limiting agregado no gateway. Códigos antigos mantêm status público reduzido; migração/rotação para códigos fortes deve ser gradual, individual e comunicada por canal autorizado, sem revogação em massa. Consulte [CONTINUACAO_B01_B02_RASTREIO_PUBLICO](./CONTINUACAO_B01_B02_RASTREIO_PUBLICO.md).
+
+O código de rastreio é um segredo de posse: a consulta pública o transporta na URL. A aplicação evita incluí-lo em mensagens de erro/auditoria e registra o ID da entrega em falhas de PDF; gateways e provedores de logs de acesso devem redigir caminhos de rastreamento e consultas SignalR. Rotacionar o código se houver suspeita de exposição.
+
 ## Contratos HTTP efetivos
 
 | Método e caminho | Contrato/consumidor real | Controle principal |
@@ -60,7 +68,7 @@ Implementação: [Program](../src/MglConnect.Web/Program.cs), [AuthController](.
 | GET `/api/gps/historico/{entregaId}` | Histórico paginado, período e qualidade | Cookie ou bearer; escopo do perfil/cliente |
 | POST `/api/entregas/{id}/pod` | Recebedor, assinatura e localidade | Motorista autorizado/admin; conteúdo idempotente |
 | GET `/api/entregas/{id}/pod-pdf` | PDF do comprovante | Admin/motorista/cliente/intermediador conforme recurso |
-| GET `/api/rastreio/{codigo}` | Projeção pública permitida | Código, controles de abuso e dados mínimos |
+| GET `/api/rastreio/{codigo}` | Projeção pública permitida | Código e limite por IP; legado fraco recebe somente status |
 | GET `/GpsHistorico` e `/GpsHistorico/Exportar` | Consulta/CSV administrativo | Admin/tenant, volume e CSV injection |
 | GET `/health/live`, `/health/ready` | Sondas mínimas de processo/conexão | Sem dados operacionais; restringir na borda externa |
 | GET `/operacional/saude` | Verificação administrativa existente | Admin, no-store |

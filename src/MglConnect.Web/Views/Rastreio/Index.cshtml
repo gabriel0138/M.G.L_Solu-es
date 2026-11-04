@@ -19,7 +19,9 @@
         "Cancelada" => "Entrega cancelada",
         _ => "Atualização operacional"
     };
-    var statusDetail = status switch
+    var statusDetail = entrega?.InformacoesPublicasReduzidas == true
+        ? "Por segurança, códigos antigos exibem apenas o status. Solicite ao remetente um código atualizado para ver detalhes."
+        : status switch
     {
         "Entregue" when entrega?.DataEntregaRealizada is DateTime data => $"Conclusão confirmada em {data:dd/MM/yyyy 'às' HH:mm} UTC.",
         "Entregue" => "A operação confirmou a conclusão desta entrega.",
@@ -92,7 +94,14 @@
                     <span id="publicDeliveryStatus" class="cc-status" data-status="@statusTone">@status</span>
                     <h2 id="publicTrackingHeadline">@statusTitle</h2>
                     <p id="publicTrackingDetail">@statusDetail</p>
-                    <span id="trackingConnectionStatus" class="cc-tracking-connection" role="status" aria-live="polite" data-state="connecting">Conectando atualizações…</span>
+                    @if (entrega.InformacoesPublicasReduzidas)
+                    {
+                        <span class="cc-tracking-connection" role="status" data-state="unavailable">Atualizações em tempo real indisponíveis para códigos antigos.</span>
+                    }
+                    else
+                    {
+                        <span id="trackingConnectionStatus" class="cc-tracking-connection" role="status" aria-live="polite" data-state="connecting">Conectando atualizações…</span>
+                    }
                 </div>
                 <div class="cc-tracking-code-card">
                     <span class="cc-tracking-label">Código de rastreamento</span>
@@ -123,7 +132,11 @@
                             var eventosOrdenados = entrega.EventosRastreio.OrderByDescending(e => e.DataHora).ToList();
                             bool isFirst = true;
                         }
-                        @if (eventosOrdenados.Count == 0)
+                        @if (entrega.InformacoesPublicasReduzidas)
+                        {
+                            <p id="publicTimelineEmpty" class="cc-tracking-timeline-empty">A linha do tempo detalhada não está disponível para códigos antigos.</p>
+                        }
+                        else if (eventosOrdenados.Count == 0)
                         {
                             <p id="publicTimelineEmpty" class="cc-tracking-timeline-empty">Nenhum evento compartilhado até o momento. Novas atualizações aparecerão aqui.</p>
                         }
@@ -150,18 +163,25 @@
                 <section class="cc-panel" aria-labelledby="trackingSummaryTitle">
                     <header class="cc-panel-header"><h2 id="trackingSummaryTitle">Resumo da entrega</h2><i class="bi bi-box-seam" aria-hidden="true"></i></header>
                     <div class="cc-panel-body">
-                        <div class="cc-tracking-route-summary" aria-label="Localidades da entrega">
-                            @if (!string.IsNullOrWhiteSpace(entrega.CidadeOrigem))
-                            {
-                                <div><span class="cc-tracking-route-point" aria-hidden="true"></span><div><span class="cc-tracking-label">Origem</span><strong>@entrega.CidadeOrigem / @entrega.EstadoOrigem</strong></div></div>
-                            }
-                            <div><span class="cc-tracking-route-point is-destination" aria-hidden="true"></span><div><span class="cc-tracking-label">Destino</span><strong>@entrega.CidadeDestino / @entrega.EstadoDestino</strong></div></div>
-                        </div>
-                        <dl class="cc-tracking-details">
-                            <div><dt>Destinatário</dt><dd>@entrega.DestinatarioNome</dd></div>
-                            <div><dt>Registro da entrega</dt><dd>@entrega.DataCriacao.ToString("dd/MM/yyyy")</dd></div>
-                            <div><dt>Previsão de entrega</dt><dd>@(entrega.DataPrevisaoEntrega?.ToString("dd/MM/yyyy") ?? "Ainda não informada")</dd></div>
-                        </dl>
+                        @if (entrega.InformacoesPublicasReduzidas)
+                        {
+                            <p>As localidades e datas foram ocultadas para proteger dados pessoais associados a códigos antigos.</p>
+                        }
+                        else
+                        {
+                            <div class="cc-tracking-route-summary" aria-label="Localidades da entrega">
+                                @if (!string.IsNullOrWhiteSpace(entrega.CidadeOrigem))
+                                {
+                                    <div><span class="cc-tracking-route-point" aria-hidden="true"></span><div><span class="cc-tracking-label">Origem</span><strong>@entrega.CidadeOrigem / @entrega.EstadoOrigem</strong></div></div>
+                                }
+                                <div><span class="cc-tracking-route-point is-destination" aria-hidden="true"></span><div><span class="cc-tracking-label">Destino</span><strong>@entrega.CidadeDestino / @entrega.EstadoDestino</strong></div></div>
+                            </div>
+                            <dl class="cc-tracking-details">
+                                <div><dt>Destinatário</dt><dd>@entrega.DestinatarioNome</dd></div>
+                                <div><dt>Registro da entrega</dt><dd>@(entrega.DataCriacao?.ToString("dd/MM/yyyy") ?? "Não informado")</dd></div>
+                                <div><dt>Previsão de entrega</dt><dd>@(entrega.DataPrevisaoEntrega?.ToString("dd/MM/yyyy") ?? "Ainda não informada")</dd></div>
+                            </dl>
+                        }
                     </div>
                 </section>
                 <section class="cc-panel cc-tracking-privacy" aria-labelledby="trackingPrivacyTitle">
@@ -180,9 +200,10 @@
     {
         <script>
             const trackingCode = @Json.Serialize(Model.Entrega.CodigoRastreio);
-            const normalizedTrackingCode = trackingCode.trim().toUpperCase();
             const copyButton = document.getElementById("copyTrackingCode");
             copyButton?.addEventListener("click", () => copiarCodigoRastreio(trackingCode, copyButton));
+            if (!@Json.Serialize(Model.Entrega.InformacoesPublicasReduzidas)) {
+            const normalizedTrackingCode = trackingCode.trim().toUpperCase();
             const connectionStatus = document.getElementById("trackingConnectionStatus");
             const showConnectionStatus = (text, state) => {
                 if (!connectionStatus) return;
@@ -313,6 +334,7 @@
                 connection.start().then(joinTrackingGroup).then(() => {
                     showConnectionStatus("Atualizações conectadas", "connected");
                 }).catch(() => showConnectionStatus("Atualizações indisponíveis", "unavailable"));
+            }
             }
         </script>
     }

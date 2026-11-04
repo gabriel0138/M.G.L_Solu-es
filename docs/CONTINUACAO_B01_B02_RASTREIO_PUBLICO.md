@@ -70,3 +70,23 @@ Pendências explícitas:
 - Eventos públicos agora exibem mensagens genéricas por estado. Etapas detalhadas derivadas de textos livres não são reconstruídas publicamente. O histórico privado mantém esses textos.
 
 Esta continuação resolve os cenários reproduzidos e amplia a evidência de B01/B02; não declara encerrada toda a auditoria nem inicia B03, migração SaaS, saneamento de dados ou publicação.
+
+## Atualização de segurança — 2026-11-04
+
+Esta seção complementa o estado histórico acima após auditoria independente do PR #1.
+
+- A classificação de baixa entropia cobre códigos decimais de oito dígitos e `MGL-########BR`. Eles continuam resolvendo para o registro correto, mas a página e a API expõem somente o status genérico: nome, origem/destino, datas e linha do tempo ficam vazios. Esses códigos não podem entrar em grupos públicos SignalR nem recebem broadcasts. Códigos aleatórios novos e GUIDs mantêm a projeção pública anterior.
+- O orçamento global de códigos legados foi removido para que tentativas, inclusive contra códigos inexistentes, não bloqueiem coletivamente todos os destinatários. Página, API e ingresso no hub compartilham apenas o limite por endereço IP (padrão: 30 operações por 60 segundos). Não há contador nem cache indexado por código fornecido pelo cliente, evitando estado por código e consumo de memória controlável por entradas arbitrárias. Esse limite local **não impede enumeração distribuída** por múltiplos endereços e não é compartilhado entre instâncias; deployments com réplicas precisam de rate limiting agregado no gateway.
+- Política escolhida: preservar temporariamente o acesso legado somente ao status, sem rotação ou revogação em massa, e oferecer migração gradual por rotação individual autenticada. Códigos de baixa entropia ainda permitem distinguir códigos válidos pela resposta e podem ser enumerados de forma distribuída; a projeção reduzida limita os dados expostos, mas não torna esses códigos equivalentes a segredos fortes.
+- Nenhum código existente é rotacionado automaticamente. Um administrador pode rotacionar uma entrega individual pela tela de detalhes. A ação cria um código aleatório novo, registra a operação sem armazenar os códigos nos detalhes de auditoria e invalida o anterior. Para preservar acesso legítimo: confirmar a identidade/autoridade de quem solicita, usar canal de contato previamente verificado para transmitir o novo código após a rotação e confirmar que o destinatário recebeu o acesso. Não fazer rotação em lote nem usar contatos não verificados. Não há migração de schema ou operação automática em banco operacional.
+- Testes cobrindo códigos MGL/números legados, códigos fortes, consultas inválidas, dados pessoais ocultos, hub bloqueado, limite compartilhado por IP e isolamento entre endereços e rotação individual estão em [PublicTrackingTests](../src/MglConnect.Tests/PublicTrackingTests.cs), [PublicTrackingRateLimiterTests](../src/MglConnect.Tests/PublicTrackingRateLimiterTests.cs) e [PublicTrackingRealtimeTests](../src/MglConnect.Tests/PublicTrackingRealtimeTests.cs).
+- [Workflow CI](../.github/workflows/ci.yml) agora executa em pull requests, com permissão `contents: read`, fixtures locais, .NET 10, JavaScript, whitespace e Gitleaks. PostgreSQL, SQL Server, Docker, deploy e serviços externos continuam fora do workflow. O scanner é baixado de release fixada e validado por SHA-256; relatórios usam redaction integral. Resultado remoto do PR deve ser confirmado separadamente, após o push.
+
+### Procedimento de rotação individual
+
+1. Verificar a solicitação com a organização/destinatário por um contato já cadastrado e confiável. A aplicação não valida destinatários nem envia o código por e-mail.
+2. Na tela autenticada da entrega, um administrador seleciona **Rotacionar código público** e confirma que o código anterior será invalidado.
+3. Comunicar o novo código por canal autorizado e verificar seu recebimento. Aguardar essa comunicação antes de promover rotação de outros registros.
+4. Confirmar que o novo código retorna status e a projeção completa permitida; confirmar que o anterior retorna 404. Registrar a ocorrência sem copiar códigos em tickets/logs.
+
+Se não houver meio confiável de contatar o destinatário, não rotacionar só para remover o formato legado: ele permanece acessível com status limitado até que haja solicitação/risco individualizado. Nenhum conteúdo histórico é apagado por esse procedimento.

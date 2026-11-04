@@ -598,6 +598,58 @@ namespace MglConnect.Web.Controllers
             return View(entrega);
         }
 
+        [HttpPost]
+        [Authorize(Roles = "Admin")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RotacionarCodigoRastreio(int id)
+        {
+            if (!TryGetCurrentUserId(out var adminId)) return Forbid();
+
+            var tenantId = await _context.Usuarios
+                .Where(u => u.Id == adminId && u.Ativo
+                    && (u.Perfil == "Admin" || u.Perfil == "Administrador"))
+                .Select(u => (Guid?)u.TenantId)
+                .FirstOrDefaultAsync();
+            if (tenantId == null) return Forbid();
+
+            var entrega = await _context.Entregas
+                .FirstOrDefaultAsync(e => e.Id == id && e.TenantId == tenantId.Value);
+            if (entrega == null) return NotFound();
+
+            string novoCodigo;
+            do
+            {
+                novoCodigo = _trackingService.GenerateTrackingCode();
+            }
+            while (await _context.Entregas.AnyAsync(e => e.CodigoRastreio == novoCodigo));
+
+            entrega.CodigoRastreio = novoCodigo;
+            entrega.Versao++;
+            _context.AuditoriaOperacional.Add(new AuditoriaOperacional
+            {
+                TenantId = entrega.TenantId,
+                AtorUsuarioId = adminId,
+                Evento = "CodigoRastreioRotacionado",
+                TipoEntidade = "Entrega",
+                IdentificadorEntidade = entrega.Id.ToString(),
+                Detalhes = "Código público rotacionado por solicitação administrativa.",
+                OcorridoEmUtc = DateTime.UtcNow
+            });
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException exception)
+            {
+                _logger?.LogWarning(exception, "Código de rastreio da entrega {EntregaId} foi atualizado concorrentemente.", id);
+                TempData["MensagemErro"] = "O código não foi alterado porque a entrega mudou em outra operação. Atualize e tente novamente.";
+                return RedirectToAction(nameof(Details), new { id });
+            }
+
+            TempData["MensagemSucesso"] = "Código atualizado. Compartilhe o novo código por um canal autorizado; o anterior deixou de funcionar.";
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
         [HttpGet]
         [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
         public async Task<IActionResult> Navegar(int id)

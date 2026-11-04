@@ -263,7 +263,7 @@ namespace MglConnect.Web.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Erro ao gerar PDF POD para entrega {CodigoRastreio}", entregaCompleta.CodigoRastreio);
+                _logger.LogError(ex, "Erro ao gerar PDF POD para entrega {EntregaId}", entregaCompleta.Id);
                 throw;
             }
         }

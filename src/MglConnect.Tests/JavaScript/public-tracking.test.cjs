@@ -99,7 +99,8 @@ function environment({ initialEvents = [], missingClient = false } = {}) {
     };
     const source = fs.readFileSync(path.join(__dirname, '../../MglConnect.Web/Views/Rastreio/Index.cshtml'), 'utf8');
     const script = source.match(/<script>([\s\S]*?)<\/script>/)[1]
-        .replace('@Json.Serialize(Model.Entrega.CodigoRastreio)', '"MGL-TEST"');
+        .replace('@Json.Serialize(Model.Entrega.CodigoRastreio)', '"MGL-TEST"')
+        .replace('@Json.Serialize(Model.Entrega.InformacoesPublicasReduzidas)', 'false');
     vm.runInNewContext(script, context);
     return {
         elements, handlers, calls, requests,

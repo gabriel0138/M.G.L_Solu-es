@@ -4,8 +4,9 @@ namespace MglConnect.Web.Services;
 // to anonymous pages, APIs or broadcasts.
 public sealed record PublicTrackingDetails(
     string CodigoRastreio, string StatusEntrega, string DestinatarioNome,
-    string? CidadeOrigem, string? EstadoOrigem, string CidadeDestino, string EstadoDestino,
-    DateTime DataCriacao, DateTime? DataPrevisaoEntrega, DateTime? DataEntregaRealizada,
+    string? CidadeOrigem, string? EstadoOrigem, string? CidadeDestino, string? EstadoDestino,
+    DateTime? DataCriacao, DateTime? DataPrevisaoEntrega, DateTime? DataEntregaRealizada,
+    bool InformacoesPublicasReduzidas,
     IReadOnlyList<PublicTrackingEvent> EventosRastreio);
 
 public sealed record PublicTrackingEvent(
@@ -20,6 +21,16 @@ public static class PublicTrackingProjection
         if (string.IsNullOrEmpty(value) || value.Length > 64
             || value.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '-')) return null;
         return value.ToUpperInvariant();
+    }
+
+    public static bool IsWeakLegacyCode(string? code)
+    {
+        var value = NormalizeCode(code);
+        return (value is { Length: 8 } && value.All(char.IsAsciiDigit))
+            || (value is { Length: 14 }
+                && value.StartsWith("MGL-", StringComparison.Ordinal)
+                && value.EndsWith("BR", StringComparison.Ordinal)
+                && value.Substring(4, 8).All(char.IsAsciiDigit));
     }
 
     public static string FirstName(string name) =>

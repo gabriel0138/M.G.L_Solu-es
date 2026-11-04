@@ -114,6 +114,27 @@ public class PublicTrackingRealtimeTests
     }
 
     [Fact]
+    public async Task WeakLegacyCodeCannotJoinRealtimeTrackingGroup()
+    {
+        await using var fixture = await SecurityHttpFixture.CreateAsync();
+        const string code = "MGL-12345678BR";
+        await fixture.ChangeAsync(db => db.Entregas.Single(e => e.Id == fixture.Deliveries[0].Id).CodigoRastreio = code);
+
+        var cookies = new CookieContainer();
+        using var anonymous = new SecurityHttpFixture.Session(fixture.Anonymous(cookies), cookies, "");
+        await using var hub = await SecurityHubConnection.ConnectAsync(fixture, anonymous, "/trackingHub");
+        var result = await hub.InvokeAsync("JoinTrackingGroup", code);
+        Assert.True(result.TryGetProperty("error", out var error));
+        Assert.Contains("Rastreamento não localizado", error.GetString());
+
+        using var response = await anonymous.Client.GetAsync($"/api/rastreio/{code}");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("Destinatário", json.RootElement.GetProperty("destinatario").GetString());
+        Assert.Empty(json.RootElement.GetProperty("eventos").EnumerateArray());
+    }
+
+    [Fact]
     public async Task NewCodesFitExistingSchemaAndRemainQueryable()
     {
         await using var fixture = await SecurityHttpFixture.CreateAsync();

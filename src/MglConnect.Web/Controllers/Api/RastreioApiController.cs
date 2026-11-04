@@ -30,6 +30,7 @@ namespace MglConnect.Web.Controllers.Api
             {
                 codigoRastreio = entrega.CodigoRastreio,
                 status = entrega.StatusEntrega,
+                informacoesPublicasReduzidas = entrega.InformacoesPublicasReduzidas,
                 destinatario = entrega.DestinatarioNome,
                 cidadeOrigem = entrega.CidadeOrigem,
                 ufOrigem = entrega.EstadoOrigem,

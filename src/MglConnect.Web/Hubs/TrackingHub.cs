@@ -23,7 +23,8 @@ namespace MglConnect.Web.Hubs
             if (!lease.IsAcquired)
                 throw new HubException("Muitas consultas. Aguarde antes de tentar novamente.");
             var key = PublicTrackingProjection.NormalizeCode(codigoRastreio);
-            if (key == null || !await _context.Entregas.AnyAsync(e => e.CodigoRastreio.ToUpper() == key))
+            if (key == null || PublicTrackingProjection.IsWeakLegacyCode(key)
+                || !await _context.Entregas.AnyAsync(e => e.CodigoRastreio.ToUpper() == key))
                 throw new HubException("Rastreamento não localizado.");
 
             await Groups.AddToGroupAsync(Context.ConnectionId, key);

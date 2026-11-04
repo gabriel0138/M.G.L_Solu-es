@@ -72,26 +72,29 @@ namespace MglConnect.Web.Services
             await _context.SaveChangesAsync();
 
             // TRANSMISSÃO WEBSOCKET SIGNALR EM TEMPO REAL
-            try
+            if (!PublicTrackingProjection.IsWeakLegacyCode(entrega.CodigoRastreio))
             {
-                var publicEvent = PublicTrackingProjection.Event(evento.DataHora, evento.StatusAssociado);
-                var payload = new
+                try
                 {
-                    codigoRastreio = entrega.CodigoRastreio.ToUpperInvariant(),
-                    status = PublicTrackingProjection.Status(entrega.StatusEntrega),
-                    titulo = publicEvent.Titulo,
-                    descricao = publicEvent.Descricao,
-                    localidade = publicEvent.Localidade,
-                    icone = publicEvent.Icone,
-                    dataHora = evento.DataHora
-                };
+                    var publicEvent = PublicTrackingProjection.Event(evento.DataHora, evento.StatusAssociado);
+                    var payload = new
+                    {
+                        codigoRastreio = entrega.CodigoRastreio.ToUpperInvariant(),
+                        status = PublicTrackingProjection.Status(entrega.StatusEntrega),
+                        titulo = publicEvent.Titulo,
+                        descricao = publicEvent.Descricao,
+                        localidade = publicEvent.Localidade,
+                        icone = publicEvent.Icone,
+                        dataHora = evento.DataHora
+                    };
 
-                await _hubContext.Clients.Group(entrega.CodigoRastreio.ToUpperInvariant()).SendAsync("ReceiveCheckpointUpdate", payload);
-            }
-            catch (Exception exception)
-            {
-                _logger?.LogWarning(exception,
-                    "Checkpoint persisted, but the live notification could not be sent.");
+                    await _hubContext.Clients.Group(entrega.CodigoRastreio.ToUpperInvariant()).SendAsync("ReceiveCheckpointUpdate", payload);
+                }
+                catch (Exception exception)
+                {
+                    _logger?.LogWarning(exception,
+                        "Checkpoint persisted, but the live notification could not be sent.");
+                }
             }
 
             return evento;
@@ -101,6 +104,19 @@ namespace MglConnect.Web.Services
         {
             var cleanCode = PublicTrackingProjection.NormalizeCode(codigoRastreio);
             if (cleanCode == null) return null;
+            var reduced = PublicTrackingProjection.IsWeakLegacyCode(cleanCode);
+
+            if (reduced)
+            {
+                var legacyStatus = await _context.Entregas.AsNoTracking()
+                    .Where(e => e.CodigoRastreio.ToUpper() == cleanCode)
+                    .Select(e => e.StatusEntrega)
+                    .FirstOrDefaultAsync();
+                return legacyStatus == null
+                    ? null
+                    : new(cleanCode, PublicTrackingProjection.Status(legacyStatus), "Destinatário",
+                        null, null, null, null, null, null, null, true, []);
+            }
 
             var row = await _context.Entregas.AsNoTracking()
                 .Where(e => e.CodigoRastreio.ToUpper() == cleanCode)
@@ -114,9 +130,10 @@ namespace MglConnect.Web.Services
                         .Select(ev => new { ev.DataHora, ev.StatusAssociado }).ToList()
                 }).FirstOrDefaultAsync();
             if (row == null) return null;
+
             return new(cleanCode, PublicTrackingProjection.Status(row.StatusEntrega),
                 PublicTrackingProjection.FirstName(row.DestinatarioNome), row.CidadeOrigem, row.EstadoOrigem,
-                row.CidadeDestino, row.EstadoDestino, row.DataCriacao, row.DataPrevisaoEntrega, row.DataEntregaRealizada,
+                row.CidadeDestino, row.EstadoDestino, row.DataCriacao, row.DataPrevisaoEntrega, row.DataEntregaRealizada, false,
                 row.Eventos.Select(ev => PublicTrackingProjection.Event(ev.DataHora, ev.StatusAssociado)).ToArray());
         }
 
@@ -193,26 +210,29 @@ namespace MglConnect.Web.Services
             }
 
             // Notificação SignalR em tempo real
-            try
+            if (!PublicTrackingProjection.IsWeakLegacyCode(entrega.CodigoRastreio))
             {
-                var publicEvent = PublicTrackingProjection.Event(evento.DataHora, evento.StatusAssociado);
-                var payload = new
+                try
                 {
-                    codigoRastreio = entrega.CodigoRastreio.ToUpperInvariant(),
-                    status = "Entregue",
-                    titulo = publicEvent.Titulo,
-                    descricao = publicEvent.Descricao,
-                    localidade = publicEvent.Localidade,
-                    icone = publicEvent.Icone,
-                    dataHora = agora
-                };
+                    var publicEvent = PublicTrackingProjection.Event(evento.DataHora, evento.StatusAssociado);
+                    var payload = new
+                    {
+                        codigoRastreio = entrega.CodigoRastreio.ToUpperInvariant(),
+                        status = "Entregue",
+                        titulo = publicEvent.Titulo,
+                        descricao = publicEvent.Descricao,
+                        localidade = publicEvent.Localidade,
+                        icone = publicEvent.Icone,
+                        dataHora = agora
+                    };
 
-                await _hubContext.Clients.Group(entrega.CodigoRastreio.ToUpperInvariant()).SendAsync("ReceiveCheckpointUpdate", payload);
-            }
-            catch (Exception exception)
-            {
-                _logger?.LogWarning(exception,
-                    "POD persisted, but the live notification could not be sent.");
+                    await _hubContext.Clients.Group(entrega.CodigoRastreio.ToUpperInvariant()).SendAsync("ReceiveCheckpointUpdate", payload);
+                }
+                catch (Exception exception)
+                {
+                    _logger?.LogWarning(exception,
+                        "POD persisted, but the live notification could not be sent.");
+                }
             }
 
             return true;

@@ -42,11 +42,27 @@
                class="btn btn-mgl-teal btn-sm fw-bold shadow-sm">
                 <i class="bi bi-eye-fill me-1"></i> Consulta pública
             </a>
+            @if (User.IsInRole("Admin"))
+            {
+                <form asp-action="RotacionarCodigoRastreio" method="post"
+                      onsubmit="return confirm('O código atual deixará de funcionar. Confirme que o novo poderá ser compartilhado por um canal autorizado.');">
+                    <input type="hidden" name="id" value="@Model.Id" />
+                    <button type="submit" class="btn btn-outline-warning btn-sm">Rotacionar código público</button>
+                </form>
+            }
             <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
                 <i class="bi bi-arrow-left me-1"></i> Voltar
             </a>
         </div>
     </div>
+    @if (TempData["MensagemSucesso"] is string mensagemSucesso)
+    {
+        <div class="alert alert-success" role="status">@mensagemSucesso</div>
+    }
+    @if (TempData["MensagemErro"] is string mensagemErro)
+    {
+        <div class="alert alert-danger" role="alert">@mensagemErro</div>
+    }
 
     <div class="row g-4">
         <!-- Coluna Esquerda: Informações Gerais, POD e Veículo -->
