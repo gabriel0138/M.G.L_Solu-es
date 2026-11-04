@@ -87,7 +87,7 @@ public sealed class DecimalContractHttpTests
             Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
             Assert.Equal(value, FleetManagementHttpTests.Input(await rejected.Content.ReadAsStringAsync(), field));
         }
-        foreach (var value in new[] { "18,60", "1,234.56", "1.234", "1;;2", "1;", "1; 2", "-1;30001.02", "0;30000.02", "1e2;29900.02" })
+        foreach (var value in new[] { "18,60", "1,234.56", "1.234", "1;;2", "1;", "1; 2", " ", "-1;30001.02", "0;30000.02", "1e2;29900.02" })
         {
             var data = Data(); data["AxleLoadsKg"] = value;
             using var rejected = await admin.Client.PostAsync(path + "/Perfil", new FormUrlEncodedContent(data));

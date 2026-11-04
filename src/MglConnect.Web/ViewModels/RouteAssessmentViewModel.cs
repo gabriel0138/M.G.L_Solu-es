@@ -29,6 +29,7 @@ public sealed class TruckProfileForm : IValidatableObject
     [StringLength(200)]public string? HazardClass {get;set;}
     [StringLength(1000)]public string? Permits {get;set;}
     [StringLength(200)]public string? AccessRequirements {get;set;}
+    [DisplayFormat(ConvertEmptyStringToNull=false)]
     [StringLength(1000)]public string? AxleLoadsKg {get;set;}
     public OperationalTruckProfile ToProfile(int trip)
     {
