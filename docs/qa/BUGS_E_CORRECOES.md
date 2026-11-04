@@ -1,5 +1,7 @@
 # Defeitos reproduzidos e correções — 2026-11-04
 
+> Registro da entrega 1. A implementação, validação e limitações atuais de circuito/GPS/cockpit estão na [Entrega 2](ENTREGA_2.md).
+
 Base: `01bcd8299a2c1108ee8de89c6743531ec32a92a5`. Branch: `feat/mgl-functional-gps-mobile`.
 
 | Defeito | Reprodução e causa | Correção | Evidência de regressão |

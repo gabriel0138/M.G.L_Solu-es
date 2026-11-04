@@ -1,5 +1,7 @@
 # Próximos incrementos do protótipo
 
+> Registro da entrega 1. A implementação, validação e limitações atuais de circuito/GPS/cockpit estão na [Entrega 2](ENTREGA_2.md).
+
 Esta primeira entrega implementa correções e demonstra uma jornada local; não encerra a homologação funcional do sistema inteiro.
 
 1. **P0 — rota viária controlada:** fixture determinística do contrato do provedor no servidor, curva/desvio/retorno e recálculo; comparar geometria serializada, progresso e todos os mapas. Na execução atual o provedor ficou desativado: orientação suspensa é o resultado correto. GPS observado permanece independente da geometria. Medir lentidão antes de otimizar consultas ou algoritmos.

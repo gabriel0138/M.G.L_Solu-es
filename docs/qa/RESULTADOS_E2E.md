@@ -1,5 +1,7 @@
 # Execução funcional — 2026-11-04
 
+> Registro da entrega 1. A implementação, validação e limitações atuais de circuito/GPS/cockpit estão na [Entrega 2](ENTREGA_2.md).
+
 Base `01bcd82`; implementação/regressões no commit `32d1057`, branch `feat/mgl-functional-gps-mobile`. O checkout de estabilização e a branch de integração foram preservados. Nenhum push ou merge.
 
 ## Ambiente e isolamento
