@@ -16,6 +16,7 @@ jobs:
       MGLCONNECT_POSTGRES_TEST_CONNECTION: ''
       MGLCONNECT_SQLSERVER_TEST_CONNECTION: ''
       PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      PUSH_BEFORE_SHA: ${{ github.event.before }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -52,8 +53,10 @@ jobs:
           set -euo pipefail
           if [ -n "$PR_BASE_SHA" ]; then
             "$RUNNER_TEMP/gitleaks" git --log-opts "$PR_BASE_SHA..HEAD" --redact --no-banner
+          elif [ -n "$PUSH_BEFORE_SHA" ] && [ "$PUSH_BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            "$RUNNER_TEMP/gitleaks" git --log-opts "$PUSH_BEFORE_SHA..HEAD" --redact --no-banner
           else
-            "$RUNNER_TEMP/gitleaks" dir --redact --no-banner .
+            "$RUNNER_TEMP/gitleaks" git --redact --no-banner
           fi
       - name: Check pull request diff whitespace
         if: github.event_name == 'pull_request'
