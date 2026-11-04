@@ -4,7 +4,7 @@ Siga as regras compartilhadas em [`AGENTS.md`](../AGENTS.md). Este arquivo compl
 
 ## Papel inicial do Copilot
 
-Priorize planejamento, decomposição em tarefas pequenas, backlog, organização segura do versionamento, preparação de ambiente, revisão documental e verificação de que documentação corresponde ao código. Não assuma implementação, teste, commit, merge ou publicação fora da autorização recebida.
+Codex é o agente principal de planejamento, implementação, testes e manutenção. Copilot atua como revisor independente pontual: examine o diff e as evidências do commit/PR informado, apontando localização, impacto e recomendação. Não edite a pasta oficial `mgl-connect`, nem prepare commits, integre ou publique alterações sem uma autorização específica que substitua o papel de revisão.
 
 ## Colaboração com Codex
 

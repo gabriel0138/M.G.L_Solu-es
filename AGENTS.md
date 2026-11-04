@@ -39,8 +39,11 @@ Fleetbase é uma referência externa e não integra o repositório M.G.L Connect
 
 ## Colaboração e transferência de contexto
 
+- A pasta de desenvolvimento diário é `mgl-connect`; as outras worktrees ficam preservadas como referências históricas. Codex conduz planejamento, implementação, testes e manutenção nesta pasta e administra branches quando necessário, sem exigir escolhas rotineiras do usuário.
+- Copilot faz revisão independente pontual, preferencialmente do diff/PR e sem editar a pasta oficial. Não atribuir autoavaliação do Codex a uma revisão do Copilot. Não alterar configurações globais para esse fluxo.
+- GitHub é a cópia versionada do conteúdo publicável; não substitui backup local criptografado de histórico, arquivos privados e alterações pendentes. Verificar backup antes de consolidações estruturais. Nunca publicar backups, chaves ou documentos acadêmicos pessoais.
 - Cada tarefa delegada identifica responsável, branch/worktree, arquivos previstos, objetivo, critérios de aceite, testes necessários e revisor.
-- Copilot prioriza planejamento, escopo, organização, preparação de ambiente e revisão documental. Codex prioriza implementação complexa, testes/regressões e auditoria técnica. As atribuições podem ser ajustadas por tarefa, sem remover as salvaguardas comuns.
+- Codex é o agente principal de engenharia. Copilot é revisor quando solicitado; revisão deve informar commit, escopo, evidências, achados e limitações, sem integrar automaticamente.
 - Não permita alterações simultâneas no mesmo checkout. Antes de paralelizar, confira os worktrees e use worktrees/branches isolados.
 - Nenhum agente faz merge ou push automaticamente.
 - Handoffs registram commit-base, arquivos/diffs, evidências, comandos executados, resultados, limitações, pendências e próximo passo autorizado. Trate relatos de outro agente como alegações até que evidências verificáveis os sustentem.

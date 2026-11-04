@@ -8,6 +8,17 @@ Copilot e Codex podem revisar o trabalho um do outro. Nenhum dos dois modifica s
 
 ## Registros
 
+### 2026-11-04 — consolidação preservada para publicação controlada
+
+- Autor: Codex. Base `6966b11e2e12ecfd477732649bee78e0dcedc455`; pasta oficial `mgl-connect`, branch `integration/mgl-unificado-2026-11`. Nenhum merge em main.
+- Backup criptografado novo verificado antes da criação: AES-256, 7.800 arquivos/links, hash e permissões em [CONSOLIDACAO](./CONSOLIDACAO.md). Fontes/estados estáveis; índice original e seis estados históricos preservados. Backup anterior verificado pelo usuário.
+- Código da aplicação/testes mantido na base decimal. Recuperados seletivamente 22 arquivos de infraestrutura/ferramentas, com sintaxe verificada; 12 checks estáticos aprovados. Workflow substituído por versão apenas manual, sem Docker/bancos externos automáticos, ações fixadas por SHA.
+- Privacidade: três documentos acadêmicos herdados foram retirados apenas do índice e ignorados, com cópias locais/originais preservadas. Não se expurgou histórico já público. Nada privado/backup/Fleetbase foi acrescentado aos novos commits.
+- Restore/build Debug aprovados, 0 warnings/erros; suíte C# 618 aprovados/0 falhos/9 ignorados em 627 casos; JS 107/0/0. SQLite/Kestrel descartáveis; não executados Docker, browser, PostgreSQL/SQL Server, smoke Release, APIs externas ou deploy.
+- Revisão independente: pendente até haver resultado efetivo do Copilot no PR. Solicitação não é aprovação. Não ativar fix automático, automerge ou edição concorrente.
+- Diff completo e conjunto exato de caminhos: [vs main](./ARQUIVOS_VS_MAIN.txt) e [vs snapshot](./ARQUIVOS_VS_PUBLICADO.txt). Publicação autorizada condicionada a segurança/testes/remoto; merge exige aprovação final do usuário.
+
+
 ### 2026-11-04 — Missão Codex 02: implementação P0 para revisão pelo Copilot
 
 - Autor: Codex, implementação autorizada. Revisor previsto: GitHub Copilot, **revisão independente ainda pendente**. Não atribuir esta execução ou seus testes ao Copilot.

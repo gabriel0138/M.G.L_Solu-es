@@ -15,6 +15,13 @@ Estimativas relativas, a refinar após validação. Nenhum item abaixo autoriza 
 | B9 | P0 | Revisar correção dos HTTP 500 e cultura decimal | Alto | Alto | Médio | Correção local `bbcb189` pronta; revisão independente do Codex em branch/worktree próprios. Confirmar os 13 casos, precisão decimal e respostas 404/400 sem relaxar autorização. |
 | B10 | P0 | Revisar contrato decimal determinístico implementado pelo Codex | Alto | Alto | Médio | Branch `fix/mgl-decimal-contract-p0`, base `a888d56`; revisão independente pelo Copilot pendente. Conferir rejeição de vírgula/milhares/escala/arredondamento, cargas por eixo, ModelState, persistência e isolamento; [handoff atual](./HANDOFF.md#missão-codex-02--contrato-decimal-p0). |
 
+## Consolidação e pasta única — 2026-11-04
+
+- Pasta diária: `mgl-connect`; Codex principal, Copilot somente revisão pontual. Outras worktrees preservadas e sem uso ativo.
+- Branch `integration/mgl-unificado-2026-11` sobre `6966b11`; backup criptografado novo verificado antes de alterações estruturais. Seleção e inventário em [CONSOLIDACAO](./CONSOLIDACAO.md).
+- Próximo P0: revisão independente do diff e aprovação humana antes de merge. Push da branch autorizado apenas após backup, segurança e testes; nenhuma autorização de merge.
+- Próximos P1: homologações descartáveis por provedor, container, GPS físico, backup offsite e eventual exposição histórica de documentos acadêmicos. Não iniciar como parte da consolidação.
+
 ## Situação atual — 2026-11-04
 
 - B9 identificou a ambiguidade residual do binder e da lista por eixo. B10 implementado pelo Codex, com commits locais separados de código/testes e documentação; Copilot será revisor, ainda não acionado como executor nesta missão.

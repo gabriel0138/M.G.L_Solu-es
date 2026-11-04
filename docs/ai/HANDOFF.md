@@ -1,7 +1,15 @@
 # Handoff — M.G.L Connect
 
 **Atualizado em:** 2026-11-04
-**Estado atual:** implementação do contrato decimal P0 pelo Codex na branch local `fix/mgl-decimal-contract-p0`, baseada em `a888d56414fb54f3aefec86914fcef34c5622a74`. Revisão independente pelo Copilot pendente. Sem push/merge; não é homologação operacional. Os registros de 2026-11-03 abaixo são históricos e não definem o contrato atual.
+**Estado atual:** consolidação na pasta oficial `mgl-connect`, branch `integration/mgl-unificado-2026-11`, baseada em `6966b11e2e12ecfd477732649bee78e0dcedc455`. Backup novo criptografado verificado antes da criação da worktree. Publicação condicionada à validação e SHA remoto na entrega; merge em main depende de aprovação final. Revisão independente pendente. Consulte [CONSOLIDACAO](./CONSOLIDACAO.md) para seleção, preservação e limites. O contrato decimal abaixo permanece vigente; relatos anteriores são históricos.
+
+## Consolidação — evidência local
+
+- Base decimal preservada; 22 arquivos de infraestrutura/ferramentas recuperados seletivamente; CI apenas manual. Classificação, backup e limites em [CONSOLIDACAO](./CONSOLIDACAO.md).
+- Validação desta nova árvore: restore/build Debug 0 warnings/erros; C# **618 aprovados, 0 falhos, 9 ignorados de 627**; JS **107/0/0**; 12 checks estáticos e sintaxe dos scripts aprovados; Gitleaks da árvore sem ocorrências. Os nove externos não foram executados.
+- Seis worktrees anteriores preservadas, inclusive pendências e índice original. Binários acadêmicos retirados só do índice oficial; arquivos continuam locais e no backup. Não é expurgo do histórico público.
+- Revisão Copilot e aprovação final do merge são etapas distintas; nenhuma autoavaliação vale por revisão independente. PR deve analisar apenas diff, sem execução externa/fix automático.
+- Commits desta consolidação: consultar `git log --oneline 6966b11..HEAD`; SHAs e confirmação remota ficam registrados na entrega/PR. Arquivos exatos em [vs main](./ARQUIVOS_VS_MAIN.txt) e [vs snapshot](./ARQUIVOS_VS_PUBLICADO.txt).
 
 ## Missão Codex 02 — contrato decimal P0
 
