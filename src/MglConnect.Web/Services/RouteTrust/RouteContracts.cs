@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Security.Cryptography;
 using MglConnect.Web.Models;
+using MglConnect.Web.ModelBinding;
 namespace MglConnect.Web.Services.RouteTrust;
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -36,6 +37,8 @@ public sealed class OperationalTruckProfile
         var errors=new List<string>();if(ReadError!=null)errors.Add(ReadError);
         foreach(var pair in new[]{("altura",Height,"m"),("largura",Width,"m"),("comprimento",Length,"m"),("tara",Tare,"kg"),("PBT",Pbt,"kg"),("PBTC",Pbtc,"kg"),("carga",Payload,"kg")})
             if(pair.Item2 is {} value&&((value.Value<0||value.Value==0&&pair.Item1!="carga")||value.Value>1000000||value.Unit!=pair.Item3||string.IsNullOrWhiteSpace(value.Reference)||value.Reference.Length>200||!Enum.IsDefined(value.Origin)))errors.Add($"Dado/unidade inválido: {pair.Item1}.");
+        if(new[]{Height,Width,Length,Tare,Pbt,Pbtc,Payload}.Any(m=>m!=null&&!DecimalFormContract.HasSupportedScale(m.Value))
+            ||AxleLoads.Any(m=>!DecimalFormContract.HasSupportedScale(m.Value)))errors.Add("Medidas devem ter no máximo duas casas decimais.");
         if(Axles is <1 or >30)errors.Add("Número de eixos inválido.");
         if(AxleLoads.Count>30||AxleLoads.Any(m=>m.Value<=0||m.Unit!="kg"||string.IsNullOrWhiteSpace(m.Reference))||AxleLoads.Count>0&&AxleLoads.Count!=Axles)errors.Add("Informe uma carga em kg para cada eixo conhecido.");
         if(Pbt!=null&&Pbtc!=null&&Pbtc.Value<Pbt.Value)errors.Add("PBTC não pode ser menor que PBT informado.");

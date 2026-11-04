@@ -43,7 +43,6 @@ public sealed class DecimalRangeCultureTests
 
     [Theory]
     [InlineData("18.60")]
-    [InlineData("18,60")]
     public async Task HtmlDecimalBinderPreservesDecimalValueUnderBrazilianCulture(string postedValue)
     {
         var originalCulture = CultureInfo.CurrentCulture;

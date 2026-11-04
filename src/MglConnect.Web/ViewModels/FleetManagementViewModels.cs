@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using MglConnect.Web.ModelBinding;
 
 namespace MglConnect.Web.ViewModels;
@@ -10,15 +11,15 @@ public sealed class FleetVehicleForm : IValidatableObject
     public string? Selo { get; set; }
     [Required, StringLength(80)] public string Modelo { get; set; } = "";
     [Required, StringLength(10)] public string Placa { get; set; } = "";
-    [ModelBinder(BinderType = typeof(HtmlDecimalModelBinder))]
+    [BindRequired, ModelBinder(BinderType = typeof(HtmlDecimalModelBinder))]
     [Range(typeof(decimal), "0", "99999999.99", ParseLimitsInInvariantCulture = true)] public decimal CapacidadeCargaKg { get; set; }
-    [ModelBinder(BinderType = typeof(HtmlDecimalModelBinder))]
+    [BindRequired, ModelBinder(BinderType = typeof(HtmlDecimalModelBinder))]
     [Range(typeof(decimal), "0", "999.99", ParseLimitsInInvariantCulture = true)] public decimal AlturaMetros { get; set; }
-    [ModelBinder(BinderType = typeof(HtmlDecimalModelBinder))]
+    [BindRequired, ModelBinder(BinderType = typeof(HtmlDecimalModelBinder))]
     [Range(typeof(decimal), "0", "999.99", ParseLimitsInInvariantCulture = true)] public decimal LarguraMetros { get; set; }
-    [ModelBinder(BinderType = typeof(HtmlDecimalModelBinder))]
+    [BindRequired, ModelBinder(BinderType = typeof(HtmlDecimalModelBinder))]
     [Range(typeof(decimal), "0", "999.99", ParseLimitsInInvariantCulture = true)] public decimal ComprimentoMetros { get; set; }
-    [ModelBinder(BinderType = typeof(HtmlDecimalModelBinder))]
+    [BindRequired, ModelBinder(BinderType = typeof(HtmlDecimalModelBinder))]
     [Range(typeof(decimal), "0", "9999.99", ParseLimitsInInvariantCulture = true)] public decimal PesoToneladas { get; set; }
     [Range(1, 20)] public int QtdEixos { get; set; }
     [Required, StringLength(50)] public string TipoCarga { get; set; } = "";
@@ -31,7 +32,7 @@ public sealed class FleetVehicleForm : IValidatableObject
         {
             if (value == 0 && Id == 0)
                 yield return new ValidationResult("Informe um valor maior que zero.", [field]);
-            if (decimal.Round(value, 2) != value)
+            if (!DecimalFormContract.HasSupportedScale(value))
                 yield return new ValidationResult("Informe no máximo duas casas decimais.", [field]);
         }
         if (PesoToneladas > 0 && CapacidadeCargaKg > PesoToneladas * 1000)

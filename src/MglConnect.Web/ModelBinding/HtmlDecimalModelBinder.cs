@@ -1,4 +1,3 @@
-using System.Globalization;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace MglConnect.Web.ModelBinding;
@@ -12,8 +11,13 @@ public sealed class HtmlDecimalModelBinder : IModelBinder
             return Task.CompletedTask;
 
         bindingContext.ModelState.SetModelValue(bindingContext.ModelName, valueResult);
+        if (valueResult.Values.Count != 1)
+        {
+            bindingContext.ModelState.TryAddModelError(bindingContext.ModelName, DecimalFormContract.Error);
+            return Task.CompletedTask;
+        }
         var rawValue = valueResult.FirstValue;
-        if (string.IsNullOrWhiteSpace(rawValue))
+        if (string.IsNullOrEmpty(rawValue))
         {
             if (Nullable.GetUnderlyingType(bindingContext.ModelMetadata.ModelType) != null)
                 bindingContext.Result = ModelBindingResult.Success(null);
@@ -23,13 +27,10 @@ public sealed class HtmlDecimalModelBinder : IModelBinder
             return Task.CompletedTask;
         }
 
-        var culture = rawValue.Contains('.')
-            ? CultureInfo.InvariantCulture
-            : CultureInfo.CurrentCulture;
-        if (decimal.TryParse(rawValue, NumberStyles.Number, culture, out var value))
+        if (DecimalFormContract.TryParse(rawValue, out var value))
             bindingContext.Result = ModelBindingResult.Success(value);
         else
-            bindingContext.ModelState.TryAddModelError(bindingContext.ModelName, "Informe um número válido.");
+            bindingContext.ModelState.TryAddModelError(bindingContext.ModelName, DecimalFormContract.Error);
 
         return Task.CompletedTask;
     }
