@@ -44,6 +44,10 @@ async function viewport(width, height) {
     await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
 }
 async function screenshot(name) {
+    // Full-document captures otherwise place sticky/fixed elements at the
+    // current scroll offset, creating apparent overlaps absent in the viewport.
+    const scroll = await evaluate('({x:scrollX,y:scrollY})');
+    await evaluate('window.scrollTo({left:0,top:0,behavior:"instant"});new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
     const metrics = await command('Page.getLayoutMetrics');
     const size = metrics.cssContentSize;
     const image = await command('Page.captureScreenshot', {
@@ -51,6 +55,7 @@ async function screenshot(name) {
         clip: { x: 0, y: 0, width: size.width, height: size.height, scale: 1 }
     });
     writeFileSync(join(directory, name + '.png'), Buffer.from(image.data, 'base64'));
+    await evaluate(`window.scrollTo({left:${scroll.x},top:${scroll.y},behavior:"instant"})`);
 }
 async function key(key, code = key, modifiers = 0) {
     await command('Input.dispatchKeyEvent', { type: 'keyDown', key, code, modifiers });

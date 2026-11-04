@@ -20,7 +20,8 @@ namespace MglConnect.Web.Services
         private const double CajamarDepotLatitude = -23.355797;
         private const double CajamarDepotLongitude = -46.877658;
         private static readonly PublicApiThrottle PhotonThrottle = new(TimeSpan.FromSeconds(1));
-        private static readonly PublicApiThrottle OsrmThrottle = new(TimeSpan.FromSeconds(1));
+        private ProviderRouteReply? _lastOsrmReply;
+        private readonly OsrmRoadRouter? _osrm;
 
         private readonly IConfiguration _configuration;
         private readonly MglDbContext _context;
@@ -40,7 +41,7 @@ namespace MglConnect.Web.Services
             IMemoryCache routeCache,
             IConfiguration configuration,
             ILogger<TruckRoutingService> logger,
-            IRouteDeviationEngine deviationEngine, RouteTrustService? trust = null,IHttpContextAccessor? request = null,IExperimentalTruckRouter? experimental = null, ControlledRouteDemo? demo = null)
+            IRouteDeviationEngine deviationEngine, RouteTrustService? trust = null,IHttpContextAccessor? request = null,IExperimentalTruckRouter? experimental = null, ControlledRouteDemo? demo = null, OsrmRoadRouter? osrm = null)
         {
             _context = context;
             _httpClientFactory = httpClientFactory;
@@ -48,7 +49,7 @@ namespace MglConnect.Web.Services
             _configuration = configuration;
             _logger = logger;
             _deviationEngine = deviationEngine;
-            _trust = trust;_request=request;_experimental=experimental;_demo=demo;
+            _trust = trust;_request=request;_experimental=experimental;_demo=demo;_osrm=osrm;
 
             // Validar gabarito físico imediatamente após injeção de dependência
             // (para garantir que parâmetros padrão sejam consistentes)
@@ -466,7 +467,7 @@ namespace MglConnect.Web.Services
             if (_demo?.Enabled == true) return await _demo.ForTripAsync(entregaId, Abort);
 
             var cachedTrust=_trust==null?null:await _trust.CachedForReadAsync(entregaId);
-            if(cachedTrust!=null)return new TruckRoutePlan{Confianca=cachedTrust,PerfilVeiculo=perfilVeiculo,RotaDisponivel=cachedTrust.Geometry.Count>1,
+            if(cachedTrust!=null)return new TruckRoutePlan{Confianca=cachedTrust,ProviderDurationSeconds=cachedTrust.ProviderDurationSeconds,ProviderResponseSha256=cachedTrust.ProviderResponseSha256,GeometrySourceReference=cachedTrust.GeometrySourceReference,ProviderName=cachedTrust.Provider,ProviderProfile=cachedTrust.RoutingProfile,GeometrySource=cachedTrust.GeometrySource??"Unavailable",PerfilVeiculo=perfilVeiculo,RotaDisponivel=cachedTrust.Geometry.Count>1,
                 TrajetoCoordenadas=cachedTrust.Geometry,PassosNavegacao=cachedTrust.Steps,DistanciaKm=cachedTrust.EstimatedDistanceKm??0,TempoEstimadoMinutos=cachedTrust.EstimatedMinutes??0,
                 AvisoRota=cachedTrust.NavigationAllowed?"Verificação limitada ao escopo indicado.":"Orientação suspensa: dados insuficientes, incompatíveis ou sintéticos."};
             var ticket = _trust == null ? null : await _trust.BeginAsync(entregaId,ct:Abort);
@@ -621,9 +622,8 @@ namespace MglConnect.Web.Services
                 PerfilVeiculo = isPesado ? "Pesado" : "Leve",
                 CorredorRodoviario = "Nova rota recalculada a partir da posição atual",
                 DistanciaKm = rotaGeo.Value.distanciaKm,
-                TempoEstimadoMinutos = isPesado
-                    ? (int)Math.Max(15, Math.Round((double)rotaGeo.Value.distanciaKm / 55.0 * 60.0))
-                    : (int)Math.Max(10, Math.Round((double)rotaGeo.Value.distanciaKm / 80.0 * 60.0)),
+                TempoEstimadoMinutos = rotaGeo.Value.tempoMinutos,
+                ProviderName=_lastOsrmReply?.Provider??"OSRM",ProviderProfile="driving",GeometrySource=_lastOsrmReply?.GeometrySource??"RoadNetwork",ProviderDurationSeconds=_lastOsrmReply?.DurationSeconds,ProviderResponseSha256=_lastOsrmReply?.ResponseSha256,GeometrySourceReference=_lastOsrmReply?.SourceReference,
                 TrajetoCoordenadas = rotaGeo.Value.coords,
                 PassosNavegacao = rotaGeo.Value.passos,
                 RotaDisponivel = true,
@@ -663,7 +663,9 @@ namespace MglConnect.Web.Services
             string perfilVeiculo = "Pesado")
         {
             // Cache key based on route parameters - hashed for stability
-            var cacheKey = $"rota_pesada_{origem?.Trim().ToUpperInvariant()}_{destino?.Trim().ToUpperInvariant()}_{perfilVeiculo}_{alturaMetros}_{pesoToneladas}_{larguraMetros}_{qtdEixos}_{tipoCarga}";
+            _lastOsrmReply=null;
+            var cacheKey = "rota_pesada_"+RouteFingerprint.Hash(new { origem=origem?.Trim().ToUpperInvariant(),destino=destino?.Trim().ToUpperInvariant(),perfilVeiculo,alturaMetros,pesoToneladas,larguraMetros,qtdEixos,tipoCarga,
+                provider=_configuration["Routing:OsrmBaseUrl"],capture=_configuration["Routing:HistoricalGeometryPath"] });
             
             if (_routeCache.TryGetValue(cacheKey, out TruckRoutePlan? cachedPlano))
             {
@@ -689,12 +691,12 @@ namespace MglConnect.Web.Services
             {
                 // PERFIL 1: CARGA PESADA (CAMINHÕES / CARRETAS)
                 plano.CorredorRodoviario = "Percurso rodoviário entre os endereços informados; confirme as restrições do veículo.";
-                plano.AlturaVeiculo = alturaMetros > 0 ? alturaMetros : 4.20m;
-                plano.PesoVeiculo = pesoToneladas > 0 ? pesoToneladas : 28.5m;
+                plano.AlturaVeiculo = Math.Max(0,alturaMetros);
+                plano.PesoVeiculo = Math.Max(0,pesoToneladas);
                 plano.EixosVeiculo = qtdEixos > 0 ? qtdEixos : 5;
                 
                 // Pedágio multiplicado pelos eixos comerciais
-                plano.CustoPedagioEstimado = plano.EixosVeiculo * 18.50m;
+                plano.CustoPedagioEstimado = null; // No route-specific toll provider.
 
                 // 1. Alerta de Gabarito de Altura (evitamento de pontes e viadutos baixos do centro de SP)
                 if (plano.AlturaVeiculo >= 4.10m)
@@ -713,7 +715,7 @@ namespace MglConnect.Web.Services
                 {
                     Tipo = "Peso",
                     Severidade = "Atencao",
-                    Mensagem = $"Veículo com massa cadastrada de {plano.PesoVeiculo:F1}t (natureza não verificada), com {plano.EixosVeiculo} eixos. O traçado não verifica limites locais nem localização de balanças.",
+                    Mensagem = plano.PesoVeiculo>0 ? $"Massa informada: {plano.PesoVeiculo:F1}t (natureza não verificada), {plano.EixosVeiculo} eixos. Limites locais e balanças não verificados." : "Massa não informada. Perfil físico e restrições não verificados.",
                     Localizacao = "Verificar restrições ao longo de toda a rota"
                 });
 
@@ -743,12 +745,12 @@ namespace MglConnect.Web.Services
             {
                 // PERFIL 2: CARGA LEVE (UTILITÁRIOS / VANS / CARROS)
                 plano.CorredorRodoviario = "Percurso rodoviário entre os endereços informados.";
-                plano.AlturaVeiculo = alturaMetros > 0 ? alturaMetros : 2.10m;
-                plano.PesoVeiculo = pesoToneladas > 0 ? pesoToneladas : 2.8m;
+                plano.AlturaVeiculo = Math.Max(0,alturaMetros);
+                plano.PesoVeiculo = Math.Max(0,pesoToneladas);
                 plano.EixosVeiculo = 1; // Tarifa base 1 eixo simples
 
                 // Tarifa base de 1 eixo simples (veículo utilitário leve)
-                plano.CustoPedagioEstimado = 33.80m;
+                plano.CustoPedagioEstimado = null;
 
                 // Alerta informativo: isenção de pesagem e liberação de tráfego urbano
                 plano.Alertas.Add(new TruckRestrictionAlert
@@ -780,6 +782,9 @@ namespace MglConnect.Web.Services
                 plano.PassosNavegacao = rotaGeo.Value.passos;
                 plano.DistanciaKm = rotaGeo.Value.distanciaKm;
                 plano.RotaDisponivel = true;
+                plano.ProviderName=_lastOsrmReply?.Provider??"OSRM";plano.ProviderProfile="driving";
+                plano.GeometrySource=_lastOsrmReply?.GeometrySource??"RoadNetwork";
+                plano.ProviderDurationSeconds=_lastOsrmReply?.DurationSeconds;plano.ProviderResponseSha256=_lastOsrmReply?.ResponseSha256;plano.GeometrySourceReference=_lastOsrmReply?.SourceReference;plano.ProviderGraphVersion=_lastOsrmReply?.GraphVersion;
                 plano.RotaHomologadaParaVeiculo = false;
                 plano.RotaAprovada = false;
                 plano.AvisoRota = isPesado
@@ -789,6 +794,7 @@ namespace MglConnect.Web.Services
             else
             {
                 plano.RotaDisponivel = false;
+                plano.ProviderFailure=_lastOsrmReply?.Failure??ProviderFailure.MissingLocations;
                 plano.RotaHomologadaParaVeiculo = false;
                 plano.RotaAprovada = false;
                 plano.AvisoRota = "Não foi possível calcular a rota. Confira os endereços, habilite Photon em desenvolvimento ou configure Google Geocoding, e verifique Routing:OsrmBaseUrl.";
@@ -810,23 +816,13 @@ namespace MglConnect.Web.Services
             {
                 plano.TempoEstimadoMinutos = 0;
             }
-            else if (isPesado)
-            {
-                // Velocidade média operacional para caminhões pesados com paradas em pedágio e balança (~55 km/h)
-                plano.TempoEstimadoMinutos = (int)Math.Max(90, Math.Round((double)plano.DistanciaKm / 55.0 * 60.0));
-            }
-            else
-            {
-                // Velocidade média de 80 km/h exigida no perfil leve
-                plano.TempoEstimadoMinutos = (int)Math.Max(60, Math.Round((double)plano.DistanciaKm / 80.0 * 60.0));
-            }
+            else plano.TempoEstimadoMinutos=rotaGeo?.tempoMinutos??0;
 
             // Cache o resultado com expiração de 30 minutos
             if (plano.RotaDisponivel)
             {
                 var cacheEntryOptions = new MemoryCacheEntryOptions()
-                    .SetSlidingExpiration(TimeSpan.FromMinutes(30))
-                    .SetAbsoluteExpiration(TimeSpan.FromHours(1));
+                    .SetAbsoluteExpiration(TimeSpan.FromMinutes(5));
                 _routeCache.Set(cacheKey, plano, cacheEntryOptions);
             }
 
@@ -835,125 +831,10 @@ namespace MglConnect.Web.Services
 
         private async Task<(List<RouteCoordinate> coords, decimal distanciaKm, int tempoMinutos, List<RouteStep> passos)?> ObterRotaOsrmPorWaypointsAsync(string waypoints)
         {
-            try
-            {
-                var routingBaseUrl = _configuration["Routing:OsrmBaseUrl"];
-                if (!Uri.TryCreate(routingBaseUrl, UriKind.Absolute, out var baseUri)
-                    || baseUri.Scheme != Uri.UriSchemeHttps)
-                {
-                    _logger.LogInformation("Roteamento indisponível: configure Routing:OsrmBaseUrl com um endpoint HTTPS compatível com OSRM.");
-                    return null;
-                }
-
-                var url = $"{routingBaseUrl.TrimEnd('/')}/route/v1/driving/{waypoints}?overview=full&geometries=geojson&steps=true";
-
-                var client = _httpClientFactory.CreateClient();
-                client.Timeout = TimeSpan.FromSeconds(20);
-                client.DefaultRequestHeaders.UserAgent.ParseAdd("MglConnect-LogisticsEngine/2.0");
-
-                using var response = baseUri.Host.Equals("router.project-osrm.org", StringComparison.OrdinalIgnoreCase)
-                    || baseUri.Host.Equals("routing.openstreetmap.de", StringComparison.OrdinalIgnoreCase)
-                    ? await OsrmThrottle.GetAsync(client, url,Abort)
-                    : await client.GetAsync(url,Abort);
-                if (!response.IsSuccessStatusCode)
-                {
-                    _logger.LogWarning("OSRM retornou status HTTP {StatusCode}", response.StatusCode);
-                    return null;
-                }
-
-                using var stream = await response.Content.ReadAsStreamAsync();
-                using var doc = await JsonDocument.ParseAsync(stream);
-                var root = doc.RootElement;
-
-                if (!root.TryGetProperty("code", out var codeElem) || codeElem.GetString() != "Ok")
-                {
-                    return null;
-                }
-
-                var routes = root.GetProperty("routes");
-                if (routes.GetArrayLength() == 0) return null;
-
-                var firstRoute = routes[0];
-                var distanceMeters = firstRoute.GetProperty("distance").GetDouble();
-                var durationSeconds = firstRoute.GetProperty("duration").GetDouble();
-                var coordinatesArray = firstRoute.GetProperty("geometry").GetProperty("coordinates");
-
-                int totalPoints = coordinatesArray.GetArrayLength();
-                if (totalPoints is <2 or >20000) return null;
-
-                // Keep the provider's exact vertex order for verifiable edge references.
-                // Rendering must not change rule association by resampling geometry.
-                var list=new List<RouteCoordinate>(totalPoints);
-                for(int i=0;i<totalPoints;i++)
-                {
-                    var coord=coordinatesArray[i];double lon=coord[0].GetDouble(),lat=coord[1].GetDouble();
-                    if(!double.IsFinite(lat)||lat is <-90 or >90||!double.IsFinite(lon)||lon is <-180 or >180)return null;
-                    list.Add(new RouteCoordinate{Latitude=lat,Longitude=lon,Tipo=i==0?"Origem":i==totalPoints-1?"Destino":"Waypoint",Nome=i==0?"Origem":i==totalPoints-1?"Destino da rota":null});
-                }
-
-                // Extração dos Steps de Navegação Turn-by-Turn
-                var passos = new List<RouteStep>();
-                if (firstRoute.TryGetProperty("legs", out var legsArray))
-                {
-                    int ordem = 1;
-                    foreach (var leg in legsArray.EnumerateArray())
-                    {
-                        if (leg.TryGetProperty("steps", out var stepsArray))
-                        {
-                            foreach (var s in stepsArray.EnumerateArray())
-                            {
-                                var nomeVia = s.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
-                                var distM = s.TryGetProperty("distance", out var d) ? d.GetDouble() : 0.0;
-                                var durS = s.TryGetProperty("duration", out var du) ? du.GetDouble() : 0.0;
-                                
-                                string manTipo = "turn";
-                                string manMod = "straight";
-                                double latStep = 0.0;
-                                double lonStep = 0.0;
-
-                                if (s.TryGetProperty("maneuver", out var man))
-                                {
-                                    if (man.TryGetProperty("type", out var mt)) manTipo = mt.GetString() ?? "turn";
-                                    if (man.TryGetProperty("modifier", out var mm)) manMod = mm.GetString() ?? "straight";
-                                    if (man.TryGetProperty("location", out var loc) && loc.GetArrayLength() >= 2)
-                                    {
-                                        lonStep = loc[0].GetDouble();
-                                        latStep = loc[1].GetDouble();
-                                    }
-                                }
-
-                                var (icone, instrucao) = GerarInstrucaoManobra(manTipo, manMod, nomeVia, distM);
-
-                                passos.Add(new RouteStep
-                                {
-                                    Ordem = ordem++,
-                                    NomeVia = string.IsNullOrWhiteSpace(nomeVia) ? "Via sem nome" : nomeVia,
-                                    Instrucao = instrucao,
-                                    ManobraTipo = manTipo,
-                                    ManobraModificador = manMod,
-                                    DistanciaMetros = distM,
-                                    DuracaoSegundos = durS,
-                                    Latitude = latStep,
-                                    Longitude = lonStep,
-                                    IconeBootstrap = icone
-                                });
-                            }
-                        }
-                    }
-                }
-
-                decimal distKm = Convert.ToDecimal(distanceMeters / 1000.0);
-                int durMin = (int)Math.Round(durationSeconds / 60.0);
-
-                return (list, distKm, durMin, passos);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(
-                    "Falha ao obter traçado OSRM ({ErrorType}); não será exibido um percurso de fallback fictício.",
-                    ex.GetType().Name);
-                return null;
-            }
+            if(!OsrmRoadRouter.TryLocations(waypoints,out var points))return null;
+            _lastOsrmReply=await (_osrm??new OsrmRoadRouter(_httpClientFactory,_configuration,_routeCache)).RouteAsync(points,Abort);
+            if(_lastOsrmReply.Failure!=ProviderFailure.None)return null;
+            return (_lastOsrmReply.Geometry,_lastOsrmReply.DistanceKm??0,_lastOsrmReply.EstimatedMinutes??0,_lastOsrmReply.Steps);
         }
 
         private static (string icone, string instrucao) GerarInstrucaoManobra(string tipo, string mod, string via, double distM)

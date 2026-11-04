@@ -80,6 +80,10 @@ public sealed class RouteEvidence
 public sealed record RestrictionCheck(string RuleId,RestrictionKind Kind,RestrictionOutcome Outcome,string Reason,string Source,string Version,int FirstEdge,int LastEdge);
 public sealed class RouteTrustResult
 {
+    public double? ProviderDurationSeconds {get;set;}
+    public string? ProviderResponseSha256 {get;set;}
+    public string? GeometrySource {get;set;}
+    public string? GeometrySourceReference {get;set;}
     public Guid CalculationId {get;set;}=Guid.NewGuid();
     public string CalculationVersion {get;set;}="7B1-1";
     public DateTime ValidUntilUtc {get;set;}

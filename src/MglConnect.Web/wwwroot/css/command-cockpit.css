@@ -128,3 +128,10 @@ body.cc-driver-navigation:has(#demoRouteControls[data-route-available="true"]) #
     body.cc-driver-navigation .cc-cockpit #cockpitMap { min-height: 100dvh; }
     .cc-map-tile-state { left: 20rem; top: .5rem; max-width: calc(100% - 21rem); }
 }
+
+/* Accessible adaptive sheet: critical actions precede the scrollable diagnostics. */
+body.cc-driver-navigation .cc-cockpit-top { padding-top:max(.5rem,env(safe-area-inset-top)) !important; padding-inline-start:max(.5rem,env(safe-area-inset-left)) !important; padding-inline-end:max(.5rem,env(safe-area-inset-right)) !important; }
+body.cc-driver-navigation .cc-cockpit-bottom { padding-bottom:max(.5rem,env(safe-area-inset-bottom)) !important; padding-inline-start:max(.5rem,env(safe-area-inset-left)) !important; padding-inline-end:max(.5rem,env(safe-area-inset-right)) !important; }
+body.cc-driver-navigation .cc-cockpit-bottom .cc-cockpit-hud { border-radius:1.35rem 1.35rem .75rem .75rem !important; }
+.cc-driver-diagnostics[open] { max-block-size:min(32dvh,18rem); overflow-y:auto; overscroll-behavior:contain; }
+.cc-driver-diagnostics > summary { position:sticky; top:0; background:var(--mgl-bg-surface); z-index:1; }

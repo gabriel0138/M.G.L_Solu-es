@@ -38,6 +38,10 @@ public static class RoadEvidenceAssociation
 }
 public sealed class ProviderRouteReply
 {
+    public string? SourceReference { get; set; }
+    public string GeometrySource { get; set; } = "RoadNetwork";
+    public double? DurationSeconds { get; set; }
+    public List<RouteStep> Steps { get; set; } = [];
     public string Provider { get; set; } = "Valhalla experimental";
     public string Profile { get; set; } = "truck";
     public string? GraphVersion { get; set; }
@@ -54,9 +58,10 @@ public sealed class ProviderRouteReply
     public Dictionary<RestrictionKind, RestrictionOutcome> Coverage { get; set; } = Enum.GetValues<RestrictionKind>().ToDictionary(k => k, _ => RestrictionOutcome.Desconhecido);
     public TruckRoutePlan ToPlan() => new()
     {
+        ProviderResponseSha256=ResponseSha256,ProviderGraphVersion=GraphVersion,GeometrySourceReference=SourceReference,ProviderName=Provider,ProviderProfile=Profile,GeometrySource=GeometrySource,ProviderFailure=Failure,ProviderDurationSeconds=DurationSeconds,PassosNavegacao=Steps,
         RotaDisponivel = Failure == ProviderFailure.None && Geometry.Count > 1, TrajetoCoordenadas = Geometry,
-        PerfilVeiculo = "Pesado", DistanciaKm = DistanceKm ?? 0, TempoEstimadoMinutos = EstimatedMinutes ?? 0,
-        AvisoRota = "Valhalla experimental: restrições e correspondência viária não comprovadas; orientação suspensa."
+        PerfilVeiculo = Profile=="driving"?"Leve":"Pesado", DistanciaKm = DistanceKm ?? 0, TempoEstimadoMinutos = EstimatedMinutes ?? 0,
+        AvisoRota = Provider+": restrições e correspondência viária não comprovadas; orientação pesada suspensa. "+Detail
     };
     public RouteEvidence Evidence() => new()
     {

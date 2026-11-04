@@ -282,4 +282,59 @@ async function experimentalMain() {
     assert.deepEqual(errors,[]);console.log('Stage 7B.1 Chromium passed: actual HTTP adapter against controlled synthetic protocol, physical units, unknown road coverage, missing data, no coverage, HTTP outage, rate limit, observed synthetic GPS, blocked ETA and actual POD/PDF. 60 layout combinations; no live Valhalla engine or real GPS accuracy claim.');
     console.log('Owned evidence: '+directory+'; screenshots: '+JSON.stringify(Object.fromEntries(Object.entries(profiles).map(([role,c])=>[role,c.directory]))));
 }
-main().catch(async error=>{console.error('Failed stage: '+stage+'\n'+error.stack);for(const[role,c]of Object.entries(profiles))try{await c.screenshot('route-failed-'+role);console.error(role+': '+c.directory);}catch{}console.error('Owned evidence: '+directory);process.exitCode=1;}).finally(async()=>{for(const c of Object.values(profiles))await c.closeBrowser();server?.kill('SIGTERM');for(const listener of controlledServers)listener.closeAllConnections?.();await Promise.all(controlledServers.map(s=>new Promise(resolve=>s.close(resolve))));});
+if(require.main===module)main().catch(async error=>{console.error('Failed stage: '+stage+'\n'+error.stack);for(const[role,c]of Object.entries(profiles))try{await c.screenshot('route-failed-'+role);console.error(role+': '+c.directory);}catch{}console.error('Owned evidence: '+directory);process.exitCode=1;}).finally(async()=>{for(const c of Object.values(profiles))await c.closeBrowser();server?.kill('SIGTERM');for(const listener of controlledServers)listener.closeAllConnections?.();await Promise.all(controlledServers.map(s=>new Promise(resolve=>s.close(resolve))));});
+
+
+// Reused by the owned logistics journey: no external routing calls.
+async function checkRoutePlanning(client,{setMode=()=>{},historical=false}={}) {
+    const assert=require('node:assert/strict');
+    const wait=async expression=>{for(let i=0;i<150;i++){try{if(await client.evaluate(expression))return;}catch{}await client.pause(100);}throw new Error('Route UI state did not converge');};
+    await client.navigate('/Roteamento');
+    assert.equal(await client.evaluate("document.getElementById('routeResult').dataset.routeState"),'AwaitingParameters');
+    assert.deepEqual(await client.evaluate("[...document.querySelectorAll('.cc-routing-metrics dd')].map(e=>e.textContent.trim())"),['—','—','—','—','—']);
+    const input='-46.6559,-23.5614;-46.6333,-23.5505';
+    async function submit(expected){
+        await client.evaluate(`document.getElementById('routeCoordinates').value=${JSON.stringify(input)};document.getElementById('rotaForm').requestSubmit()`);
+        await wait(`document.readyState==='complete'&&document.getElementById('routeResult')?.dataset.routeState===${JSON.stringify(expected)}`);
+    }
+    setMode('slow');
+    const pendingState=await client.evaluate(`(()=>{document.getElementById('routeCoordinates').value=${JSON.stringify(input)};document.getElementById('rotaForm').requestSubmit();return document.getElementById('routeResult').dataset.routeState;})()`);
+    assert.equal(pendingState,'Calculating');
+    await wait("document.readyState==='complete'&&document.getElementById('routeResult')?.dataset.routeState==='GenericUnverifiedTruck'");
+    const result=await client.evaluate("JSON.parse(document.getElementById('routePresentation').textContent)");
+    assert.equal(result.hasGeometry,true);assert.equal(result.coordinates.length,189);assert.equal(result.distanceKm,4.962);assert.equal(result.routeToll,null);
+    if(historical){assert.equal(result.source,'HistoricalRoadCapture');assert.equal(result.durationSeconds,null);}
+    else {assert.equal(result.source,'LocalProviderFixture');assert.equal(result.durationSeconds,410.25);}
+    assert.equal(await client.evaluate("document.getElementById('routeToll').textContent.trim()"),'—');
+    assert.equal(await client.evaluate("document.body.textContent.includes('OSRM Curvo')"),false);
+    for(const theme of ['dark','light']){
+        await client.evaluate(`document.documentElement.dataset.mglTheme=${JSON.stringify(theme)}`);
+        for(const [w,h] of [[320,844],[360,844],[390,844],[428,844],[768,1000],[1024,1000],[1280,1000],[1440,1000],[844,390],[390,500]]){
+            await client.viewport(w,h);
+            assert.ok(await client.evaluate('document.documentElement.scrollWidth<=innerWidth'),'Routing overflow '+w);
+            await client.evaluate("if(!document.getElementById('routeParameters').open)document.querySelector('#routeParameters > summary').click()");
+            for(const selector of ['#routeCoordinates','#calculateRoute'])assert.ok(await client.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});e.scrollIntoView({block:'center',behavior:'instant'});const r=e.getBoundingClientRect();return !!document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest(${JSON.stringify(selector)});})()`),'Route input hit testing '+selector);
+            await client.evaluate("if(innerWidth<=767 && document.getElementById('routeParameters').open)document.querySelector('#routeParameters > summary').click()");
+            await client.screenshot('delivery3-routing-'+(historical?'historical-':'fixture-')+theme+'-'+w+'x'+h);
+        }
+    }
+    if(!historical){
+        for(const [mode,state] of [['no-route','NoRoute'],['unavailable','ProviderUnavailable'],['invalid','ProviderUnavailable'],['ok','GenericUnverifiedTruck']]){
+            setMode(mode);await submit(state);
+            if(mode!=='ok')assert.deepEqual(await client.evaluate("[...document.querySelectorAll('.cc-routing-metrics dd')].map(e=>e.textContent.trim())"),['—','—','—','—','—']);
+            await client.evaluate("if(innerWidth<=767 && document.getElementById('routeParameters').open)document.querySelector('#routeParameters > summary').click()");
+            await client.screenshot('delivery3-routing-'+mode);
+        }
+    }
+    await client.evaluate(`(()=>{window.__routeOriginalGetSize=L.Map.prototype.getSize;L.Map.prototype.getSize=function(){const size=window.__routeOriginalGetSize.call(this);if(this.getContainer().id==='truckMap')window.__routeObservedSize=size.x;return size;};document.getElementById('truckMap').style.setProperty('width','280px','important');})()`);await client.pause(200);
+    const resized=await client.evaluate("({actual:document.getElementById('truckMap').clientWidth,leaflet:window.__routeObservedSize})");
+    assert.ok(resized.actual>0&&resized.actual<300);assert.equal(resized.leaflet,resized.actual);
+    await client.evaluate("(()=>{L.Map.prototype.getSize=window.__routeOriginalGetSize;document.getElementById('truckMap').style.removeProperty('width');})()");
+    if(!process.env.MGL_DEMO_ROUTES){
+        await client.navigate('/Entregas/Navegar/1');
+        assert.deepEqual(await client.evaluate("['etaValue','distanceRemaining','fuelRemaining'].map(id=>document.getElementById(id).textContent.trim())"),['--:--','—','—']);
+        await client.screenshot('delivery3-admin-no-route-cockpit');
+    }
+    console.log('Routing UI passed: explicit states, geometry/metrics/toll provenance, 20 viewports/themes, controls and provider recovery; source '+result.source);
+}
+module.exports={checkRoutePlanning};

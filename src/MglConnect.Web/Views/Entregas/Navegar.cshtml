@@ -6,7 +6,8 @@
     var plano = ViewBag.PlanoRota as MglConnect.Web.Services.TruckRoutePlan ?? new MglConnect.Web.Services.TruckRoutePlan();
     var custo = ViewBag.CustoViagem as MglConnect.Web.Services.TripCostResult ?? new MglConnect.Web.Services.TripCostResult();
     bool demoMode = plano.DemonstracaoControlada;
-    bool displayRoute = demoMode || plano.Confianca is { NavigationAllowed:true, Obsolete:false, Synthetic:false };
+    bool guidanceAllowed = plano.Confianca is { NavigationAllowed:true, Obsolete:false, Synthetic:false };
+    bool displayRoute = MglConnect.Web.Services.RoutePresentation.ValidGeometry(plano);
     var savedGps = new {
         codigoRastreio = Model.CodigoRastreio,
         latitude = Model.UltimaLatitudeGps,
@@ -30,12 +31,12 @@
                 <div class="cc-cockpit-hud cc-driver-nav-header rounded-4">
                     <div class="d-flex align-items-center gap-2">
                         <i id="maneuverIcon" class="bi bi-compass text-teal" aria-hidden="true"></i>
-                        <h1 id="maneuverRoad">@(demoMode ? "Demonstração controlada" : displayRoute ? "Rota disponível" : "Sem rota")</h1>
+                        <h1 id="maneuverRoad">@(demoMode ? "Demonstração controlada" : guidanceAllowed ? "Rota disponível" : displayRoute ? "Traçado · orientação suspensa" : "Sem rota")</h1>
                         <a asp-action="Index" class="cc-cockpit-close btn btn-outline-light ms-auto" aria-label="Voltar às viagens"><i class="bi bi-x-lg" aria-hidden="true"></i></a>
                     </div>
-                    <p id="maneuverInstruction">@(demoMode ? "Circuito e GPS fictícios · sem homologação" : displayRoute ? "Ative o GPS para acompanhar sua posição." : "GPS disponível; confirme o trajeto com a operação.")</p>
+                    <p id="maneuverInstruction">@(demoMode ? "Circuito e GPS fictícios · sem homologação" : guidanceAllowed ? "Ative o GPS para acompanhar sua posição." : "GPS disponível; confirme o trajeto com a operação.")</p>
                     <span id="maneuverDist" hidden></span>
-                    <span id="routeTrustBadge" hidden data-confidence="@(demoMode ? "SINTÉTICA" : "NÃO VERIFICADA")" data-navigation-allowed="@(displayRoute && !demoMode ? "true" : "false")"></span>
+                    <span id="routeTrustBadge" hidden data-confidence="@(demoMode ? "SINTÉTICA" : "NÃO VERIFICADA")" data-navigation-allowed="@(guidanceAllowed ? "true" : "false")"></span>
                     <div class="progress cc-cockpit-progress"><div id="tripProgressBar" class="progress-bar" role="progressbar" aria-label="@(demoMode ? "Progresso no circuito sintético" : "Progresso estimado sobre o trajeto")" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" style="width:0%"></div></div>
                 </div>
             </div>
@@ -150,7 +151,7 @@
     </div>
 
     <!-- PAINEL INFERIOR DE BORDO (COCKPIT HUD FLUTUANTE) -->
-    <div class="cc-cockpit-bottom position-absolute bottom-0 start-0 end-0 p-3 z-3">
+    <div class="cc-cockpit-bottom position-absolute bottom-0 start-0 end-0 p-3 z-3" role="region" aria-label="Painel operacional e ações da viagem">
         <div class="container-fluid cc-cockpit-panel-width">
             <div class="card cc-cockpit-hud text-white rounded-4 p-3">
                 <div class="cc-cockpit-connection"><i class="bi bi-broadcast" aria-hidden="true"></i><span id="telemetryConnectionState" role="status">Conectando à operação…</span></div>
@@ -182,16 +183,16 @@
                             <span id="trafficStatusBadge" class="visually-hidden">Sem dados de trânsito ao vivo</span>
                             <span id="speedValue" class="visually-hidden">0</span>
                             <span id="fuelRemaining" class="visually-hidden">0</span>
-                            <div class="small text-white-50 mt-1">Último sinal conhecido</div>
+                            <time id="positionAge" class="small text-white-50 mt-1 d-block">Nenhum sinal recebido</time>
                         </div>
                         <div class="driver-route-metric">
                             <span class="fs-8 text-white-50 text-uppercase fw-semibold">Chegada estimada</span>
                             <h4 id="etaValue" class="fw-extrabold mb-0 text-white font-monospace">--:--</h4>
-                            <span id="etaMinutes" class="fs-8 text-teal">@(plano.TempoEstimadoMinutos > 0 ? $"{plano.TempoEstimadoMinutos} min estimados" : "Sem estimativa")</span>
+                            <span id="etaMinutes" class="fs-8 text-teal">@((guidanceAllowed || demoMode) && plano.TempoEstimadoMinutos > 0 ? $"{plano.TempoEstimadoMinutos} min estimados" : "Sem estimativa")</span>
                         </div>
                         <div class="driver-route-metric">
                             <span class="fs-8 text-white-50 text-uppercase fw-semibold">Distância</span>
-                            <h4 id="distanceRemaining" class="fw-extrabold mb-0 text-white font-monospace">@(displayRoute && plano.RotaDisponivel ? $"{plano.DistanciaKm:F1} km" : "—")</h4>
+                            <h4 id="distanceRemaining" class="fw-extrabold mb-0 text-white font-monospace">@((guidanceAllowed || demoMode) && plano.RotaDisponivel ? $"{plano.DistanciaKm:F1} km" : "—")</h4>
                             <span class="fs-8 text-white-50">estimativa</span>
                         </div>
                     </div>
@@ -217,21 +218,21 @@
                     <div class="col-3 border-end border-secondary">
                         <span class="fs-8 text-white-50 text-uppercase fw-semibold">Chegada Prevista</span>
                         <h4 id="etaValue" class="fw-extrabold mb-0 text-white font-monospace">--:--</h4>
-                        <span id="etaMinutes" class="fs-8 text-teal" style="color: var(--mgl-teal);">@(plano.TempoEstimadoMinutos > 0 ? $"{plano.TempoEstimadoMinutos} min estimados" : "Sem estimativa")</span>
+                        <span id="etaMinutes" class="fs-8 text-teal" style="color: var(--mgl-teal);">@((guidanceAllowed || demoMode) && plano.TempoEstimadoMinutos > 0 ? $"{plano.TempoEstimadoMinutos} min estimados" : "Sem estimativa")</span>
                     </div>
 
                     <!-- Distância Restante -->
                     <div class="col-3 border-end border-secondary">
                         <span class="fs-8 text-white-50 text-uppercase fw-semibold">Distância</span>
-                        <h4 id="distanceRemaining" class="fw-extrabold mb-0 text-white font-monospace">@plano.DistanciaKm.ToString("F1")</h4>
+                        <h4 id="distanceRemaining" class="fw-extrabold mb-0 text-white font-monospace">@((guidanceAllowed || demoMode) && displayRoute ? plano.DistanciaKm.ToString("F1") : "—")</h4>
                         <span class="fs-8 text-white-50">km restantes</span>
                     </div>
 
                     <!-- Consumo Estimado -->
                     <div class="col-3">
                         <span class="fs-8 text-white-50 text-uppercase fw-semibold">Combustível</span>
-                        <h4 id="fuelRemaining" class="fw-extrabold mb-0 text-warning font-monospace">@custo.LitrosCombustivel.ToString("F1")</h4>
-                        <span class="fs-8 text-white-50">L • R$ @custo.CustoCombustivel.ToString("N0")</span>
+                        <h4 id="fuelRemaining" class="fw-extrabold mb-0 text-warning font-monospace">@((guidanceAllowed || demoMode) && custo.RouteCostAvailable ? custo.LitrosCombustivel.ToString("F1") : "—")</h4>
+                        <span class="fs-8 text-white-50">@((guidanceAllowed || demoMode) && custo.RouteCostAvailable ? $"L · R$ {custo.CustoCombustivel:N0}" : "Sem estimativa")</span>
                     </div>
                 </div>
                 }
@@ -395,7 +396,7 @@
 
             // 1. CARREGAMENTO DOS DADOS GEOGRÁFICOS E PASSOS TURN-BY-TURN
             const navigationValidUntil = @Json.Serialize(plano.Confianca?.ValidUntilUtc);
-            const navigationAllowed = @Json.Serialize(plano.Confianca is { NavigationAllowed:true, Obsolete:false, Synthetic:false });
+            const navigationAllowed = @Json.Serialize(guidanceAllowed);
             const rawCoords = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(displayRoute ? plano.TrajetoCoordenadas : new List<MglConnect.Web.Services.RouteCoordinate>()));
             const steps = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(plano.PassosNavegacao ?? new List<MglConnect.Web.Services.RouteStep>()));
             const demoMode = @Json.Serialize(demoMode);
@@ -403,7 +404,7 @@
             const isFinalDelivery = @Json.Serialize(isFinalDelivery);
             const totalDistKm = @plano.DistanciaKm.ToString(System.Globalization.CultureInfo.InvariantCulture);
             const totalFuelLiters = @(isDriver ? "0" : custo.LitrosCombustivel.ToString(System.Globalization.CultureInfo.InvariantCulture));
-            const tempoBaseMin = @plano.TempoEstimadoMinutos;
+            const tempoBaseMin = @((guidanceAllowed || demoMode) ? plano.TempoEstimadoMinutos : 0);
 
             const coordinates = rawCoords.map(c => [c.Latitude, c.Longitude]);
             const mapStatus = document.getElementById('cockpitMapStatus');
@@ -557,8 +558,8 @@
                 const simIcon = document.getElementById('simIcon');
                 const btnSimularDesvio = document.getElementById('btnSimularDesvio');
                 const simulationBadge = document.getElementById('positionSourceBadge');
-                if (btnSimular) btnSimular.disabled = isFinalDelivery || coordinates.length < 2;
-                if (btnSimularDesvio) btnSimularDesvio.disabled = isFinalDelivery || coordinates.length < 2;
+                if (btnSimular) btnSimular.disabled = isFinalDelivery || !navigationAllowed || coordinates.length < 2;
+                if (btnSimularDesvio) btnSimularDesvio.disabled = isFinalDelivery || !navigationAllowed || coordinates.length < 2;
 
                 function pararSimulacao() {
                     if (simInterval) clearInterval(simInterval);

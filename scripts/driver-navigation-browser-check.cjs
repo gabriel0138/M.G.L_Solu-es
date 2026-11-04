@@ -109,7 +109,7 @@ async function checkControlledDemo(client) {
     assert.ok(await client.evaluate("window.mglControlledDemo.tracker.routeCoordinates.length>=6"));
     for(const theme of ['dark','light']) {
         await client.evaluate(`document.documentElement.dataset.mglTheme=${JSON.stringify(theme)}`);
-        for(const [width,height] of [[320,844],[360,844],[390,844],[428,844],[768,1000],[1024,1000],[844,390],[390,500]]){
+        for(const [width,height] of [[320,844],[360,844],[390,844],[428,844],[768,1000],[1024,1000],[1280,1000],[1440,1000],[844,390],[390,500]]){
             await client.viewport(width,height);
             assert.ok(await client.evaluate('document.documentElement.scrollWidth<=innerWidth'));
             const map=await client.evaluate("(()=>{const r=document.getElementById('cockpitMap').getBoundingClientRect();return{width:r.width,height:r.height}})()");

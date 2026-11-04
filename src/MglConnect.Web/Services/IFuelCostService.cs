@@ -4,6 +4,8 @@ namespace MglConnect.Web.Services
 {
     public class TripCostResult
     {
+        public bool RouteCostAvailable { get; set; }
+        public string TollSource { get; set; } = "FixedPerAxleScenario";
         public decimal DistanciaKm { get; set; }
         public string PerfilVeiculo { get; set; } = "Pesado"; // "Pesado" (Caminhão) ou "Leve" (Van/Utilitário)
         public string TipoCombustivel { get; set; } = "Diesel S10";
@@ -23,6 +25,8 @@ namespace MglConnect.Web.Services
 
     public class FleetCostSummary
     {
+        public int ViagensSemEstimativa { get; set; }
+        public bool MargemDisponivel { get; set; }
         public decimal FaturamentoTotal { get; set; }
         public decimal CustoTotalCombustivel { get; set; }
         public decimal CustoTotalPedagios { get; set; }

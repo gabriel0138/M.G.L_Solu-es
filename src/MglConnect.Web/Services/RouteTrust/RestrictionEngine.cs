@@ -10,7 +10,7 @@ public sealed class RestrictionEngine
             &&coords.All(p=>p!=null&&double.IsFinite(p.Latitude)&&p.Latitude is >=-90 and <=90&&double.IsFinite(p.Longitude)&&p.Longitude is >=-180 and <=180)
             &&coords.Zip(coords.Skip(1)).Any(p=>p.First.Latitude!=p.Second.Latitude||p.First.Longitude!=p.Second.Longitude);
         var hash=geometry?RouteFingerprint.Geometry(coords):"";
-        var result=new RouteTrustResult{Vehicle=vehicle,CalculatedAtUtc=passage.UtcDateTime,Provider=evidence.Provider,RoutingProfile=evidence.RoutingProfile,
+        var result=new RouteTrustResult{ProviderDurationSeconds=plan.ProviderDurationSeconds,ProviderResponseSha256=plan.ProviderResponseSha256,GeometrySource=plan.GeometrySource,GeometrySourceReference=plan.GeometrySourceReference,Vehicle=vehicle,CalculatedAtUtc=passage.UtcDateTime,Provider=evidence.Provider,RoutingProfile=evidence.RoutingProfile,
             GeographicVersion=evidence.GeographicVersion,SourceReference=evidence.SourceReference,Territory=evidence.Territory,
             RulesVersion=RouteFingerprint.Rules(evidence),GeometrySha256=hash,Synthetic=evidence.Synthetic,
             Confidence=geometry?RouteConfidence.Estimada:RouteConfidence.Indisponivel,

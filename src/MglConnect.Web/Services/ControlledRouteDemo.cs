@@ -29,7 +29,7 @@ public sealed class ControlledRouteDemo(IConfiguration configuration, IWebHostEn
     public static TruckRoutePlan Plan(bool detour = false, string? failure = null)
     {
         var points = detour ? Detour : Circuit;
-        var plan = new TruckRoutePlan { DemonstracaoControlada = true, Origem = "Origem do circuito fictício",
+        var plan = new TruckRoutePlan { ProviderName="Circuito local autorado",ProviderProfile="synthetic",GeometrySource="SyntheticCircuit",DemonstracaoControlada = true, Origem = "Origem do circuito fictício",
             Destino = "Destino do circuito fictício", PerfilVeiculo = "Demonstração", RotaDisponivel = failure == null,
             AvisoRota = failure ?? "Circuito e GPS sintéticos · sem homologação para caminhões." };
         if (failure != null) return plan;

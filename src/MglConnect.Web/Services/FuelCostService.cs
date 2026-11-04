@@ -46,10 +46,10 @@ namespace MglConnect.Web.Services
             int eixos = isPesado ? (qtdEixos > 0 ? qtdEixos : 5) : 1;
 
             // Fórmulas Financeiras e de Combustível
-            decimal litros = consumoKmL > 0 ? Math.Round(distanciaKm / consumoKmL, 2) : 0m;
+            decimal litros = distanciaKm>0 && consumoKmL > 0 ? Math.Round(distanciaKm / consumoKmL, 2) : 0m;
             decimal custoCombustivel = Math.Round(litros * precoLitro, 2);
-            decimal custoPedagio = Math.Round(TarifaBasePedagioPorEixo * eixos, 2);
-            decimal custoTotalViagem = Math.Round(custoCombustivel + custoPedagio + custoFixo, 2);
+            decimal custoPedagio = distanciaKm>0 ? Math.Round(TarifaBasePedagioPorEixo * eixos, 2) : 0m;
+            decimal custoTotalViagem = distanciaKm>0 ? Math.Round(custoCombustivel + custoPedagio + custoFixo, 2) : 0m;
             decimal lucroEstimado = Math.Round(valorPedido - custoTotalViagem, 2);
             decimal margemPercentual = valorPedido > 0 
                 ? Math.Round((lucroEstimado / valorPedido) * 100m, 2) 
@@ -57,7 +57,8 @@ namespace MglConnect.Web.Services
 
             return new TripCostResult
             {
-                DistanciaKm = distanciaKm,
+                RouteCostAvailable=distanciaKm>0,
+                DistanciaKm = Math.Max(0,distanciaKm),
                 PerfilVeiculo = isPesado ? "Pesado" : "Leve",
                 TipoCombustivel = isPesado ? "Diesel S10" : "Gasolina Comum / Flex",
                 ConsumoKmL = consumoKmL,
@@ -70,8 +71,8 @@ namespace MglConnect.Web.Services
                 CustoOperacionalFixo = custoFixo,
                 CustoTotalViagem = custoTotalViagem,
                 ValorPedido = valorPedido,
-                LucroEstimado = lucroEstimado,
-                MargemPercentual = margemPercentual
+                LucroEstimado = distanciaKm>0?lucroEstimado:0,
+                MargemPercentual = distanciaKm>0?margemPercentual:0
             };
         }
 
@@ -91,10 +92,10 @@ namespace MglConnect.Web.Services
             bool isPesado = entrega.Veiculo == null || entrega.Veiculo.PesoToneladas > 3.5m || entrega.QtdEixos > 2;
             string perfil = isPesado ? "Pesado" : "Leve";
 
-            // Calcula rota via TruckRoutingService para obter a distância real calculada via OSRM
+            // Usa a geometria disponível; não cria distância de fallback para estimar custos.
             var plano = await _routingService.CalcularRotaParaEntregaAsync(entregaId, perfil);
 
-            decimal distanciaKm = plano.DistanciaKm > 0 ? plano.DistanciaKm : (isPesado ? 147.0m : 120.5m);
+            decimal distanciaKm = RoutePresentation.ValidGeometry(plano) ? plano.DistanciaKm : 0m;
             int eixos = entrega.Veiculo != null ? entrega.Veiculo.QtdEixos : entrega.QtdEixos;
             decimal valorPedido = entrega.Pedido?.ValorTotal ?? 0m;
 
@@ -120,11 +121,14 @@ namespace MglConnect.Web.Services
             decimal totalCombustivel = 0m;
             decimal totalPedagios = 0m;
             decimal totalLitros = 0m;
+            int unavailable=0;
 
             foreach (var ent in entregas)
             {
                 bool isPesado = ent.Veiculo == null || ent.Veiculo.PesoToneladas > 3.5m || ent.QtdEixos > 2;
-                decimal dist = isPesado ? 147.0m : 120.5m;
+                var plan=await _routingService.CalcularRotaParaEntregaAsync(ent.Id,isPesado?"Pesado":"Leve");
+                if(!RoutePresentation.ValidGeometry(plan)||plan.DistanciaKm<=0){unavailable++;continue;}
+                decimal dist=plan.DistanciaKm;
                 int eixos = ent.Veiculo?.QtdEixos ?? ent.QtdEixos;
 
                 decimal preco = isPesado 
@@ -146,12 +150,13 @@ namespace MglConnect.Web.Services
 
             return new FleetCostSummary
             {
+                ViagensSemEstimativa=unavailable,MargemDisponivel=unavailable==0,
                 FaturamentoTotal = faturamentoTotal,
                 CustoTotalCombustivel = totalCombustivel,
                 CustoTotalPedagios = totalPedagios,
                 CustoTotalOperacional = custoTotalOperacional,
-                MargemLucroLiquida = margemLucroLiquida,
-                MargemLucroPercentual = margemPercentual,
+                MargemLucroLiquida = unavailable==0?margemLucroLiquida:0,
+                MargemLucroPercentual = unavailable==0?margemPercentual:0,
                 TotalLitrosDiesel = totalLitros,
                 TotalViagens = entregas.Count
             };

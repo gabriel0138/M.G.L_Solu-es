@@ -10,6 +10,7 @@ const {createBrowserClient} = require('./command-center-browser-check.cjs');
 const directory = mkdtempSync(join(tmpdir(),'mgl-e2e-journey-'));
 const pause = ms => new Promise(resolve=>setTimeout(resolve,ms));
 let server;
+let roadProvider;let roadMode="ok";
 let profiles = {};
 let stage = 'start isolated server';
 const errors = [];
@@ -23,12 +24,28 @@ async function until(client, expression, label=expression, timeout=20000) {
     throw new Error('Journey timed out: '+label);
 }
 async function startServer(restored, reusePort) {
+    if(process.env.MGL_ROUTING_UI_CHECK==='provider' && !roadProvider){
+        const http=require('node:http'),fs=require('node:fs');
+        const fixture=JSON.parse(fs.readFileSync(resolve(__dirname,'../src/MglConnect.Tests/Fixtures/route-trust-public-landmarks.json'),'utf8'));
+        roadProvider=http.createServer((req,res)=>{
+            res.setHeader('Content-Type','application/json');
+            if(roadMode==='unavailable'){res.statusCode=503;res.end('{}');return;}
+            if(roadMode==='no-route'){res.end(JSON.stringify({code:'NoRoute',routes:[]}));return;}
+            const reply={code:'Ok',data_version:'local-protocol-fixture',routes:[{distance:4962,duration:410.25,geometry:{type:'LineString',coordinates:fixture.RecordedPlan.TrajetoCoordenadas.map(p=>[p.Longitude,p.Latitude])},legs:[]}]};
+            if(roadMode==='invalid')reply.routes[0].geometry.coordinates=[];
+            const body=JSON.stringify(reply);
+            if(roadMode==='slow')setTimeout(()=>res.end(body),1500);else res.end(body);
+        });
+        await new Promise(resolve=>roadProvider.listen(0,'127.0.0.1',resolve));
+    }
     const port=reusePort||await new Promise((resolve,reject)=>{
         const probe=net.createServer();probe.once('error',reject);
         probe.listen(0,'127.0.0.1',()=>{const port=probe.address().port;probe.close(()=>resolve(port));});
     });
     const log=createWriteStream(join(directory,'server.log'));
     const env={...process.env,MGL_LOCAL_PORT:String(port),MGL_LOCAL_DATA_DIR:join(directory,'database'),GpsHistory__DiasAntesCompactar:'0'};
+    if(process.env.MGL_ROUTING_UI_CHECK==='historical')env.MGL_ROAD_CAPTURE=resolve(__dirname,'../src/MglConnect.Tests/Fixtures/route-trust-public-landmarks.json');
+    if(roadProvider)env.MGL_OSRM_BASE_URL='http://127.0.0.1:'+roadProvider.address().port;
     if(restored) {
         for(const name of ['POSTGRES_URL','DATABASE_URL','POSTGRES_PRISMA_URL','PORT','VERCEL','GOOGLE_MAPS_API_KEY'])delete env[name];
         Object.assign(env,{ASPNETCORE_ENVIRONMENT:'Development',ASPNETCORE_URLS:'http://127.0.0.1:'+port,
@@ -170,6 +187,10 @@ async function main() {
     await login(profiles.admin,'admin','admin123','/Dashboard');
     await login(profiles.client,'cliente.demo','cliente123','/Cliente');
     await login(profiles.driver,'carlos.motorista','motorista123','/Entregas');
+    if(process.env.MGL_ROUTING_UI_CHECK){
+        stage='routing page and provider protocol regression';
+        await require('./route-restrictions-browser-check.cjs').checkRoutePlanning(profiles.admin,{historical:process.env.MGL_ROUTING_UI_CHECK==='historical',setMode:mode=>{roadMode=mode;}});
+    }
     stage='direct server authorization checks';
     await profiles.public.navigate('/Account/Login');
     for(const [role,path,status] of [
@@ -349,4 +370,4 @@ main().catch(async error=>{
     console.error('Failed stage: '+stage+'\n'+error.message);
     for(const[role,client]of Object.entries(profiles))try{await client.screenshot('journey-failed-'+role);console.error(role+': '+client.directory);}catch{}
     console.error('Owned evidence: '+directory);process.exitCode=1;
-}).finally(()=>{for(const client of Object.values(profiles))client.closeBrowser();server?.kill('SIGTERM');});
+}).finally(()=>{for(const client of Object.values(profiles))client.closeBrowser();server?.kill('SIGTERM');roadProvider?.closeAllConnections();roadProvider?.close();});

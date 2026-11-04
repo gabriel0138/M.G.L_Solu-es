@@ -145,7 +145,10 @@ class MglCockpitTracker {
                 if (this.mapResizeFrame) cancelAnimationFrame(this.mapResizeFrame);
                 this.mapResizeFrame = requestAnimationFrame(() => {
                     this.mapResizeFrame = null;
-                    if (!this.destroyed) this.map.invalidateSize({ pan: false });
+                    if (!this.destroyed) {
+                        this.map.invalidateSize({ pan: false });
+                        if(this.followVehicle && this.currentLatLng)this.map.panTo?.(this.currentLatLng,{animate:false});
+                    }
                 });
             });
             this.mapResizeObserver.observe(this.map.getContainer());
@@ -362,7 +365,7 @@ class MglCockpitTracker {
         this.hubConnection.start()
             .then(connected)
             .then(() => {
-                if (!this.destroyed) console.log('Conectado ao TelemetryHub para remessa:', this.codigoRastreio);
+                if (!this.destroyed) console.debug('Conexão de telemetria autorizada.');
             })
             .catch(err => {
                 if (this.destroyed) return;
@@ -462,11 +465,18 @@ class MglCockpitTracker {
         if (!this.positionSourceBadge) return;
         let state = 'awaiting';
         let label = 'Aguardando posição GPS';
+        let stale=false;
+        const ageElement=document.getElementById('positionAge');
         if (Number.isFinite(this.lastPositionTimestamp) && this.lastPositionSource) {
             const time = new Date(this.lastPositionTimestamp).toLocaleTimeString('pt-BR', {
                 hour: '2-digit', minute: '2-digit', second: '2-digit'
             });
-            const stale = now - this.lastPositionTimestamp > 120000;
+            stale = now - this.lastPositionTimestamp > 120000;
+            if(ageElement){
+                const age=Math.max(0,Math.floor((now-this.lastPositionTimestamp)/1000));
+                ageElement.textContent=this.lastPositionSource==='legacy'?'Captura desconhecida':`${stale?'Sinal desatualizado · ':''}há ${age<60?age+' s':Math.floor(age/60)+' min'}`;
+                if(this.lastPositionSource!=='legacy')ageElement.setAttribute('datetime',new Date(this.lastPositionTimestamp).toISOString());
+            }
             if (this.lastPositionSource === 'simulated') {
                 state = 'simulated';
                 label = 'SIMULAÇÃO — POSIÇÃO FICTÍCIA';
@@ -485,7 +495,7 @@ class MglCockpitTracker {
         this.positionSourceBadge.dataset.state = state;
         this.positionSourceBadge.classList.toggle('text-warning', state === 'simulated' || state === 'stale' || state === 'unknown-age');
         this.positionSourceBadge.classList.toggle('text-success', state === 'received');
-        if (state === 'stale' || state === 'unknown-age') {
+        if (stale || state === 'stale' || state === 'unknown-age') {
             this.positionIsHistorical = true;
             this.updateArrivalEstimate(null);
             if (this.speedElem) this.speedElem.textContent = '—';
@@ -522,6 +532,7 @@ class MglCockpitTracker {
 
     suspendNavigation(state='SUSPENSA') {
         this.navigationAllowed=false;this.demoRouteAvailable=false;this.updateArrivalEstimate(null);
+        if(this.fuelElem)this.fuelElem.textContent='—';
         if(this.distElem)this.distElem.textContent='—';
         if(this.maneuverInstruction)this.maneuverInstruction.textContent='Confirme o trajeto com a operação.';
         const badge=document.getElementById('routeTrustBadge');if(badge){badge.textContent=(state==='SUSPENSA'?(badge.dataset.confidence||'NÃO VERIFICADA'):state)+' · orientação suspensa';badge.dataset.navigationAllowed='false';}

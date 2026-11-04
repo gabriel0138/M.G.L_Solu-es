@@ -60,7 +60,7 @@ function telemetryEnvironment({ live = false, joinFails = false, trackerOptions 
         off(...args) { removedMapListeners.push(args); }
     };
     const context = {
-        console: { log() {}, warn() {}, error() {} },
+        console: { log() {}, debug() {}, warn() {}, error() {} },
         Date: ClockDate, Number, AbortController,
         document: {
             getElementById: id => elements.get(id) || null,
@@ -531,5 +531,18 @@ test('a short remaining segment does not claim zero minutes before the destinati
     assert.equal(env.elements.get('etaMinutes').textContent,'<1 min estimados');
     env.tracker.updateRouteProgress(0,.01);
     assert.equal(env.elements.get('etaMinutes').textContent,'0 min estimados');
+    env.tracker.destroy();
+});
+
+test('an aging synthetic fix also suspends ETA instead of remaining apparently current', () => {
+    const env=telemetryEnvironment({trackerOptions:{demoMode:true,navigationAllowed:false}});
+    env.tracker.demoRouteAvailable=true;env.tracker.routeCoordinates=[[0,0],[0,.01]];
+    env.tracker.routeCumulativeMeters=[0,1111.95];env.tracker.totalRouteMeters=1111.95;env.tracker.totalDistKm=1.11195;
+    env.tracker.applyTelemetryPosition(env.payload({latitude:0,longitude:.004,isSimulated:true}));
+    assert.notEqual(env.elements.get('etaValue').textContent,'--:--');
+    env.advance(120001);env.tracker.updatePositionStatus();
+    assert.equal(env.elements.get('positionSourceBadge').dataset.state,'simulated');
+    assert.equal(env.tracker.positionIsHistorical,true);
+    assert.equal(env.elements.get('etaValue').textContent,'--:--');
     env.tracker.destroy();
 });

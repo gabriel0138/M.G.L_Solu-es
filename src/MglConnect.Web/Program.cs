@@ -141,6 +141,8 @@ builder.Services.AddScoped<GpsTelemetryPublisher>();
 builder.Services.AddSingleton<MglConnect.Web.Services.RouteTrust.RestrictionEngine>();
 builder.Services.AddScoped<MglConnect.Web.Services.RouteTrust.IRouteEvidenceSource,MglConnect.Web.Services.RouteTrust.ConfiguredRouteEvidenceSource>();
 builder.Services.AddScoped<MglConnect.Web.Services.RouteTrust.RouteTrustService>();
+builder.Services.AddHttpClient("OsrmRoad").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect=false }).RemoveAllLoggers();
+builder.Services.AddScoped<OsrmRoadRouter>();
 builder.Services.AddScoped<ControlledRouteDemo>();
 builder.Services.AddScoped<ControlledDemoNavigation>();
 builder.Services.AddScoped<ITruckRoutingService, TruckRoutingService>();

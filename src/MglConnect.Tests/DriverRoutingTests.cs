@@ -51,11 +51,11 @@ public class DriverRoutingTests
             if (request.RequestUri.Host == "photon.komoot.io")
             {
                 return JsonResponse(
-                    @"{""features"":[{""geometry"":{""coordinates"":[-46.63,-23.55]}}]}");
+                    @"{""features"":[{""geometry"":{""type"":""LineString"",""coordinates"":[-46.63,-23.55]}}]}");
             }
 
             return JsonResponse(
-                @"{""code"":""Ok"",""routes"":[{""distance"":12345,""duration"":600,""geometry"":{""coordinates"":[[-46.877658,-23.355797],[-43.2,-22.9]]},""legs"":[{""steps"":[{""name"":""Rua de Origem"",""distance"":6000,""duration"":300,""maneuver"":{""type"":""depart"",""modifier"":""straight"",""location"":[-46.877658,-23.355797]}},{""name"":""Rua de Destino"",""distance"":6345,""duration"":300,""maneuver"":{""type"":""arrive"",""location"":[-43.2,-22.9]}}]}]}]}");
+                @"{""code"":""Ok"",""routes"":[{""distance"":12345,""duration"":600,""geometry"":{""type"":""LineString"",""coordinates"":[[-46.877658,-23.355797],[-43.2,-22.9]]},""legs"":[{""steps"":[{""name"":""Rua de Origem"",""distance"":6000,""duration"":300,""maneuver"":{""type"":""depart"",""modifier"":""straight"",""location"":[-46.877658,-23.355797]}},{""name"":""Rua de Destino"",""distance"":6345,""duration"":300,""maneuver"":{""type"":""arrive"",""location"":[-43.2,-22.9]}}]}]}]}");
         });
 
         var factory = new Mock<IHttpClientFactory>();
@@ -110,11 +110,11 @@ public class DriverRoutingTests
             if (request.RequestUri.Host == "photon.komoot.io")
             {
                 return JsonResponse(
-                    @"{""features"":[{""geometry"":{""coordinates"":[-46.63,-23.55]}}]}");
+                    @"{""features"":[{""geometry"":{""type"":""LineString"",""coordinates"":[-46.63,-23.55]}}]}");
             }
 
             return JsonResponse(
-                @"{""code"":""Ok"",""routes"":[{""distance"":7200,""duration"":540,""geometry"":{""coordinates"":[[-46.877658,-23.355797],[-46.63,-23.55]]},""legs"":[{""steps"":[]}]}]}");
+                @"{""code"":""Ok"",""routes"":[{""distance"":7200,""duration"":540,""geometry"":{""type"":""LineString"",""coordinates"":[[-46.877658,-23.355797],[-46.63,-23.55]]},""legs"":[{""steps"":[]}]}]}");
         });
 
         var factory = new Mock<IHttpClientFactory>();

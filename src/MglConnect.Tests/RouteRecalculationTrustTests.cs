@@ -52,7 +52,7 @@ public sealed class RouteRecalculationTrustTests
         {
             entered.TrySetResult();await release.Task.WaitAsync(ct);
             var points=reverse?plan.TrajetoCoordenadas.AsEnumerable().Reverse():plan.TrajetoCoordenadas;
-            return new(HttpStatusCode.OK){Content=new StringContent(JsonSerializer.Serialize(new{code="Ok",routes=new[]{new{distance=5000,duration=600,geometry=new{coordinates=points.Select(p=>new[]{p.Longitude,p.Latitude})},legs=new[]{new{steps=Array.Empty<object>()}}}}}))};
+            return new(HttpStatusCode.OK){Content=new StringContent(JsonSerializer.Serialize(new{code="Ok",routes=new[]{new{distance=5000,duration=600,geometry=new{type="LineString",coordinates=points.Select(p=>new[]{p.Longitude,p.Latitude})},legs=new[]{new{steps=Array.Empty<object>()}}}}}))};
         }
     }
 }

@@ -39,6 +39,14 @@ namespace MglConnect.Web.Services
 
     public class TruckRoutePlan
     {
+        public string? ProviderResponseSha256 { get; set; }
+        public string? ProviderGraphVersion { get; set; }
+        public string? GeometrySourceReference { get; set; }
+        public string ProviderName { get; set; } = "Não consultado";
+        public string ProviderProfile { get; set; } = "Não informado";
+        public string GeometrySource { get; set; } = "Unavailable";
+        public double? ProviderDurationSeconds { get; set; }
+        public MglConnect.Web.Services.RouteTrust.ProviderFailure ProviderFailure { get; set; }
         public bool DemonstracaoControlada { get; set; }
         public MglConnect.Web.Services.RouteTrust.RouteTrustResult? Confianca { get; set; }
         public string Origem { get; set; } = string.Empty;
@@ -48,7 +56,7 @@ namespace MglConnect.Web.Services
         public string AvisoRota { get; set; } = string.Empty;
         public decimal DistanciaKm { get; set; }
         public int TempoEstimadoMinutos { get; set; }
-        public decimal CustoPedagioEstimado { get; set; }
+        public decimal? CustoPedagioEstimado { get; set; }
         public bool RotaAprovada { get; set; }
         public decimal AlturaVeiculo { get; set; }
         public decimal PesoVeiculo { get; set; }

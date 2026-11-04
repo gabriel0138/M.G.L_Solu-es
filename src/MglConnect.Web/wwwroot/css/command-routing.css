@@ -1,0 +1,42 @@
+.cc-routing { min-width: 0; }
+.cc-routing-heading { display:flex; justify-content:space-between; gap:1rem; align-items:center; margin-bottom:1rem; }
+.cc-routing h1 { font-size:clamp(1.5rem,3vw,2rem); margin:.3rem 0; }
+.cc-routing-heading p { margin:0; color:var(--mgl-text-secondary); }
+.cc-route-parameters { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; padding:1rem; }
+.cc-route-parameters label { display:block; font-size:.8rem; margin-bottom:.3rem; }
+.cc-route-wide { grid-column:1/-1; }
+.cc-route-cost-inputs { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.75rem; margin-block:.75rem; }
+.cc-routing summary, .cc-routing .btn { min-height:44px; padding-block:.65rem; }
+.cc-routing summary { cursor:pointer; }
+.cc-routing-notice { padding:1rem 0; font-size:.85rem; color:var(--mgl-text-secondary); }
+.cc-routing-metrics { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:.75rem; }
+.cc-routing-metrics > div { padding:1rem; background:var(--mgl-bg-surface); border:1px solid var(--mgl-border-subtle); border-radius:var(--mgl-radius-md); min-width:0; }
+.cc-routing-metrics dt, .cc-routing-metrics small { font-size:.7rem; color:var(--mgl-text-secondary); }
+.cc-routing-metrics dd { margin:.4rem 0 0; font-size:1.2rem; font-weight:800; overflow-wrap:anywhere; }
+.cc-routing-map-panel { padding:1rem; }
+.cc-routing-map-heading { display:flex; align-items:center; gap:1rem; justify-content:space-between; flex-wrap:wrap; }
+.cc-routing-map-heading h2 { font-size:1rem; margin:0; }
+.cc-routing-map-heading span, #routeMapStatus { font-size:.75rem; color:var(--mgl-text-secondary); }
+.cc-routing #truckMap { height:clamp(22rem,58dvh,50rem); min-height:22rem; }
+.cc-route-diagnostics { padding:1rem; margin-top:1rem; font-size:.85rem; }
+.cc-route-diagnostics h3 { font-size:.9rem; margin-top:1rem; }
+@media(max-width:1024px){.cc-routing-metrics {grid-template-columns:repeat(3,minmax(0,1fr));}}
+@media(max-width:575px){.cc-route-parameters,.cc-route-cost-inputs {grid-template-columns:minmax(0,1fr);} .cc-routing-metrics {grid-template-columns:repeat(2,minmax(0,1fr));} .cc-routing-heading{align-items:flex-start;flex-direction:column;}}
+
+.cc-route-diagnostics dd { overflow-wrap:anywhere; }
+.cc-routing-source { font-size:.8rem; color:var(--mgl-text-secondary); }
+
+.cc-route-parameters-panel > summary { min-height:44px; padding:.65rem .25rem; font-weight:700; }
+.cc-routing #truckMap { scroll-margin-block-start:calc(var(--mgl-topbar-height) + 1rem); }
+@media(min-width:1200px){
+    .cc-routing { display:grid; grid-template-columns:minmax(16rem,19rem) minmax(0,1fr); column-gap:1rem; align-items:start; }
+    .cc-routing-heading { grid-area:1/1/2/3; }
+    .cc-route-parameters-panel { grid-area:2/1/7/2; }
+    .cc-route-parameters,.cc-route-cost-inputs { grid-template-columns:minmax(0,1fr); }
+    .cc-routing-notice { grid-area:2/2; padding:.5rem 0; }
+    .cc-routing-source { grid-area:3/2; }
+    .cc-routing-metrics { grid-area:4/2; grid-template-columns:repeat(3,minmax(0,1fr)); }
+    .cc-routing-map-panel { grid-area:5/2; }
+    .cc-route-diagnostics { grid-area:6/2; }
+    .cc-route-capture-link { grid-area:7/1; }
+}
