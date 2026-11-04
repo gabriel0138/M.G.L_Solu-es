@@ -8,6 +8,18 @@ Copilot e Codex podem revisar o trabalho um do outro. Nenhum dos dois modifica s
 
 ## Registros
 
+### 2026-11-04 — Missão Codex 02: implementação P0 para revisão pelo Copilot
+
+- Autor: Codex, implementação autorizada. Revisor previsto: GitHub Copilot, **revisão independente ainda pendente**. Não atribuir esta execução ou seus testes ao Copilot.
+- Base/branch: `a888d56414fb54f3aefec86914fcef34c5622a74` → `fix/mgl-decimal-contract-p0`, criada na worktree solicitada inicialmente limpa. Branch de revisão/diagnóstico e publicação preservadas; nenhum outro checkout foi editado.
+- Código inicial: `6c19dfeb7ecc55f1fffe892896ff32f994ff91f8`; complemento local `c43406b88499941c20b32821dd186633db20d59a` (`fix: preserve malformed axle load input for validation`); documentação em commit separado. Consultar `git log --oneline a888d56..HEAD` e a entrega na conversa para os hashes finais.
+- Achados tratados: `NumberStyles.Number`/cultura ambiente aceitavam agrupamento; parsing por eixo aceitava outro contrato; TryParse podia arredondar; medidas de perfil não impunham centésimos; valores tentados não eram recuperados na view do perfil; MVC podia converter texto de eixo só com espaços em null.
+- Resolução: gramática decimal invariável completa, exatidão por comparação de representação, escala de duas casas para medidas, obrigatoriedade explícita na frota, nulabilidade preservada, parser compartilhado da lista por eixo e saída HTML com ponto/ModelState. Quantidade de eixos permanece inteira; negativos/faixas continuam no domínio. Sem alteração de autorização, tenant, controller ou esquema.
+- Evidência: restore exit 0; build Debug final exit 0, 0 warnings/erros; dirigidos 191 aprovados/0 falhos; complemento HTTP 6/0; completa 618 aprovados/0 falhos/9 ignorados (627 total); JS 107/0/0. Cinco PostgreSQL e quatro SQL Server não executados. Os 147 casos novos estão incluídos na completa; um caso antigo de aceitação de vírgula foi substituído por rejeições explícitas, não relaxado.
+- Execução: .NET 10.0.403/runtime 10.0.14, Node v24.21.0, fixtures SQLite e Kestrel loopback, raízes próprias fora do repositório, conexões externas removidas somente do processo. Primeiro build teve CS0266 em helper novo de teste, corrigido; builds e suítes finais aprovados. Gitleaks da árvore/staged sem ocorrências e diff check aprovado antes dos commits.
+- Limites: sem PostgreSQL/SQL Server, Docker, APIs externas, browser físico, banco operacional, saneamento de legado, push ou merge. Não é homologação de navegação ou produção.
+- Próximo passo: Copilot deve auditar o diff e evidências, especialmente precisão, escala, campos ausentes, espaços no eixo, ModelState e 400/404. Matriz, arquivos, comandos e riscos em [HANDOFF](./HANDOFF.md#missão-codex-02--contrato-decimal-p0). Nenhuma aprovação genérica nem integração automática.
+
 ### 2026-11-03 — preparação do protocolo multiagente
 
 - Tipo: criação documental; não é revisão de código por dois agentes.

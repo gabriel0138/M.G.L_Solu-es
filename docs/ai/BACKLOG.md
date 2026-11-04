@@ -13,8 +13,17 @@ Estimativas relativas, a refinar após validação. Nenhum item abaixo autoriza 
 | B7 | P2 | Trabalho Copilot/Codex em worktrees separados | Médio | Baixo | Baixo | Definir responsável, worktree/branch, arquivos, aceite, testes e revisor por tarefa; impedir checkout simultâneo. |
 | B8 | P2 | Preencher matriz de auditoria jurídica | Alto | Alto | Médio/alto | Fontes oficiais atuais, análise de aplicabilidade por operação real e parecer jurídico quando necessário; nenhuma alegação de conformidade sem evidências. |
 | B9 | P0 | Revisar correção dos HTTP 500 e cultura decimal | Alto | Alto | Médio | Correção local `bbcb189` pronta; revisão independente do Codex em branch/worktree próprios. Confirmar os 13 casos, precisão decimal e respostas 404/400 sem relaxar autorização. |
+| B10 | P0 | Revisar contrato decimal determinístico implementado pelo Codex | Alto | Alto | Médio | Branch `fix/mgl-decimal-contract-p0`, base `a888d56`; revisão independente pelo Copilot pendente. Conferir rejeição de vírgula/milhares/escala/arredondamento, cargas por eixo, ModelState, persistência e isolamento; [handoff atual](./HANDOFF.md#missão-codex-02--contrato-decimal-p0). |
 
-## Situação observada em 2026-11-03
+## Situação atual — 2026-11-04
+
+- B9 identificou a ambiguidade residual do binder e da lista por eixo. B10 implementado pelo Codex, com commits locais separados de código/testes e documentação; Copilot será revisor, ainda não acionado como executor nesta missão.
+- Contrato: ponto invariável, até duas casas para medidas, sem milhares/vírgula/expoentes/sinais finais ou arredondamento silencioso; eixos inteiros. Cargas por eixo usam o mesmo parser, sem eliminar tokens vazios ou espaços; texto em branco não é convertido em null antes da validação.
+- Validação local: restore/build Debug aprovados (0 warnings/erros), dirigidos 191/0/0, complemento HTTP 6/0/0, C# completa 618/0/9 em 627 casos, JS 107/0/0; externos ignorados, não aprovados. Comandos, histórico, limites e evidências no handoff.
+- Não houve alteração de autorização/esquema, outras worktrees, Fleetbase, bancos operacionais, push ou merge. Validação de provedores externos e eventual reconciliação de valores legados exigem tarefas próprias; não sanear dados silenciosamente.
+- Próximo passo atual: revisão independente do Copilot dos commits de implementação desde `a888d56`; o pedido anterior de revisão Codex do commit `bbcb189` permanece histórico.
+
+## Situação histórica observada em 2026-11-03
 
 - B1 concluído: SDK .NET 10.0.403/runtime 10.0.14 isolado e validado.
 - B2 concluído: na branch de diagnóstico, restore/build aprovados; C# 472 aprovados, 0 falhos e 9 ignorados em 481 casos; JavaScript 107/107 aprovados. PostgreSQL/SQL Server ficaram sem configuração.
@@ -26,7 +35,7 @@ Estimativas relativas, a refinar após validação. Nenhum item abaixo autoriza 
 - B8: plano metodológico criado; confirmação jurídica de aplicabilidade e revisão especializada continuam pendentes.
 - B9: correção local preparada e bateria segura aprovada; revisão cruzada ainda pendente.
 
-## Sequência proposta
+## Sequência histórica proposta em 2026-11-03
 
 1. (B9, P0) Fazer revisão independente do commit `bbcb189` em worktree própria.
 2. Avaliar e resolver eventuais achados antes de decidir sobre publicação; nunca publicar na `main` automaticamente.
