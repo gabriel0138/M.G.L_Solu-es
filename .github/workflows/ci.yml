@@ -1,5 +1,7 @@
 name: MGL safe local-fixture validation
 on:
+  push:
+    branches: [integration/mgl-unificado-2026-11]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
@@ -10,7 +12,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
-      TMPDIR: ${{ runner.temp }}/mgl-fixtures
+      TMPDIR: /tmp/mgl-fixtures-${{ github.run_id }}
       MGLCONNECT_POSTGRES_TEST_CONNECTION: ''
       MGLCONNECT_SQLSERVER_TEST_CONNECTION: ''
       PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
