@@ -166,6 +166,23 @@ async function checkControlledDemo(client) {
     await client.navigate(path);
     for(let i=0;i<100;i++){if(await client.evaluate("document.getElementById('positionSourceBadge').dataset.state==='simulated'"))break;await client.pause(100);}
     assert.deepEqual(await client.evaluate('[window.mglControlledDemo.tracker.currentLatLng.lat,window.mglControlledDemo.tracker.currentLatLng.lng]'),[-23.5520,-46.6333]);
+    // Close the actual native WebSocket, then require automatic reconnect/rejoin
+    // and a persisted snapshot to restore intentionally cleared display state.
+    const previousConnection=await client.evaluate(`(()=>{
+        const tracker=window.mglControlledDemo.tracker;
+        const id=tracker.hubConnection.connectionId;
+        const socket=window.__mglTestSockets.find(s=>s.readyState===WebSocket.OPEN&&s.url.includes('/telemetryHub'));
+        if(!socket)throw new Error('Missing live native telemetry socket');
+        tracker.currentLatLng=null;tracker.lastPositionTimestamp=null;
+        socket.close();return id;
+    })()`);
+    for(let i=0;i<200;i++){
+        if(await client.evaluate(`window.mglControlledDemo.tracker.hubConnection.connectionId && window.mglControlledDemo.tracker.hubConnection.connectionId!==${JSON.stringify(previousConnection)} && !!window.mglControlledDemo.tracker.currentLatLng && document.getElementById('telemetryConnectionState').dataset.state==='connected'`))break;
+        await client.pause(100);
+    }
+    assert.notEqual(await client.evaluate('window.mglControlledDemo.tracker.hubConnection.connectionId'),previousConnection);
+    assert.deepEqual(await client.evaluate('[window.mglControlledDemo.tracker.currentLatLng.lat,window.mglControlledDemo.tracker.currentLatLng.lng]'),[-23.5520,-46.6333]);
+    await client.screenshot('delivery2-demo-reconnected');
     // Container-only resize must update the actual Leaflet dimensions.
     await client.evaluate("document.getElementById('cockpitMap').style.setProperty('width','280px','important')");await client.pause(150);
     assert.equal(await client.evaluate('window.mglControlledDemo.tracker.map.getSize().x'),280);
@@ -174,7 +191,7 @@ async function checkControlledDemo(client) {
     await client.evaluate('window.mglControlledDemo.sendSample(4,true)');
     assert.equal(await client.evaluate("document.getElementById('tripProgressBar').getAttribute('aria-valuenow')"),'100');
     await client.screenshot('delivery2-demo-circuit-complete');
-    console.log('Controlled demo passed: controlled route, eight viewports x two themes, synthetic GPS, progress, duplicate, deviation/recalculation, reload and container resize. Tile diagnostics: '+JSON.stringify(await client.evaluate("({...document.getElementById('cockpitMap').dataset})")));
+    console.log('Controlled demo passed: controlled route, eight viewports x two themes, synthetic GPS, progress, duplicate, deviation/recalculation, reload, native WebSocket reconnect and container resize. Tile diagnostics: '+JSON.stringify(await client.evaluate("({...document.getElementById('cockpitMap').dataset})")));
 }
 
 async function checkUnavailableDemo(client) {

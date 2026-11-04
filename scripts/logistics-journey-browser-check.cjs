@@ -157,6 +157,13 @@ async function main() {
     }
     // Keep CDP response-loss interception on the isolated driver page. Production
     // Service Worker rules have their own tests; IndexedDB and actual HTTP remain real.
+    await profiles.driver.command('Page.addScriptToEvaluateOnNewDocument',{source:`
+        window.__mglTestSockets=[];
+        const NativeWebSocket=window.WebSocket;
+        window.WebSocket=class extends NativeWebSocket {
+            constructor(...args){super(...args);window.__mglTestSockets.push(this);}
+        };
+    `});
     await profiles.driver.command('Network.setBypassServiceWorker',{bypass:true});
     await profiles.driver.command('Page.addScriptToEvaluateOnNewDocument',{source:`if(navigator.serviceWorker)navigator.serviceWorker.register=async()=>{throw new Error('Journey transport fixture');};`});
     stage='authenticate the three isolated roles';
