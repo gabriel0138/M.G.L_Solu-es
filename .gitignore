@@ -7,3 +7,12 @@
 .env
 .env.*
 !.env.example
+**/secrets/
+**/*.pfx
+**/*.p12
+**/*.key
+*.gpg
+*.age
+/docs/academico/
+/Manual_PIM_IV - ADS*.docx
+/PIM-agora.pdf

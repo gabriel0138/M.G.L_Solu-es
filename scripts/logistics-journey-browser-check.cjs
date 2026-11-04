@@ -1,0 +1,312 @@
+// Complete browser journey on an exclusively owned temporary SQLite database.
+// Four Chromium profiles keep administrator, customer, driver and public cookies separate.
+const assert = require('node:assert/strict');
+const {spawn} = require('node:child_process');
+const {mkdtempSync,createWriteStream} = require('node:fs');
+const {tmpdir} = require('node:os');
+const {join,resolve} = require('node:path');
+const net = require('node:net');
+const {createBrowserClient} = require('./command-center-browser-check.cjs');
+const directory = mkdtempSync(join(tmpdir(),'mgl-e2e-journey-'));
+const pause = ms => new Promise(resolve=>setTimeout(resolve,ms));
+let server;
+let profiles = {};
+let stage = 'start isolated server';
+const errors = [];
+async function until(client, expression, label=expression, timeout=20000) {
+    const deadline=Date.now()+timeout;
+    while(Date.now()<deadline) {
+        try { if(await client.evaluate(expression)) return; }
+        catch(error) { if(!/context.*destroyed|cannot find context/i.test(error.message)) throw error; }
+        await pause(100);
+    }
+    throw new Error('Journey timed out: '+label);
+}
+async function startServer(restored, reusePort) {
+    const port=reusePort||await new Promise((resolve,reject)=>{
+        const probe=net.createServer();probe.once('error',reject);
+        probe.listen(0,'127.0.0.1',()=>{const port=probe.address().port;probe.close(()=>resolve(port));});
+    });
+    const log=createWriteStream(join(directory,'server.log'));
+    const env={...process.env,MGL_LOCAL_PORT:String(port),MGL_LOCAL_DATA_DIR:join(directory,'database'),GpsHistory__DiasAntesCompactar:'0'};
+    if(restored) {
+        for(const name of ['POSTGRES_URL','DATABASE_URL','POSTGRES_PRISMA_URL','PORT','VERCEL','GOOGLE_MAPS_API_KEY'])delete env[name];
+        Object.assign(env,{ASPNETCORE_ENVIRONMENT:'Development',ASPNETCORE_URLS:'http://127.0.0.1:'+port,
+            DatabaseProvider:'Sqlite',ConnectionStrings__DefaultConnection:'Data Source='+join(restored,'database.sqlite')+';Foreign Keys=True',
+            DataProtection__KeysPath:join(restored,'keys'),DemoData__Enabled:'false',Geocoding__PhotonEnabled:'false',Routing__OsrmBaseUrl:'',GoogleMaps__ApiKey:'',GoogleMaps__GeocodingApiKey:''});
+    }
+    const dotnet=join(process.env.HOME,'.local/share/mglconnect-dotnet10/dotnet');
+    server=spawn(restored?dotnet:'bash',restored?[resolve(__dirname,'../src/MglConnect.Web/bin/Debug/net10.0/MglConnect.Web.dll'),'--contentRoot',resolve(__dirname,'../src/MglConnect.Web')]:['scripts/dev-local.sh'],
+        {cwd:resolve(__dirname,'..'),env,stdio:['ignore','pipe','pipe']});
+    await new Promise((resolve,reject)=>{
+        const timer=setTimeout(()=>reject(new Error('Owned development server did not start.')),60000);
+        server.on('error',reject);
+        server.on('exit',code=>{clearTimeout(timer);reject(new Error('Owned server exited before readiness: '+code));});
+        let output='';
+        server.stdout.on('data',chunk=>{log.write(chunk);output+=chunk;
+            if(output.includes('Now listening on: http://127.0.0.1:'+port)){clearTimeout(timer);resolve();}
+        });
+        server.stderr.on('data',chunk=>log.write(chunk));
+    });
+    return 'http://127.0.0.1:'+port;
+}
+async function login(client,name,password,landing) {
+    await client.navigate('/Account/Login');
+    assert.ok(await client.evaluate(`document.querySelector('.cc-demo-access')?.textContent.includes(${JSON.stringify(name)})`),'Use only the owned Development demo.');
+    await client.evaluate(`document.getElementById('Login').value=${JSON.stringify(name)};document.getElementById('Senha').value=${JSON.stringify(password)};document.querySelector('.cc-login-form').requestSubmit()`);
+    await until(client,`location.pathname===${JSON.stringify(landing)} && document.readyState==='complete'`,name+' login');
+}
+async function issueCode(id) {
+    const client=profiles.admin;
+    await client.navigate('/Entregas/Details/'+id);
+    const code=await client.evaluate(`(async()=>{
+        const form=[...document.forms].find(form=>new URL(form.action).pathname==='/Entregas/EmitirCodigoTurno');
+        if(!form?.querySelector('[name="__RequestVerificationToken"]')) throw new Error('Missing actual code form or CSRF.');
+        const response=await fetch(form.action,{method:'POST',credentials:'same-origin',body:new FormData(form)});
+        if(!response.ok) throw new Error('Code was not issued: '+response.status);
+        return new DOMParser().parseFromString(await response.text(),'text/html').querySelector('output[aria-label="Código temporário"]')?.textContent.trim();
+    })()`);
+    assert.ok(code,'A real server-issued shift code is required.');return code;
+}
+async function repeatCurrentAssignments(id) {
+    for(const action of ['AtribuirMotorista','AtribuirVeiculo']) {
+        for(let retry=0;retry<2;retry++) {
+            const result=await profiles.admin.evaluate(`(async()=>{
+                const form=[...document.forms].find(form=>new URL(form.action).pathname==='/Entregas/${action}');
+                if(!form || form.elements.entregaId.value!==${JSON.stringify(String(id))}) throw new Error('Missing current assignment form.');
+                const response=await fetch(form.action,{method:'POST',credentials:'same-origin',body:new FormData(form)});
+                const page=new DOMParser().parseFromString(await response.text(),'text/html');
+                return {ok:response.ok,path:new URL(response.url).pathname,status:page.getElementById('adminDeliveryDetails')?.dataset.deliveryStatus};
+            })()`);
+            assert.ok(result.ok);
+            assert.equal(result.path,'/Entregas/Details/'+id);
+            assert.equal(result.status,'Pendente');
+        }
+    }
+}
+async function startShift(id,code) {
+    const client=profiles.driver;
+    await client.navigate('/Entregas');
+    await client.evaluate(`(()=>{
+        const form=[...document.forms].find(form=>new URL(form.action).pathname==='/Entregas/IniciarTurno' && form.elements.entregaId?.value===${JSON.stringify(String(id))});
+        if(!form) throw new Error('Assigned trip was not offered to the driver.');
+        form.elements.codigo.value=${JSON.stringify(code)};form.requestSubmit();
+    })()`);
+    await until(client,`location.pathname==='/Entregas/Navegar/${id}' && document.readyState==='complete'`,'Driver navigates after validating shift');
+    await until(client,`document.getElementById('telemetryConnectionState')?.dataset.state==='connected'`,'Authorized GPS hub');
+    assert.equal(await client.evaluate(`!!document.getElementById('btnSimular')`),false);
+}
+async function drawAndSubmitPod(id,name) {
+    const client=profiles.driver;
+    await client.evaluate(`document.querySelector('[data-bs-target="#modalPODNavegacao"]').click()`);
+    await until(client,`document.getElementById('modalPODNavegacao').contains(document.activeElement)`,'POD focus');
+    await client.evaluate(`(()=>{
+        const form=document.getElementById('formPODNavegacao');
+        if(form.elements.entregaId.value!==${JSON.stringify(String(id))}) throw new Error('Wrong POD trip.');
+        form.elements.nomeRecebedor.value=${JSON.stringify(name)};form.elements.documentoRecebedor.value='PRIVATE-BROWSER-DOC';
+        document.getElementById('sigCanvasNav').scrollIntoView({block:'center',behavior:'instant'});
+    })()`);
+    const rect=await client.evaluate(`(()=>{const r=document.getElementById('sigCanvasNav').getBoundingClientRect();return{x:r.x,y:r.y,width:r.width,height:r.height};})()`);
+    const x=rect.x+rect.width*.15,y=rect.y+rect.height*.45;
+    await client.command('Input.dispatchMouseEvent',{type:'mousePressed',x,y,button:'left',buttons:1,clickCount:1});
+    for(let i=1;i<=6;i++) await client.command('Input.dispatchMouseEvent',{type:'mouseMoved',x:x+i*rect.width*.08,y:y+(i%2?15:-10),buttons:1});
+    await client.command('Input.dispatchMouseEvent',{type:'mouseReleased',x:x+rect.width*.48,y:y-10,button:'left',clickCount:1});
+    await client.evaluate(`document.getElementById('formPODNavegacao').requestSubmit()`);
+    await until(client,`document.getElementById('assinaturaBase64Nav').value.startsWith('data:image/png;base64,')`,'Actual canvas signature is submitted');
+}
+async function ownedQueueCount() {
+    return profiles.driver.evaluate(`(async()=>{
+        const shell=document.getElementById('driverOfflineQueueState');
+        const owner=shell.dataset.offlineUser+':'+shell.dataset.offlineTenant.toLowerCase();
+        return (await new MglIndexedPodStore().list(owner)).length;
+    })()`);
+}
+async function responsive(client, role) {
+    await client.command('Accessibility.enable');
+    const tree=await client.command('Accessibility.getFullAXTree');
+    const unnamed=tree.nodes.filter(n=>!n.ignored&&['button','link','textbox','combobox','checkbox','spinbutton'].includes(n.role?.value)&&!n.name?.value?.trim());
+    assert.deepEqual(unnamed.map(n=>({role:n.role?.value,node:n.backendDOMNodeId})),[],role+' controls must have accessible names');
+    assert.ok(await client.evaluate(`document.documentElement.lang.toLowerCase().startsWith('pt')`),role+' language');
+    for(const theme of ['dark','light']) {
+        await client.evaluate(`document.documentElement.dataset.mglTheme=${JSON.stringify(theme)};document.documentElement.style.colorScheme=${JSON.stringify(theme)}`);
+        for(const width of [1440,1280,768,390,360]) {
+            await client.viewport(width,width<500?844:1000);
+            const layout=await client.evaluate(`({width:innerWidth,scroll:document.documentElement.scrollWidth,offenders:[...document.querySelectorAll('main *')].filter(element=>{const r=element.getBoundingClientRect();return r.width && r.right>innerWidth+1 && !element.closest('.leaflet-pane')}).slice(0,3).map(element=>element.tagName+'.'+element.className)})`);
+            assert.ok(layout.scroll<=layout.width,role+' overflow: '+JSON.stringify(layout));
+            if(role==='driver') assert.ok(await client.evaluate('document.documentElement.scrollHeight<=innerHeight+1'), 'Cockpit alerts must not push navigation and emergency actions below the viewport.');
+            await client.screenshot('journey-final-'+role+'-'+theme+'-'+width);
+        }
+    }
+    await client.key('Tab');
+    assert.equal(await client.evaluate(`!!document.activeElement?.closest('[inert]')`),false,role+' keyboard focus must stay outside inert content');
+}
+async function main() {
+    const baseUrl=await startServer();
+    stage='open independent Chromium profiles';
+    profiles=Object.fromEntries(['admin','client','driver','public'].map(role=>[role,createBrowserClient({baseUrl})]));
+    // Stagger startup; all four authenticated profiles remain independent and live.
+    for(const [role,client] of Object.entries(profiles)) {
+        await client.openBrowser();await client.command('Runtime.enable');
+        client.onEvent('Runtime.exceptionThrown',event=>errors.push(role+': '+(event.exceptionDetails.exception?.description||event.exceptionDetails.text)));
+        await client.viewport(role==='driver'||role==='public'?390:1440,role==='driver'||role==='public'?844:1000);
+    }
+    // Keep CDP response-loss interception on the isolated driver page. Production
+    // Service Worker rules have their own tests; IndexedDB and actual HTTP remain real.
+    await profiles.driver.command('Network.setBypassServiceWorker',{bypass:true});
+    await profiles.driver.command('Page.addScriptToEvaluateOnNewDocument',{source:`if(navigator.serviceWorker)navigator.serviceWorker.register=async()=>{throw new Error('Journey transport fixture');};`});
+    stage='authenticate the three isolated roles';
+    await login(profiles.admin,'admin','admin123','/Dashboard');
+    await login(profiles.client,'cliente.demo','cliente123','/Cliente');
+    await login(profiles.driver,'carlos.motorista','motorista123','/Entregas');
+    stage='release seeded synthetic assignment through actual shift and POD';
+    await startShift(1,await issueCode(1));
+    await drawAndSubmitPod(1,'Synthetic warmup receiver');
+    await until(profiles.driver,`document.getElementById('btnSubmitPODNav').textContent==='Entrega confirmada'`,'Warmup POD confirmed');
+    assert.equal(await ownedQueueCount(),0);
+
+    stage='customer creates a new order';
+    const cargo='Browser journey '+Date.now();
+    await profiles.client.navigate('/Cliente/Pedido/Novo');
+    const fields={Descricao:cargo,TipoCarga:'Carga Geral Seca',PesoKg:'1200.50',ValorTotal:'5000',
+        OrigemEndereco:'Rua de coleta sintética',OrigemNumero:'10',OrigemBairro:'Distrito de teste',OrigemCidade:'Campinas',OrigemEstado:'SP',OrigemCep:'00000-000',
+        DestinoEndereco:'Rua de destino sintético',DestinoNumero:'20',DestinoBairro:'Distrito de teste',DestinoCidade:'Santos',DestinoEstado:'SP',DestinoCep:'00000-000'};
+    await profiles.client.evaluate(`(()=>{const form=document.getElementById('clientOrderForm');for(const[name,value]of Object.entries(${JSON.stringify(fields)})){if(!form.elements[name])throw new Error('Missing field '+name);form.elements[name].value=value;}form.requestSubmit();})()`);
+    await until(profiles.client,`new RegExp('^/Cliente/Pedido/[0-9]+$').test(location.pathname) && document.readyState==='complete'`,'Customer order saved');
+    const orderId=await profiles.client.evaluate(`Number(location.pathname.split('/').pop())`);
+    assert.equal(await profiles.client.evaluate(`document.getElementById('clientOrderDetails').dataset.hasDelivery`),'false');
+    await profiles.client.screenshot('journey-customer-order-created');
+
+    stage='administrator validates and dispatches';
+    await profiles.admin.navigate('/Pedidos?termo='+encodeURIComponent(cargo));
+    assert.ok(await profiles.admin.evaluate(`document.querySelector('main').textContent.includes(${JSON.stringify(cargo)})`));
+    await profiles.admin.navigate('/Pedidos/Details/'+orderId);
+    await profiles.admin.evaluate(`document.querySelector('button[name="status"][value="EmProcessamento"]').click()`);
+    await until(profiles.admin,`document.readyState==='complete' && !document.querySelector('button[value="EmProcessamento"]') && document.querySelector('main').textContent.includes('Em processamento')`,'Administrative approval');
+    await profiles.admin.navigate('/Entregas/Create?pedidoId='+orderId);
+    await profiles.admin.evaluate(`(()=>{
+        const form=document.getElementById('dispatchOrderForm');
+        const driver=[...form.elements.MotoristaId.options].find(option=>option.textContent.includes('Carlos Eduardo'));
+        const vehicle=[...form.elements.VeiculoId.options].find(option=>option.textContent.includes('Scania'));
+        if(!driver||!vehicle)throw new Error('Expected owned demo resources.');
+        form.elements.MotoristaId.value=driver.value;form.elements.VeiculoId.value=vehicle.value;
+        form.elements.MotoristaId.dispatchEvent(new Event('change'));form.elements.VeiculoId.dispatchEvent(new Event('change'));
+        form.elements.DestinatarioNome.value='Browser Journey Recipient';form.requestSubmit();
+    })()`);
+    await until(profiles.admin,`new RegExp('^/Entregas/Details/[0-9]+$').test(location.pathname) && document.readyState==='complete'`,'Dispatch persisted');
+    const deliveryId=await profiles.admin.evaluate(`Number(location.pathname.split('/').pop())`);
+    const trackingCode=await profiles.admin.evaluate(`new URL(document.querySelector('a[href^="/Rastreio/"]').href).pathname.split('/').pop()`);
+    assert.ok(deliveryId>1 && trackingCode);
+    await profiles.admin.screenshot('journey-dispatch-created');
+
+    stage='assigned driver starts shift and streams synthetic device GPS';
+    const shiftCode=await issueCode(deliveryId);
+    await repeatCurrentAssignments(deliveryId);
+    await startShift(deliveryId,shiftCode);
+    await profiles.public.navigate('/Rastreio/'+trackingCode);
+    await until(profiles.public,`document.getElementById('trackingConnectionStatus').dataset.state==='connected'`,'Public tracking subscription');
+    await profiles.client.navigate('/Cliente/Pedido/'+orderId);
+    await until(profiles.client,`document.getElementById('clientOrderDetails').dataset.hasDelivery==='true'`,'Private customer shipment');
+    await profiles.driver.command('Browser.grantPermissions',{origin:baseUrl,permissions:['geolocation']});
+    await profiles.driver.command('Emulation.setGeolocationOverride',{latitude:-23.5505,longitude:-46.6333,accuracy:8});
+    await profiles.driver.evaluate(`document.getElementById('btnToggleGps').click()`);
+    await until(profiles.driver,`document.getElementById('positionSourceBadge').dataset.state==='received'`,'Server receives synthetic GPS');
+    await profiles.admin.navigate('/Operacoes');
+    await until(profiles.admin,`document.getElementById('fleetTripList').textContent.includes(${JSON.stringify(trackingCode)}) && document.querySelectorAll('#fleetMap .leaflet-interactive').length===1`,'Actual map consumes persisted GPS');
+    const position=await profiles.admin.evaluate(`fetch('/Operacoes/Posicoes').then(r=>r.json()).then(data=>data.items.find(item=>item.id===${deliveryId}))`);
+    assert.equal(position.latitude,-23.5505);assert.equal(position.longitude,-46.6333);
+    await profiles.admin.screenshot('journey-map-observed-gps');
+    await profiles.admin.navigate('/Entregas/Details/'+deliveryId);
+    await until(profiles.admin,`document.getElementById('adminDeliveryDetails').dataset.deliveryStatus==='Em transporte'`,'Admin sees started shift');
+
+    stage='POD commit with deliberately lost HTTP receipt';
+    let lost=0;
+    profiles.driver.onEvent('Fetch.requestPaused',async event=>{
+        if(event.responseStatusCode===200 && lost===0) {lost++;await profiles.driver.command('Fetch.failRequest',{requestId:event.requestId,errorReason:'ConnectionClosed'});}
+        else await profiles.driver.command('Fetch.continueRequest',{requestId:event.requestId});
+    });
+    await profiles.driver.command('Fetch.enable',{patterns:[{urlPattern:'*/api/entregas/'+deliveryId+'/pod',requestStage:'Response'}]});
+    await drawAndSubmitPod(deliveryId,'Synthetic final receiver');
+    await until(profiles.driver,`document.getElementById('btnSubmitPODNav').textContent==='Comprovante pendente'`,'Lost receipt stays pending');
+    assert.equal(lost,1);assert.equal(await ownedQueueCount(),1);
+    await profiles.driver.screenshot('journey-pod-pending-after-lost-receipt');
+    await until(profiles.public,`document.getElementById('publicDeliveryStatus').textContent==='Entregue'`,'Public real event confirms completion');
+    await until(profiles.client,`!!document.getElementById('clientOrderPodHeading')`,'Private customer POD appears without page reload');
+    await until(profiles.admin,`document.getElementById('adminDeliveryDetails').dataset.deliveryStatus==='Entregue'`,'Private administrator status/POD refreshes without page reload');
+
+    stage='recover identical receipt and stop the completed cockpit';
+    await profiles.driver.command('Fetch.disable');
+    await profiles.driver.evaluate(`document.getElementById('retryOfflinePod').click()`);
+    await until(profiles.driver,`document.getElementById('btnSubmitPODNav').textContent==='Entrega confirmada'`,'Matching idempotent server receipt');
+    assert.equal(await ownedQueueCount(),0);
+    assert.equal(await profiles.driver.evaluate(`document.getElementById('btnToggleGps').disabled`),true,'A confirmed delivery must stop its GPS cockpit.');
+    assert.equal(await profiles.driver.evaluate(`document.getElementById('telemetryConnectionState').dataset.state`),'completed');
+    assert.equal(await profiles.driver.evaluate(`document.getElementById('btnToggleGps').getAttribute('aria-pressed')`),'false');
+    await profiles.driver.screenshot('journey-pod-confirmed-receipt');
+    await profiles.driver.evaluate(`document.getElementById('modalPODNavegacao').querySelector('[data-bs-dismiss="modal"]').click()`);
+    await until(profiles.driver,`!document.querySelector('.modal-backdrop')`,'POD dialog closes after confirmed receipt');
+    await profiles.driver.screenshot('journey-completed-driver-cockpit');
+    await profiles.client.screenshot('journey-customer-completed-pod');
+    await profiles.admin.screenshot('journey-admin-completed-pod');
+    await profiles.public.screenshot('journey-public-completed');
+    stage='desktop, tablet and mobile final states';
+    for(const role of ['admin','client','driver','public']) await responsive(profiles[role],role);
+
+    const pdf=await profiles.client.evaluate(`(async()=>{const response=await fetch(document.querySelector('#clientOrderPodHeading').closest('header').querySelector('a').href);const bytes=new Uint8Array(await response.arrayBuffer());return{status:response.status,type:response.headers.get('Content-Type'),magic:String.fromCharCode(...bytes.slice(0,4))};})()`);
+    assert.equal(pdf.status,200);assert.equal(pdf.type,'application/pdf');assert.equal(pdf.magic,'%PDF');
+    assert.equal(await profiles.public.evaluate(`document.querySelector('.cc-tracking').textContent.includes('PRIVATE-BROWSER-DOC')`),false);
+    await profiles.driver.navigate('/Entregas');
+    assert.equal(await profiles.driver.evaluate(`!!document.querySelector('main a[href="/Entregas/Navegar/${deliveryId}"]')`),false);
+    await profiles.admin.navigate('/Frota');
+    assert.equal(await profiles.admin.evaluate(`document.getElementById('operationalPanel').textContent.includes(${JSON.stringify(trackingCode)})`),false);
+    const active=await profiles.admin.evaluate(`fetch('/Operacoes/Posicoes').then(r=>r.json()).then(data=>data.items.some(item=>item.id===${deliveryId}))`);
+    assert.equal(active,false);
+    if(process.env.MGL_RECOVERY_CHECK==='1') {
+        stage='archive the actual finished trip before a consistent live backup';
+        const historyPath='/GpsHistorico?entregaId='+deliveryId;
+        await profiles.admin.navigate(historyPath);
+        async function submitArchive(action) {
+            await profiles.admin.evaluate(`(async()=>{const f=[...document.forms].find(f=>new URL(f.action).pathname===${JSON.stringify(action)});if(!f)throw new Error('Missing recovery archive form');if(f.elements.confirmar)f.elements.confirmar.checked=true;const r=await fetch(f.action,{method:'POST',body:new FormData(f)});if(!r.ok)throw new Error('Archive action failed '+r.status);})()`);
+            await profiles.admin.navigate(historyPath);
+        }
+        await submitArchive('/GpsHistorico/Arquivar');await submitArchive('/GpsHistorico/Compactar');
+        const before=await profiles.admin.evaluate(`fetch('/GpsHistorico/Dados?entregaId=${deliveryId}').then(r=>r.json())`);
+        assert.ok(before.total>0&&before.items.every(p=>p.arquivado));
+        const {execFileSync}=require('node:child_process'),{existsSync}=require('node:fs');
+        assert.ok(existsSync(join(directory,'database','.mgl-local-preview')));
+        const dotnet=join(process.env.HOME,'.local/share/mglconnect-dotnet10/dotnet');
+        const assembly=resolve(__dirname,'../src/MglConnect.Web/bin/Debug/net10.0/MglConnect.Web.dll');
+        const backup=join(directory,'verified-backup'),restored=join(directory,'restored');
+        const recoveryTimes=[];
+        const run=(...args)=>{const started=Date.now();const result=JSON.parse(execFileSync(dotnet,[assembly,'--operations',...args],{encoding:'utf8'}));recoveryTimes.push({operation:args[0],milliseconds:Date.now()-started});return result;};
+        assert.equal(run('backup-sqlite',join(directory,'database','mglconnect.db'),backup,'--keys',join(directory,'database','keys')).success,true);
+        assert.equal(run('verify',backup).success,true);assert.equal(run('restore',backup,restored).success,true);
+        stage='unexpected application termination followed by isolated restored database and original key ring';
+        const oldServer=server;const exited=new Promise(resolve=>oldServer.once('exit',resolve));oldServer.kill('SIGKILL');await exited;
+        await startServer(restored,Number(new URL(baseUrl).port));
+        await profiles.admin.navigate(historyPath);
+        const after=await profiles.admin.evaluate(`fetch('/GpsHistorico/Dados?entregaId=${deliveryId}').then(async r=>{if(!r.ok)throw new Error('Restored history denied');return r.json()})`);
+        assert.deepEqual(after.items.map(p=>p.eventoId),before.items.map(p=>p.eventoId));assert.equal(after.total,before.total);
+        await profiles.client.navigate('/Cliente/Pedido/'+orderId);
+        const recoveredPdf=await profiles.client.evaluate(`fetch('/Cliente/Pedido/${orderId}/Comprovante').then(async r=>({status:r.status,magic:new TextDecoder().decode((await r.arrayBuffer()).slice(0,4))}))`);
+        assert.deepEqual(recoveredPdf,{status:200,magic:'%PDF'});
+        await profiles.driver.navigate('/Entregas');
+        assert.equal(await profiles.driver.evaluate(`!!document.querySelector('main a[href="/Entregas/Navegar/${deliveryId}"]')`),false);
+        for(const role of ['admin','client'])await responsive(profiles[role],'restored-'+role);
+        stage='localized operational error and visible correlation reference';
+        await profiles.admin.navigate('/Home/Error');
+        const errorReference=await profiles.admin.evaluate(`fetch('/Home/Error').then(async r=>({header:r.headers.get('X-Correlation-ID'),shown:new DOMParser().parseFromString(await r.text(),'text/html').querySelector('section[role="alert"] code')?.textContent}))`);
+        assert.match(errorReference.header,/^[a-f0-9]{32}$/);assert.equal(errorReference.shown,errorReference.header);
+        await responsive(profiles.admin,'operational-error');
+        console.log('Recovery command measurements: '+JSON.stringify(recoveryTimes));
+        console.log('Recovery Chromium passed: live WAL-aware backup + keys + gzip/UUID index, CLI verification, isolated restore after SIGKILL, original authenticated profiles, same archived event IDs, authorized PDF and closed driver trip; two restored screens plus localized error/reference x five widths x two themes; accessible names/language/keyboard verified. Backup: '+backup);
+    }
+    assert.deepEqual(errors,[],'Journey must have no unhandled browser JavaScript exception.');
+    console.log('Complete journey passed: customer order, approval/dispatch, unchanged assignment retries preserving the issued code, driver shift, GPS via hub/database/map, signed POD, lost-receipt recovery, private/public convergence, authorized PDF, four profiles in five widths and two themes.');
+    console.log('Owned database and server evidence: '+directory);
+    console.log('Screenshots: '+JSON.stringify(Object.fromEntries(Object.entries(profiles).map(([role,client])=>[role,client.directory]))));
+}
+main().catch(async error=>{
+    console.error('Failed stage: '+stage+'\n'+error.message);
+    for(const[role,client]of Object.entries(profiles))try{await client.screenshot('journey-failed-'+role);console.error(role+': '+client.directory);}catch{}
+    console.error('Owned evidence: '+directory);process.exitCode=1;
+}).finally(()=>{for(const client of Object.values(profiles))client.closeBrowser();server?.kill('SIGTERM');});

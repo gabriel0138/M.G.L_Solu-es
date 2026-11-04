@@ -1,7 +1,20 @@
-.git
-.vs
-**/bin
-**/obj
-**/mglconnect.db*
-**/keys
-**/uploads
+# Allowlist: no .git, manuals, test fixtures, databases or host credentials enter the build context.
+**
+!src/
+!src/MglConnect.Web/
+!src/MglConnect.Web/**
+!Dockerfile
+!.dockerignore
+**/bin/**
+**/obj/**
+**/appsettings*.json
+**/.env*
+**/secrets/**
+**/keys/**
+**/uploads/**
+**/*.db*
+**/*.sqlite*
+**/*.pfx
+**/*.p12
+**/*.pem
+**/*.key

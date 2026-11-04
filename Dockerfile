@@ -1,24 +1,29 @@
-# Imagem base de compilação SDK .NET 10
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
-WORKDIR /app
-
-# Copiar csproj e restaurar dependências
-COPY src/MglConnect.Web/*.csproj src/MglConnect.Web/
+# syntax=docker/dockerfile:1
+# Tags are explicit; resolve/pin tested digests before a real release.
+FROM mcr.microsoft.com/dotnet/sdk:10.0-noble AS build
+WORKDIR /src
+COPY src/MglConnect.Web/MglConnect.Web.csproj src/MglConnect.Web/
 RUN dotnet restore src/MglConnect.Web/MglConnect.Web.csproj
-
-# Copiar código fonte completo e publicar
 COPY src/MglConnect.Web/ src/MglConnect.Web/
-WORKDIR /app/src/MglConnect.Web
-RUN dotnet publish -c Release -o /app/publish
+RUN dotnet publish src/MglConnect.Web/MglConnect.Web.csproj --no-restore -c Release -o /out /p:UseAppHost=false
 
-# Imagem runtime otimizada para produção
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble AS runtime
+# PDF native font dependencies; installation is inside the image, never on the developer host.
+RUN apt-get update && apt-get install -y --no-install-recommends libfontconfig1 fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /app/data /app/keys \
+    && chown -R "$APP_UID:$APP_UID" /app/data /app/keys
 WORKDIR /app
-COPY --from=build /app/publish .
-
-EXPOSE 80
-EXPOSE 443
-
-ENV ASPNETCORE_URLS=http://+:80
-ENV PORT=80
+COPY --from=build --chown=$APP_UID:$APP_UID /out/ ./
+ENV ASPNETCORE_HTTP_PORTS=8080 \
+    DOTNET_EnableDiagnostics=0 \
+    DatabaseProvider=Sqlite \
+    ConnectionStrings__DefaultConnection="Data Source=/app/data/mglconnect.db;Foreign Keys=True" \
+    DataProtection__KeysPath=/app/keys \
+    DemoData__Enabled=false
+USER $APP_UID
+EXPOSE 8080
+STOPSIGNAL SIGTERM
+HEALTHCHECK --interval=30s --timeout=6s --start-period=60s --retries=3 \
+    CMD ["dotnet", "MglConnect.Web.dll", "--healthcheck"]
 ENTRYPOINT ["dotnet", "MglConnect.Web.dll"]

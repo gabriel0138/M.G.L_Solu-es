@@ -1,21 +1,47 @@
-version: '3.8'
-
+# Local synthetic demonstration only. Docker remains optional for native development.
+name: mglconnect-8a-demo
 services:
   mglconnect-web:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: mglconnect_web_app
     ports:
-      - "5000:80"
+      - "127.0.0.1:${MGL_DEMO_PORT:-5084}:8080"
     environment:
-      - ASPNETCORE_ENVIRONMENT=Production
-      - DatabaseProvider=Sqlite
-      - ConnectionStrings__DefaultConnection=Data Source=/app/data/mglconnect.db
-      - DataProtection__KeysPath=/app/data/keys
+      ASPNETCORE_ENVIRONMENT: Production
+      DatabaseProvider: Sqlite
+      ConnectionStrings__DefaultConnection: "Data Source=/app/data/mglconnect.db;Foreign Keys=True"
+      DataProtection__KeysPath: /app/keys
+      Hosting__SecretsPath: /run/secrets
+      DemoData__Enabled: "true"
+      Geocoding__PhotonEnabled: "false"
+      Routing__OsrmBaseUrl: ""
+      Routing__Valhalla__Enabled: "false"
+    secrets:
+      - source: demo_admin
+        target: DemoData__AdminPassword
+      - source: demo_driver
+        target: DemoData__DriverPassword
+      - source: demo_client
+        target: DemoData__ClientPassword
     volumes:
       - mgl_data:/app/data
-    restart: unless-stopped
-
+      - mgl_keys:/app/keys
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m,uid=1654,gid=1654,mode=0700
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    init: true
+    stop_grace_period: 30s
+    restart: "no"
+secrets:
+  demo_admin:
+    file: ${MGL_SECRETS_DIR:?Generate private demo secrets first}/DemoData__AdminPassword
+  demo_driver:
+    file: ${MGL_SECRETS_DIR:?Generate private demo secrets first}/DemoData__DriverPassword
+  demo_client:
+    file: ${MGL_SECRETS_DIR:?Generate private demo secrets first}/DemoData__ClientPassword
 volumes:
   mgl_data:
+  mgl_keys:

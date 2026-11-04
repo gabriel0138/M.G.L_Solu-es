@@ -1,0 +1,41 @@
+# Optional SQL Server academic demo, NOT homologated. Run with the base compose file.
+services:
+  mglconnect-web:
+    environment:
+      DatabaseProvider: SqlServer
+      ConnectionStrings__DefaultConnection: ""
+    secrets:
+      - source: sql_connection
+        target: ConnectionStrings__DefaultConnection
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: ${MGL_SQLSERVER_ACCEPT_EULA:?Review Microsoft terms and explicitly set Y}
+      MSSQL_PID: Developer
+    # Secret is read at startup. No password in YAML, build args or command line.
+    entrypoint: [/bin/bash, -ec]
+    command:
+      - 'export MSSQL_SA_PASSWORD="$$(cat /run/secrets/sql_sa)"; exec /opt/mssql/bin/sqlservr'
+    secrets:
+      - source: sql_sa
+        target: sql_sa
+    volumes:
+      - sql_data:/var/opt/mssql
+    healthcheck:
+      test: [CMD-SHELL, 'SQLCMDPASSWORD="$$(cat /run/secrets/sql_sa)" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -Q "SELECT 1" -b -o /dev/null']
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 20
+    stop_grace_period: 60s
+    restart: "no"
+secrets:
+  sql_sa:
+    file: ${MGL_SECRETS_DIR:?Generate private demo secrets first}/SqlServerSaPassword
+  sql_connection:
+    file: ${MGL_SECRETS_DIR:?Generate private demo secrets first}/ConnectionStrings__DefaultConnection
+volumes:
+  sql_data:
