@@ -1,5 +1,5 @@
 /**
- * M.G.L Connect - Módulo de Rastreamento em Tempo Real & Suavização Cartográfica
+ * M.G.L Connect - Rastreamento em tempo real de posições observadas
  * Arquitetura: OpenStreetMap / Esri + rotas OSRM e telemetria SignalR
  * Posições ao vivo exigem telemetria; um trajeto planejado não é uma posição GPS.
  */
@@ -83,15 +83,9 @@ class MglCockpitTracker {
         this.vehicleMarker = null;
         this.destinationMarker = null;
 
-        // Estado de Animação e Interpolação do Veículo
+        // The marker represents an observed fix, never an interpolated road position.
         this.currentLatLng = null;
-        this.targetLatLng = null;
         this.currentHeading = 0;
-        this.targetHeading = 0;
-        this.animFrameId = null;
-        this.animStartTime = 0;
-        this.animDuration = 1800; // 1.8s de transição suave
-        this.startLatLng = null;
 
         // Conexão SignalR TelemetryHub
         this.hubConnection = null;
@@ -144,6 +138,16 @@ class MglCockpitTracker {
         this.setupSignalR();
         this.setupTrafficLayerMatch();
         this.setupLayerListeners();
+        if (typeof ResizeObserver === 'function' && this.map?.getContainer && this.map?.invalidateSize) {
+            this.mapResizeObserver = new ResizeObserver(() => {
+                if (this.mapResizeFrame) cancelAnimationFrame(this.mapResizeFrame);
+                this.mapResizeFrame = requestAnimationFrame(() => {
+                    this.mapResizeFrame = null;
+                    if (!this.destroyed) this.map.invalidateSize({ pan: false });
+                });
+            });
+            this.mapResizeObserver.observe(this.map.getContainer());
+        }
     }
 
     setupRouteLayers(coordinates) {
@@ -202,7 +206,6 @@ class MglCockpitTracker {
     setupVehicleMarker(startPoint) {
         if (!startPoint) return;
         this.currentLatLng = L.latLng(startPoint[0], startPoint[1]);
-        this.startLatLng = this.currentLatLng;
 
         const vehicleIcon = L.divIcon({
             html: `
@@ -423,7 +426,7 @@ class MglCockpitTracker {
         const speed = Number.isFinite(payload.speedKmH) && payload.speedKmH >= 0 ? payload.speedKmH : undefined;
         const heading = Number.isFinite(payload.heading) ? ((payload.heading % 360) + 360) % 360 : undefined;
         this.positionIsHistorical = Date.now() - capturedAt > 120000 || (!isSimulated && (payload.captureTimeKnown === false || accuracyMeters == null || accuracyMeters > 50));
-        if (this.updateVehiclePosition(latitude, longitude, speed, heading, options.snap === true) === false) return false;
+        if (this.updateVehiclePosition(latitude, longitude, speed, heading) === false) return false;
         if (speed === undefined && this.speedElem) this.speedElem.textContent = '—';
 
         this.lastPositionTimestamp = capturedAt;
@@ -470,85 +473,29 @@ class MglCockpitTracker {
         }
     }
 
-    // Atualiza a posição do veículo com interpolação suave via requestAnimationFrame
-    updateVehiclePosition(lat, lng, speedKmH, heading, snap = false) {
+    // Display only the received coordinate. A straight animation between sparse
+    // fixes cuts across bends and invents positions unsupported by GPS evidence.
+    updateVehiclePosition(lat, lng, speedKmH, heading) {
         if (!Number.isFinite(lat) || lat < -90 || lat > 90
             || !Number.isFinite(lng) || lng < -180 || lng > 180) return false;
         const firstPosition = !this.currentLatLng;
-        this.targetLatLng = L.latLng(lat, lng);
-        this.targetHeading = heading !== undefined && heading !== null ? heading : this.currentHeading;
-        if (firstPosition && this.map && typeof this.map.setView === 'function') {
-            // Leaflet may not have a center yet when the delivery has no planned route.
-            this.map.setView(this.targetLatLng, 15, { animate: false });
-        } else if (this.followVehicle && this.map && typeof this.map.panTo === 'function') {
-            this.map.panTo(this.targetLatLng, { animate: true, duration: 0.4 });
+        this.currentLatLng = L.latLng(lat, lng);
+        if (Number.isFinite(heading)) this.currentHeading = heading;
+        if (firstPosition && typeof this.map?.setView === 'function') {
+            this.map.setView(this.currentLatLng, 15, { animate: false });
+        } else if (this.followVehicle && typeof this.map?.panTo === 'function') {
+            this.map.panTo(this.currentLatLng, { animate: true, duration: 0.4 });
         }
-
-        if (this.speedElem && speedKmH !== undefined) {
-            this.speedElem.textContent = Math.round(speedKmH);
+        if (this.speedElem && speedKmH !== undefined) this.speedElem.textContent = Math.round(speedKmH);
+        if (!this.vehicleMarker) this.setupVehicleMarker([lat, lng]);
+        else this.vehicleMarker.setLatLng(this.currentLatLng);
+        const icon = document.getElementById('cockpitVehicleMarker');
+        if (icon) icon.style.transform = `rotate(${this.currentHeading.toFixed(1)}deg)`;
+        const container = this.map?.getContainer?.();
+        if (container?.dataset && (container.dataset.mapStatus === 'awaiting'
+            || /^Aguardando uma posição GPS/i.test(container.dataset.mapStatus || ''))) {
+            delete container.dataset.mapStatus;
         }
-
-        if (snap || !this.currentLatLng) {
-            if (this.animFrameId) cancelAnimationFrame(this.animFrameId);
-            this.currentLatLng = this.targetLatLng;
-            this.currentHeading = this.targetHeading;
-            if (!this.vehicleMarker) {
-                this.setupVehicleMarker([lat, lng]);
-            } else {
-                this.vehicleMarker.setLatLng(this.currentLatLng);
-            }
-            const iconElem = document.getElementById('cockpitVehicleMarker');
-            if (iconElem) iconElem.style.transform = `rotate(${this.currentHeading.toFixed(1)}deg)`;
-            const mapContainer = this.map && typeof this.map.getContainer === 'function' ? this.map.getContainer() : null;
-            if (mapContainer && mapContainer.dataset
-                && (mapContainer.dataset.mapStatus === 'awaiting'
-                    || /^Aguardando uma posição GPS/i.test(mapContainer.dataset.mapStatus || ''))) {
-                delete mapContainer.dataset.mapStatus;
-            }
-            this.updateRouteProgress(lat, lng);
-            this.updateNavigationGuidance(lat, lng);
-            return true;
-        }
-
-        this.startLatLng = this.currentLatLng;
-        this.animStartTime = performance.now();
-
-        if (this.animFrameId) {
-            cancelAnimationFrame(this.animFrameId);
-        }
-
-        this.animateStep = (timestamp) => {
-            const elapsed = timestamp - this.animStartTime;
-            const progress = Math.min(1.0, elapsed / this.animDuration);
-
-            // Interpolação suave cúbica (Ease-Out)
-            const easeProgress = 1 - Math.pow(1 - progress, 3);
-
-            const curLat = this.startLatLng.lat + (this.targetLatLng.lat - this.startLatLng.lat) * easeProgress;
-            const curLng = this.startLatLng.lng + (this.targetLatLng.lng - this.startLatLng.lng) * easeProgress;
-
-            this.currentLatLng = L.latLng(curLat, curLng);
-            if (this.vehicleMarker) {
-                this.vehicleMarker.setLatLng(this.currentLatLng);
-            }
-
-            // Interpolação de ângulo de rotação (menor arco angular)
-            const angleDiff = ((this.targetHeading - this.currentHeading + 540) % 360) - 180;
-            const curHeading = this.currentHeading + (angleDiff * easeProgress);
-
-            const iconElem = document.getElementById('cockpitVehicleMarker');
-            if (iconElem) {
-                iconElem.style.transform = `rotate(${curHeading.toFixed(1)}deg)`;
-            }
-
-            if (progress < 1.0) {
-                this.animFrameId = requestAnimationFrame(this.animateStep);
-            } else {
-                this.currentHeading = this.targetHeading;
-            }
-        };
-
-        this.animFrameId = requestAnimationFrame(this.animateStep);
         this.updateRouteProgress(lat, lng);
         this.updateNavigationGuidance(lat, lng);
         return true;
@@ -912,7 +859,8 @@ class MglCockpitTracker {
         this.destroyed = true;
         if (this.trafficTimer) clearInterval(this.trafficTimer);
         if (this.positionFreshnessTimer) clearInterval(this.positionFreshnessTimer);
-        if (this.animFrameId) cancelAnimationFrame(this.animFrameId);
+        this.mapResizeObserver?.disconnect();
+        if (this.mapResizeFrame) cancelAnimationFrame(this.mapResizeFrame);
         window.removeEventListener('online', this.onlineHandler);
         window.removeEventListener('offline', this.offlineHandler);
         window.removeEventListener('mgl:gps-confirmed', this.gpsReceiptHandler);

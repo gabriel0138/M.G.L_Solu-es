@@ -485,3 +485,16 @@ test('revoked or expired route confidence suspends navigation without shifting t
     assert.equal(env.tracker.navigationAllowed,false);assert.equal(env.elements.get('etaValue').textContent,'--:--');assert.equal(env.tracker.currentLatLng.lat,lat);
     env.handlers.ReceiveRouteTrustInvalidated({codigoRastreio:'MGL-OTHER'});assert.equal(env.tracker.currentLatLng.lat,lat);
 });
+
+test('sparse fixes around a bend never invent an intermediate diagonal GPS position', () => {
+    const env = telemetryEnvironment();
+    env.tracker.routeCoordinates = [[-23.5, -46.6], [-23.5, -46.59], [-23.49, -46.59]];
+    const samples = [[-23.5, -46.6], [-23.49, -46.59], [-23.495, -46.585]];
+    for (const [latitude, longitude] of samples) {
+        env.advance(5000);
+        assert.equal(env.tracker.applyTelemetryPosition(env.payload({ latitude, longitude })), true);
+        assert.equal(env.tracker.currentLatLng.lat, latitude);
+        assert.equal(env.tracker.currentLatLng.lng, longitude);
+    }
+    env.tracker.destroy();
+});

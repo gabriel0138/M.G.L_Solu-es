@@ -66,3 +66,31 @@
 .cc-gps-sync summary { cursor: pointer; padding-block: .35rem; }
 .cc-gps-sync details p { margin: .4rem 0 0; line-height: 1.5; }
 .cc-gps-sync[data-state="storage-error"], .cc-gps-sync[data-state="account-mismatch"] { border-color: var(--mgl-error); }
+
+/* Reserve real space for each driver panel so GPS never sits under the POD panel. */
+body.cc-driver-navigation .cc-cockpit {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(6rem, 1fr) auto;
+    height: auto;
+    overflow: visible;
+}
+body.cc-driver-navigation .cc-cockpit #cockpitMap {
+    position: relative;
+    grid-area: 2 / 1;
+    height: 100%;
+    min-height: 0;
+}
+body.cc-driver-navigation .cc-cockpit-top,
+body.cc-driver-navigation .cc-cockpit-bottom { position: relative !important; min-width: 0; }
+body.cc-driver-navigation .cc-cockpit-top { grid-row: 1; }
+body.cc-driver-navigation .cc-cockpit-bottom { grid-row: 3; }
+body.cc-driver-navigation .cc-cockpit-controls {
+    position: relative !important;
+    grid-area: 2 / 1;
+    top: auto !important;
+    transform: none !important;
+    align-self: center;
+    justify-self: end;
+}
+/* The grid can grow on landscape/keyboard resize or expanded queue details. */

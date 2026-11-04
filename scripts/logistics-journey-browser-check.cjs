@@ -147,6 +147,11 @@ async function main() {
     // Stagger startup; all four authenticated profiles remain independent and live.
     for(const [role,client] of Object.entries(profiles)) {
         await client.openBrowser();await client.command('Runtime.enable');
+        await client.command('Network.enable');
+        client.onEvent('Network.responseReceived',event=>{
+            if(event.response.status>=500 && new URL(event.response.url).origin===baseUrl)
+                errors.push(role+': HTTP '+event.response.status+' '+new URL(event.response.url).pathname);
+        });
         client.onEvent('Runtime.exceptionThrown',event=>errors.push(role+': '+(event.exceptionDetails.exception?.description||event.exceptionDetails.text)));
         await client.viewport(role==='driver'||role==='public'?390:1440,role==='driver'||role==='public'?844:1000);
     }
@@ -158,8 +163,23 @@ async function main() {
     await login(profiles.admin,'admin','admin123','/Dashboard');
     await login(profiles.client,'cliente.demo','cliente123','/Cliente');
     await login(profiles.driver,'carlos.motorista','motorista123','/Entregas');
+    stage='direct server authorization checks';
+    await profiles.public.navigate('/Account/Login');
+    for(const [role,path,status] of [
+        ['public','/api/gps/historico/1',401],
+        ['driver','/api/gps/historico/999999999',404],
+        ['client','/api/gps/historico/999999999',404]
+    ]) {
+        assert.equal(await profiles[role].evaluate(`fetch(${JSON.stringify(path)}).then(r=>r.status)`),status,role+' '+path);
+    }
+    for(const role of ['driver','client']) {
+        const denied=await profiles[role].evaluate(`fetch('/Dashboard').then(r=>({status:r.status,path:new URL(r.url).pathname}))`);
+        assert.ok(denied.status===403 || denied.path==='/Account/AccessDenied',role+' administrative access denied');
+    }
     stage='release seeded synthetic assignment through actual shift and POD';
     await startShift(1,await issueCode(1));
+    stage='driver GPS hit testing, geometry and responsive regression';
+    await require('./driver-navigation-browser-check.cjs').checkDriverNavigation(profiles.driver);
     await drawAndSubmitPod(1,'Synthetic warmup receiver');
     await until(profiles.driver,`document.getElementById('btnSubmitPODNav').textContent==='Entrega confirmada'`,'Warmup POD confirmed');
     assert.equal(await ownedQueueCount(),0);
@@ -185,7 +205,7 @@ async function main() {
     await profiles.admin.navigate('/Entregas/Create?pedidoId='+orderId);
     await profiles.admin.evaluate(`(()=>{
         const form=document.getElementById('dispatchOrderForm');
-        const driver=[...form.elements.MotoristaId.options].find(option=>option.textContent.includes('Carlos Eduardo'));
+        const driver=[...form.elements.MotoristaId.options].find(option=>option.textContent.includes('Motorista de Demonstração'));
         const vehicle=[...form.elements.VeiculoId.options].find(option=>option.textContent.includes('Scania'));
         if(!driver||!vehicle)throw new Error('Expected owned demo resources.');
         form.elements.MotoristaId.value=driver.value;form.elements.VeiculoId.value=vehicle.value;
@@ -226,6 +246,9 @@ async function main() {
     });
     await profiles.driver.command('Fetch.enable',{patterns:[{urlPattern:'*/api/entregas/'+deliveryId+'/pod',requestStage:'Response'}]});
     await drawAndSubmitPod(deliveryId,'Synthetic final receiver');
+    // "Pending" is also rendered immediately on enqueue, before the first HTTP
+    // request completes. Wait for the intercepted receipt before asserting it.
+    for(let attempt=0;attempt<100 && lost===0;attempt++) await pause(100);
     await until(profiles.driver,`document.getElementById('btnSubmitPODNav').textContent==='Comprovante pendente'`,'Lost receipt stays pending');
     assert.equal(lost,1);assert.equal(await ownedQueueCount(),1);
     await profiles.driver.screenshot('journey-pod-pending-after-lost-receipt');
