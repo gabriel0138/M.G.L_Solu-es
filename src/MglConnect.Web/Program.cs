@@ -141,6 +141,8 @@ builder.Services.AddScoped<GpsTelemetryPublisher>();
 builder.Services.AddSingleton<MglConnect.Web.Services.RouteTrust.RestrictionEngine>();
 builder.Services.AddScoped<MglConnect.Web.Services.RouteTrust.IRouteEvidenceSource,MglConnect.Web.Services.RouteTrust.ConfiguredRouteEvidenceSource>();
 builder.Services.AddScoped<MglConnect.Web.Services.RouteTrust.RouteTrustService>();
+builder.Services.AddScoped<ControlledRouteDemo>();
+builder.Services.AddScoped<ControlledDemoNavigation>();
 builder.Services.AddScoped<ITruckRoutingService, TruckRoutingService>();
 builder.Services.AddScoped<IFuelCostService, FuelCostService>();
 builder.Services.AddScoped<ITrafficMatchService, TrafficMatchService>();

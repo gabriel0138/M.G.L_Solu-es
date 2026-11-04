@@ -39,6 +39,7 @@ namespace MglConnect.Web.Services
 
     public class TruckRoutePlan
     {
+        public bool DemonstracaoControlada { get; set; }
         public MglConnect.Web.Services.RouteTrust.RouteTrustResult? Confianca { get; set; }
         public string Origem { get; set; } = string.Empty;
         public string Destino { get; set; } = string.Empty;

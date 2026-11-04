@@ -498,3 +498,38 @@ test('sparse fixes around a bend never invent an intermediate diagonal GPS posit
     }
     env.tracker.destroy();
 });
+
+test('demo guidance never grants operational trust or advances from physical GPS', () => {
+    const env=telemetryEnvironment({live:true,trackerOptions:{demoMode:true,navigationAllowed:false}});
+    env.tracker.demoRouteAvailable=true;
+    env.tracker.routeCoordinates=[[0,0],[0,.01]];
+    env.tracker.routeCumulativeMeters=[0,1111.95];env.tracker.totalRouteMeters=1111.95;
+    env.tracker.totalDistKm=1.11195;
+    assert.equal(env.tracker.applyTelemetryPosition(env.payload({latitude:0,longitude:.004,isSimulated:true})),true);
+    assert.equal(env.tracker.navigationAllowed,false);
+    assert.equal(env.elements.get('tripProgressBar').attributes['aria-valuenow'],'40');
+    assert.equal(env.elements.get('positionSourceBadge').dataset.state,'simulated');
+    env.advance(1000);
+    env.tracker.applyTelemetryPosition(env.payload({latitude:0,longitude:.008}));
+    assert.equal(env.elements.get('tripProgressBar').attributes['aria-valuenow'],'40');
+    assert.equal(env.elements.get('etaValue').textContent,'--:--');
+    env.tracker.destroy();
+});
+
+test('operational tracker ignores the dedicated demo channel', () => {
+    const env=telemetryEnvironment({live:true,trackerOptions:{navigationAllowed:false}});
+    env.handlers.ReceiveDemoState({plan:{demonstracaoControlada:true},latest:env.payload({isSimulated:true})});
+    assert.equal(env.tracker.currentLatLng,null);
+    env.tracker.destroy();
+});
+
+test('a short remaining segment does not claim zero minutes before the destination', () => {
+    const env=telemetryEnvironment({trackerOptions:{tempoBaseMinutos:1}});
+    env.tracker.routeCoordinates=[[0,0],[0,.01]];env.tracker.routeCumulativeMeters=[0,1111.95];
+    env.tracker.totalRouteMeters=1111.95;env.tracker.totalDistKm=1.11195;
+    env.tracker.updateRouteProgress(0,.006);
+    assert.equal(env.elements.get('etaMinutes').textContent,'<1 min estimados');
+    env.tracker.updateRouteProgress(0,.01);
+    assert.equal(env.elements.get('etaMinutes').textContent,'0 min estimados');
+    env.tracker.destroy();
+});

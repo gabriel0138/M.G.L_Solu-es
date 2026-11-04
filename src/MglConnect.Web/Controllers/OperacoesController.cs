@@ -9,7 +9,7 @@ namespace MglConnect.Web.Controllers;
 [Authorize(Roles = "Admin")]
 [Route("Operacoes")]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-public sealed class OperacoesController(MglDbContext context, TimeProvider? clock = null) : Controller
+public sealed class OperacoesController(MglDbContext context, TimeProvider? clock = null, MglConnect.Web.Services.ControlledRouteDemo? demo = null) : Controller
 {
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
 
@@ -42,6 +42,16 @@ public sealed class OperacoesController(MglDbContext context, TimeProvider? cloc
                 RecebidoEmUtc = e.UltimoGpsRecebidoEmUtc
             }).ToListAsync(cancellationToken);
 
+        if (demo?.Enabled == true)
+        {
+            foreach(var item in items.Where(i=>!i.Latitude.HasValue))
+            {
+                var sample=await demo.LatestAsync(item.Id,cancellationToken);
+                if(sample==null)continue;
+                item.IsSimulated=true;item.Latitude=sample.Latitude;item.Longitude=sample.Longitude;
+                item.PrecisaoMetros=sample.AccuracyMeters;item.CapturadoEmUtc=sample.Timestamp;item.RecebidoEmUtc=sample.ReceivedAt;
+            }
+        }
         // SQLite materializes DateTime with Kind=Unspecified. These values are
         // written only by the server clock and must serialize with UTC semantics.
         foreach (var item in items)

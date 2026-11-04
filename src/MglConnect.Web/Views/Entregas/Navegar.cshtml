@@ -5,6 +5,8 @@
     ViewData["Title"] = isDriver ? "Navegação" : "Cockpit da viagem " + Model.CodigoRastreio;
     var plano = ViewBag.PlanoRota as MglConnect.Web.Services.TruckRoutePlan ?? new MglConnect.Web.Services.TruckRoutePlan();
     var custo = ViewBag.CustoViagem as MglConnect.Web.Services.TripCostResult ?? new MglConnect.Web.Services.TripCostResult();
+    bool demoMode = plano.DemonstracaoControlada;
+    bool displayRoute = demoMode || plano.Confianca is { NavigationAllowed:true, Obsolete:false, Synthetic:false };
     var savedGps = new {
         codigoRastreio = Model.CodigoRastreio,
         latitude = Model.UltimaLatitudeGps,
@@ -21,6 +23,26 @@
 
 <div class="cockpit-container cc-cockpit position-relative min-vh-100 d-flex flex-column">
     
+    @if (isDriver)
+    {
+        <header class="cc-cockpit-top p-3 z-3">
+            <div class="cc-cockpit-panel-width container-fluid">
+                <div class="cc-cockpit-hud cc-driver-nav-header rounded-4">
+                    <div class="d-flex align-items-center gap-2">
+                        <i id="maneuverIcon" class="bi bi-compass text-teal" aria-hidden="true"></i>
+                        <h1 id="maneuverRoad">@(demoMode ? "Demonstração controlada" : displayRoute ? "Rota disponível" : "Sem rota")</h1>
+                        <a asp-action="Index" class="cc-cockpit-close btn btn-outline-light ms-auto" aria-label="Voltar às viagens"><i class="bi bi-x-lg" aria-hidden="true"></i></a>
+                    </div>
+                    <p id="maneuverInstruction">@(demoMode ? "Circuito e GPS fictícios · sem homologação" : displayRoute ? "Ative o GPS para acompanhar sua posição." : "GPS disponível; confirme o trajeto com a operação.")</p>
+                    <span id="maneuverDist" hidden></span>
+                    <span id="routeTrustBadge" hidden data-confidence="@(demoMode ? "SINTÉTICA" : "NÃO VERIFICADA")" data-navigation-allowed="@(displayRoute && !demoMode ? "true" : "false")"></span>
+                    <div class="progress cc-cockpit-progress"><div id="tripProgressBar" class="progress-bar" role="progressbar" aria-label="@(demoMode ? "Progresso no circuito sintético" : "Progresso estimado sobre o trajeto")" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" style="width:0%"></div></div>
+                </div>
+            </div>
+        </header>
+    }
+    else
+    {
     <!-- Instrução atual e contexto do trajeto planejado. -->
     <div class="cc-cockpit-top position-absolute top-0 start-0 end-0 p-3 z-3">
         <div class="container-fluid cc-cockpit-panel-width">
@@ -73,8 +95,12 @@
         </div>
     </div>
 
+    }
+
     <!-- A rota planejada não representa uma posição observada. -->
     <div id="cockpitMap" class="flex-grow-1 w-100" role="region" aria-label="Mapa da viagem"></div>
+
+    <p id="cockpitTileState" class="cc-map-tile-state" role="status">Aguardando rota ou posição GPS para carregar o mapa.</p>
 
     @if (!isDriver)
     {
@@ -86,6 +112,18 @@
 
     <!-- CONTROLES FLUTUANTES LATERAIS (GPS, SIMULAÇÃO, DESVIO, CAMADA MAPA) -->
     <div class="cc-cockpit-controls position-absolute end-0 top-50 translate-middle-y me-3 d-flex flex-column gap-2 z-2">
+        @if (demoMode && isDriver)
+        {
+            <div id="demoRouteControls" data-delivery="@Model.Id" data-route-available="@(plano.RotaDisponivel ? "true" : "false")">
+                @Html.AntiForgeryToken()
+                <button id="btnDemoGps" class="btn btn-driver-primary" type="button" aria-pressed="false" disabled="@(!plano.RotaDisponivel || isFinalDelivery)">Iniciar GPS sintético</button>
+                <button id="btnDemoDetour" class="btn btn-outline-light" type="button" disabled="@(!plano.RotaDisponivel || isFinalDelivery)">Desvio de ensaio</button>
+            </div>
+        }
+        @if (isDriver)
+        {
+            <button id="btnFollowPosition" class="btn btn-outline-light" type="button" aria-pressed="true" aria-label="Acompanhar posição">Acompanhar</button>
+        }
         <button id="btnToggleGps" class="btn btn-dark border shadow @(isDriver ? "rounded-pill px-3 py-2 d-flex align-items-center gap-2" : "rounded-circle p-3")"
                 type="button" disabled="@isFinalDelivery" aria-pressed="false" aria-label="Ativar GPS do aparelho" title="Ativar GPS do aparelho">
             <i id="gpsIcon" class="bi bi-geo-alt-fill text-warning fs-5"></i>
@@ -94,7 +132,7 @@
                 <span id="gpsActionLabel">Ativar GPS</span>
             }
         </button>
-        @if (User.IsInRole("Admin"))
+        @if (User.IsInRole("Admin") && !demoMode)
         {
             <button id="btnSimular" class="btn btn-teal border shadow rounded-circle p-3" title="Simulação administrativa; não representa uma posição real" style="background-color: var(--mgl-teal);">
                 <i id="simIcon" class="bi bi-play-fill text-dark fs-5"></i>
@@ -116,7 +154,7 @@
         <div class="container-fluid cc-cockpit-panel-width">
             <div class="card cc-cockpit-hud text-white rounded-4 p-3">
                 <div class="cc-cockpit-connection"><i class="bi bi-broadcast" aria-hidden="true"></i><span id="telemetryConnectionState" role="status">Conectando à operação…</span></div>
-                <p id="cockpitMapStatus" class="cc-cockpit-map-status" role="status" hidden></p>
+                @if (!isDriver) { <p id="cockpitMapStatus" class="cc-cockpit-map-status" role="status" hidden></p> }
                 <p id="routePositionStatus" class="small text-warning mb-2" role="status" hidden></p>
                 @if (isDriver)
                 {
@@ -128,8 +166,12 @@
                     {
                         <p class="cc-cockpit-feedback text-danger" role="alert">@driverError</p>
                     }
-                    <partial name="_DriverOfflineQueueState" model="true" />
-                    <partial name="_DriverGpsSync" model="Model.Id" />
+                    <details class="cc-driver-diagnostics">
+                        <summary>Sincronização e diagnósticos</summary>
+                        <p id="cockpitMapStatus" class="cc-cockpit-map-status" role="status" hidden></p>
+                        <partial name="_DriverOfflineQueueState" model="true" />
+                        <partial name="_DriverGpsSync" model="Model.Id" />
+                    </details>
                 }
 
                 @if (isDriver)
@@ -149,7 +191,7 @@
                         </div>
                         <div class="driver-route-metric">
                             <span class="fs-8 text-white-50 text-uppercase fw-semibold">Distância</span>
-                            <h4 id="distanceRemaining" class="fw-extrabold mb-0 text-white font-monospace">@(plano.Confianca?.NavigationAllowed==true ? $"{plano.DistanciaKm:F1} km" : "—")</h4>
+                            <h4 id="distanceRemaining" class="fw-extrabold mb-0 text-white font-monospace">@(displayRoute && plano.RotaDisponivel ? $"{plano.DistanciaKm:F1} km" : "—")</h4>
                             <span class="fs-8 text-white-50">estimativa</span>
                         </div>
                     </div>
@@ -208,7 +250,7 @@
                         <button type="button" class="btn btn-warning btn-lg fw-extrabold py-3 rounded-3 shadow-lg d-flex align-items-center justify-content-center gap-2 fs-6 text-dark @(isDriver ? "driver-pod-button" : "")"
                                 data-bs-toggle="modal" data-bs-target="#modalPODNavegacao" style="min-height: 52px;">
                             <i class="bi bi-patch-check-fill fs-5"></i>
-                            <span>Confirmar entrega · Coletar assinatura</span>
+                            <span>Assinar e entregar</span>
                         </button>
                     }
                 </div>
@@ -341,6 +383,7 @@
 @section Scripts {
     <script src="~/js/pod-signature.js" asp-append-version="true"></script>
     <script src="~/js/tracker.js" asp-append-version="true"></script>
+    <script src="~/js/controlled-demo-navigation.js" asp-append-version="true"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const mapElement = document.getElementById('cockpitMap');
@@ -353,8 +396,9 @@
             // 1. CARREGAMENTO DOS DADOS GEOGRÁFICOS E PASSOS TURN-BY-TURN
             const navigationValidUntil = @Json.Serialize(plano.Confianca?.ValidUntilUtc);
             const navigationAllowed = @Json.Serialize(plano.Confianca is { NavigationAllowed:true, Obsolete:false, Synthetic:false });
-            const rawCoords = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(plano.Confianca is { NavigationAllowed:true, Obsolete:false, Synthetic:false } ? plano.TrajetoCoordenadas : new List<MglConnect.Web.Services.RouteCoordinate>()));
+            const rawCoords = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(displayRoute ? plano.TrajetoCoordenadas : new List<MglConnect.Web.Services.RouteCoordinate>()));
             const steps = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(plano.PassosNavegacao ?? new List<MglConnect.Web.Services.RouteStep>()));
+            const demoMode = @Json.Serialize(demoMode);
             const isDriver = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(isDriver));
             const isFinalDelivery = @Json.Serialize(isFinalDelivery);
             const totalDistKm = @plano.DistanciaKm.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -402,9 +446,18 @@
                     osmStandard.addTo(map);
                 }
             });
-            osmStandard.on('tileerror', function () {
-                map.getContainer().dataset.mapStatus = 'Sem tiles de mapa. Verifique a conexão com a internet.';
-            });
+            const tileState=document.getElementById('cockpitTileState');
+            let loadedTiles=0, failedTiles=0, batchLoaded=0, batchFailed=0;
+            mapElement.dataset.tilesLoaded='0';mapElement.dataset.tilesFailed='0';
+            function showTileResult() {
+                tileState.hidden=batchLoaded>0 && batchFailed===0;
+                tileState.textContent=batchFailed>0 ? 'Mapa de fundo incompleto. Rota e GPS continuam visíveis.' : 'Carregando mapa…';
+                mapElement.dataset.tileState=batchFailed>0 ? (batchLoaded>0?'partial':'error') : batchLoaded>0?'loaded':'loading';
+            }
+            osmStandard.on('loading',()=>{batchLoaded=0;batchFailed=0;showTileResult();});
+            osmStandard.on('tileload',()=>{loadedTiles++;batchLoaded++;mapElement.dataset.tilesLoaded=String(loadedTiles);showTileResult();});
+            osmStandard.on('tileerror',()=>{failedTiles++;batchFailed++;mapElement.dataset.tilesFailed=String(failedTiles);showTileResult();});
+            osmStandard.on('load',showTileResult);
 
             // Adiciona o Seletor no canto superior direito do mapa
             const baseMaps = { "OpenStreetMap (ruas)": osmStandard };
@@ -415,7 +468,7 @@
             }
 
             if (coordinates.length === 0) {
-                map.getContainer().dataset.mapStatus = 'Trajeto indisponível. Distância e chegada não calculadas.';
+                map.getContainer().dataset.mapStatus = demoMode ? 'Rota de demonstração indisponível.' : '';
             }
 
             const tracker = new MglCockpitTracker({
@@ -424,6 +477,7 @@
                 codigoRastreio: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.CodigoRastreio)),
                 coordinates: coordinates,
                 navigationAllowed: navigationAllowed,
+                demoMode: demoMode,
                 navigationValidUntil: navigationValidUntil,
                 steps: steps,
                 totalDistKm: totalDistKm,
@@ -435,6 +489,12 @@
 
             const savedGps = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(savedGps));
             tracker.applyTelemetryPosition(savedGps, { snap: true });
+            if(demoMode && !isFinalDelivery)window.mglDemoNavigation?.(tracker, map, @Model.Id);
+            const followButton=document.getElementById('btnFollowPosition');
+            followButton?.addEventListener('click',()=>{
+                tracker.setFollowVehicle(!tracker.followVehicle);
+                followButton.setAttribute('aria-pressed',String(tracker.followVehicle));
+            });
 
             let viewMode = isDriver ? 'gps' : 'operational';
             const btnModeOperational = document.getElementById('btnModeOperational');

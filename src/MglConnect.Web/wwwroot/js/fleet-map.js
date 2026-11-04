@@ -82,7 +82,7 @@ class MglFleetMap {
             this.render();
             const count = this.filtered().length;
             const positioned = this.filtered().filter(item => this.position(item)).length;
-            this.statusElement.textContent = `${count} viagem(ns) · ${positioned} com GPS informado. Consulta automática a cada 10 segundos.`;
+            this.statusElement.textContent = `${count} viagem(ns) · ${positioned} com posição informada. Consulta automática a cada 10 segundos.`;
         } catch {
             if (!this.stopped) {
                 this.render();
@@ -112,7 +112,7 @@ class MglFleetMap {
                     this.node('span', '', [item.veiculo || 'Veículo não informado', item.placa].filter(Boolean).join(' · ')),
                     this.node('span', 'cc-fleet-location-meta', [item.cidadeDestino, item.estadoDestino].filter(Boolean).join(' / ')),
                     this.node('span', 'cc-fleet-location-meta', item.motorista || 'Sem motorista informado'),
-                    this.node('span', 'cc-fleet-location-meta', pos ? `${pos.stale ? 'Sinal desatualizado' : pos.captureKnown ? 'GPS recebido' : 'Captura não informada; recebimento'} · ${new Date(pos.received).toLocaleString('pt-BR')}` : 'Aguardando GPS'));
+                    this.node('span', 'cc-fleet-location-meta', pos ? `${item.isSimulated ? `SIMULAÇÃO · posição fictícia${pos.stale ? ' desatualizada' : ''}` : pos.stale ? 'Sinal desatualizado' : pos.captureKnown ? 'GPS recebido' : 'Captura não informada; recebimento'} · ${new Date(pos.received).toLocaleString('pt-BR')}` : 'Aguardando GPS'));
                 if (pos) row.append(this.node('small', 'cc-fleet-location-meta', Number.isFinite(item.precisaoMetros) ? `Precisão informada: ${Math.round(item.precisaoMetros)} m` : 'Precisão não informada'));
                 row.addEventListener('click', () => this.select(item.id));
                 this.rows.set(item.id, row);
@@ -157,10 +157,10 @@ class MglFleetMap {
         for (const { item, pos } of located) {
             const popup = this.node('div', 'cc-fleet-popup');
             popup.append(this.node('strong', '', this.text(item.codigoRastreio)), this.node('p', '', [item.veiculo, item.placa].filter(Boolean).join(' · ')),
-                this.node('p', '', `${pos.stale ? 'Sinal desatualizado' : pos.captureKnown ? 'GPS recebido' : 'Captura não informada; recebimento'} · ${new Date(pos.received).toLocaleString('pt-BR')}`));
+                this.node('p', '', `${item.isSimulated ? `SIMULAÇÃO · posição fictícia${pos.stale ? ' desatualizada' : ''}` : pos.stale ? 'Sinal desatualizado' : pos.captureKnown ? 'GPS recebido' : 'Captura não informada; recebimento'} · ${new Date(pos.received).toLocaleString('pt-BR')}`));
             this.leaflet.circleMarker([pos.lat, pos.lng], { radius: item.id === this.selectedId ? 10 : 7,
-                color: this.color(pos.stale || !pos.captureKnown ? '--mgl-text-tertiary' : '--mgl-success'),
-                fillColor: this.color(pos.stale || !pos.captureKnown ? '--mgl-text-tertiary' : '--mgl-success'), weight: 2, fillOpacity: .8
+                color: this.color(item.isSimulated ? '--mgl-warning' : pos.stale || !pos.captureKnown ? '--mgl-text-tertiary' : '--mgl-success'),
+                fillColor: this.color(item.isSimulated ? '--mgl-warning' : pos.stale || !pos.captureKnown ? '--mgl-text-tertiary' : '--mgl-success'), weight: 2, fillOpacity: .8
             }).addTo(this.markerLayer).bindPopup(popup);
         }
         const selected = located.find(entry => entry.item.id === this.selectedId);
@@ -183,7 +183,7 @@ class MglFleetMap {
             const link = this.node('a', 'btn btn-sm btn-outline-secondary', 'Abrir cockpit da viagem');
             link.href = '/Entregas/Navegar/' + id;
             this.detailElement.replaceChildren(this.node('strong', '', this.text(item.codigoRastreio)),
-                this.node('span', '', pos ? pos.stale ? 'Última posição desatualizada.' : pos.captureKnown ? 'Último GPS recebido no servidor.' : 'Horário da captura desconhecido; consulte o recebimento.' : 'Aguardando GPS: sem marcador no mapa.'), link);
+                this.node('span', '', pos ? item.isSimulated ? 'SIMULAÇÃO · posição fictícia, separada do GPS real.' : pos.stale ? 'Última posição desatualizada.' : pos.captureKnown ? 'Último GPS recebido no servidor.' : 'Horário da captura desconhecido; consulte o recebimento.' : 'Aguardando GPS: sem marcador no mapa.'), link);
             const historyLink = this.node('a', 'btn btn-outline-secondary', 'Histórico GPS');
             historyLink.href = '/GpsHistorico?entregaId=' + item.id;
             this.detailElement.append(historyLink);

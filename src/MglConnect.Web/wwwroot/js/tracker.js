@@ -41,6 +41,8 @@ class MglCockpitTracker {
     }
 
     constructor(options) {
+        this.demoMode = options.demoMode === true;
+        this.demoRouteAvailable = this.demoMode && options.coordinates?.length > 1;
         this.navigationAllowed = options.navigationAllowed !== false;
         this.navigationValidUntil = Date.parse(options.navigationValidUntil);
         this.map = options.map;
@@ -118,7 +120,7 @@ class MglCockpitTracker {
         this.gpsReceiptHandler = event => {
             const { receipt, metrics } = event.detail || {};
             if (receipt?.posicao) this.applyTelemetryPosition(receipt.posicao);
-            if (metrics?.navigationAllowed===false)this.suspendNavigation();
+            if (!this.demoMode && metrics?.navigationAllowed===false)this.suspendNavigation();
             if (metrics && !metrics.gpsDataAccepted) this.showToastAlert(metrics.motivo || 'GPS ignorado.', 'bi-geo-alt', 'var(--mgl-warning)');
         };
         window.addEventListener('mgl:gps-confirmed', this.gpsReceiptHandler);
@@ -304,6 +306,7 @@ class MglCockpitTracker {
             .build();
 
         // 1. Recebimento de Coordenadas em Tempo Real (outros dispositivos / central)
+        this.hubConnection.on('ReceiveDemoState', payload => this.applyControlledDemoState(payload));
         this.hubConnection.on('ReceiveVehiclePosition', (payload) => {
             this.applyTelemetryPosition(payload);
         });
@@ -323,7 +326,7 @@ class MglCockpitTracker {
         // 3. Telemetria Diagnóstica (XTE / ATD)
         this.hubConnection.on('ReceiveTelemetryMetrics', (metrics) => {
             if(metrics.codigoRastreio&&metrics.codigoRastreio!==this.codigoRastreio)return;
-            if(metrics.navigationAllowed===false){this.suspendNavigation();return;}
+            if(!this.demoMode && metrics.navigationAllowed===false){this.suspendNavigation();return;}
             if (!metrics.gpsDataAccepted) {
                 this.showToastAlert(metrics.motivo || 'A posição GPS foi ignorada por baixa qualidade.', 'bi-geo-alt-fill', '#FFB020');
             } else if (metrics.isOffRoute) {
@@ -368,14 +371,30 @@ class MglCockpitTracker {
             });
     }
 
+    applyControlledDemoState(data) {
+        if (!this.demoMode || this.destroyed || data?.plan?.demonstracaoControlada !== true) return false;
+        if(data.latest && Date.parse(data.latest.timestamp)<this.lastPositionTimestamp)return false;
+        const plan=data.plan;
+        if(!plan.rotaDisponivel){this.suspendNavigation();return false;}
+        const coords=(plan.trajetoCoordenadas||[]).map(c=>[c.latitude,c.longitude]);
+        if(coords.length<2||coords.some(c=>!c.every(Number.isFinite)||Math.abs(c[0])>90||Math.abs(c[1])>180))return false;
+        this.demoRouteAvailable=true;this.totalDistKm=plan.distanciaKm;this.tempoBaseMinutos=plan.tempoEstimadoMinutos;this.steps=plan.passosNavegacao||[];
+        if(JSON.stringify(coords)!==JSON.stringify(this.routeCoordinates)){
+            this.setupRouteLayers(coords);this.currentStepIndex=0;
+        }
+        if(data.latest)this.applyTelemetryPosition(data.latest);
+        return true;
+    }
+
     async refreshConfirmedPosition() {
         if (this.destroyed || !this.entregaId) return;
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 10000);
         try {
-            const response = await fetch(`/api/gps/historico/${this.entregaId}`, { credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
+            const response = await fetch(this.demoMode ? `/Entregas/${this.entregaId}/Demonstracao` : `/api/gps/historico/${this.entregaId}`, { credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
             if (!response.ok || response.redirected || this.destroyed) return;
             const history = await response.json();
+            if(this.demoMode){this.applyControlledDemoState(history);return;}
             if (history.ultimaPosicao && !this.destroyed) this.applyTelemetryPosition(history.ultimaPosicao);
         } catch { /* Keep the last observed position and its original age. */ }
         finally { clearTimeout(timeout); }
@@ -425,14 +444,14 @@ class MglCockpitTracker {
 
         const speed = Number.isFinite(payload.speedKmH) && payload.speedKmH >= 0 ? payload.speedKmH : undefined;
         const heading = Number.isFinite(payload.heading) ? ((payload.heading % 360) + 360) % 360 : undefined;
-        this.positionIsHistorical = Date.now() - capturedAt > 120000 || (!isSimulated && (payload.captureTimeKnown === false || accuracyMeters == null || accuracyMeters > 50));
+        this.positionIsHistorical = (this.demoMode && !isSimulated) || Date.now() - capturedAt > 120000 || (!isSimulated && (payload.captureTimeKnown === false || accuracyMeters == null || accuracyMeters > 50));
         if (this.updateVehiclePosition(latitude, longitude, speed, heading) === false) return false;
         if (speed === undefined && this.speedElem) this.speedElem.textContent = '—';
 
         this.lastPositionTimestamp = capturedAt;
         // Simulation always stays visibly simulated, even if a caller passes localOnly.
         this.lastPositionSource = isSimulated ? 'simulated' : payload.captureTimeKnown === false ? 'legacy' : options.localOnly === true ? 'local' : 'real';
-        if (this.routeCoordinates.length < 2 && this.maneuverInstruction) {
+        if (!this.demoMode && this.routeCoordinates.length < 2 && this.maneuverInstruction) {
             this.maneuverInstruction.textContent = 'Sem instruções de navegação. Confirme o trajeto com a operação.';
         }
         this.updatePositionStatus();
@@ -502,13 +521,13 @@ class MglCockpitTracker {
     }
 
     suspendNavigation(state='SUSPENSA') {
-        this.navigationAllowed=false;this.updateArrivalEstimate(null);
+        this.navigationAllowed=false;this.demoRouteAvailable=false;this.updateArrivalEstimate(null);
         if(this.distElem)this.distElem.textContent='—';
-        if(this.maneuverInstruction)this.maneuverInstruction.textContent='Orientação suspensa. Consulte a operação.';
+        if(this.maneuverInstruction)this.maneuverInstruction.textContent='Confirme o trajeto com a operação.';
         const badge=document.getElementById('routeTrustBadge');if(badge){badge.textContent=(state==='SUSPENSA'?(badge.dataset.confidence||'NÃO VERIFICADA'):state)+' · orientação suspensa';badge.dataset.navigationAllowed='false';}
     }
     updateRouteProgress(lat, lng) {
-        if(this.navigationAllowed===false||Number.isFinite(this.navigationValidUntil)&&Date.now()>this.navigationValidUntil){this.suspendNavigation();this.updateArrivalEstimate(null);if(this.distElem)this.distElem.textContent='—';return;}
+        if(!(this.navigationAllowed || this.demoMode && this.demoRouteAvailable)||Number.isFinite(this.navigationValidUntil)&&Date.now()>this.navigationValidUntil){this.suspendNavigation();this.updateArrivalEstimate(null);if(this.distElem)this.distElem.textContent='—';return;}
         if (this.positionIsHistorical) {
             this.updateArrivalEstimate(null);
             if (this.distElem) this.distElem.textContent = '—';
@@ -573,7 +592,7 @@ class MglCockpitTracker {
         if (this.fuelElem) this.fuelElem.textContent = (this.totalFuelLiters * (1 - progress)).toFixed(1);
 
         this.updateArrivalEstimate(this.tempoBaseMinutos > 0
-            ? Math.max(0, Math.round(this.tempoBaseMinutos * (1 - progress))) : null);
+            ? Math.max(0, this.tempoBaseMinutos * (1 - progress)) : null);
     }
 
     updateArrivalEstimate(remainingMinutes) {
@@ -582,7 +601,7 @@ class MglCockpitTracker {
             if (this.etaElem) this.etaElem.textContent = '--:--';
             return;
         }
-        if (this.etaMinutesElem) this.etaMinutesElem.textContent = `${remainingMinutes} min estimados`;
+        if (this.etaMinutesElem) this.etaMinutesElem.textContent = `${remainingMinutes > 0 && remainingMinutes < 1 ? '<1' : Math.ceil(remainingMinutes - 1e-9)} min estimados`;
         if (this.etaElem) {
             const eta = new Date(Date.now() + remainingMinutes * 60000);
             this.etaElem.textContent = `${String(eta.getHours()).padStart(2, '0')}:${String(eta.getMinutes()).padStart(2, '0')}`;
@@ -590,7 +609,7 @@ class MglCockpitTracker {
     }
 
     updateNavigationGuidance(lat, lng) {
-        if(this.navigationAllowed===false||Number.isFinite(this.navigationValidUntil)&&Date.now()>this.navigationValidUntil){this.suspendNavigation();return;}
+        if(!(this.navigationAllowed || this.demoMode && this.demoRouteAvailable)||Number.isFinite(this.navigationValidUntil)&&Date.now()>this.navigationValidUntil){this.suspendNavigation();return;}
         if (this.routeProjectionOffRoute || this.positionIsHistorical) return;
         if (!this.steps || this.steps.length === 0) return;
 
@@ -779,14 +798,14 @@ class MglCockpitTracker {
 
     // Matchmaking da Camada de Tráfego: Atualiza o ETA via API sem mexer no traçado OSRM
     setupTrafficLayerMatch() {
-        if(this.navigationAllowed===false)return;
+        if(this.demoMode || this.navigationAllowed===false)return;
         if (!this.entregaId || this.initialCoordinates.length < 2) return;
         this.fetchTrafficConditions();
         this.trafficTimer = setInterval(() => this.fetchTrafficConditions(), 300000);
     }
 
     async fetchTrafficConditions() {
-        if (!this.entregaId || this.initialCoordinates.length < 2 || !this.currentLatLng
+        if (this.demoMode || !this.entregaId || this.initialCoordinates.length < 2 || !this.currentLatLng
             || this.tempoBaseMinutos <= 0 || this.routeProjectionOffRoute) return;
 
         try {

@@ -6,12 +6,20 @@ using MglConnect.Web.Models;
 
 namespace MglConnect.Web.Services;
 
-public sealed class GpsIngestionService(MglDbContext db, TimeProvider? clock = null, IOptions<GpsHistoryOptions>? options = null)
+public sealed class GpsIngestionService(MglDbContext db, TimeProvider? clock = null, IOptions<GpsHistoryOptions>? options = null, ControlledRouteDemo? demo = null)
 {
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
     private readonly GpsHistoryOptions _limits = options?.Value ?? new();
-    public async Task<GpsReceipt> AcceptAsync(int actorId, GpsEventInput input,
+    public Task<GpsReceipt> AcceptAsync(int actorId, GpsEventInput input,
         bool legacy = false, CancellationToken cancellationToken = default)
+        => AcceptCoreAsync(actorId,input,legacy,false,cancellationToken);
+
+    // Only the gated server-owned circuit endpoint calls this; public GPS ingestion
+    // retains its prohibition on driver-supplied simulated coordinates.
+    internal Task<GpsReceipt> AcceptControlledDemoAsync(int actorId, GpsEventInput input, CancellationToken ct)
+        => AcceptCoreAsync(actorId,input,false,demo?.Enabled==true && input.Simulado,ct);
+
+    private async Task<GpsReceipt> AcceptCoreAsync(int actorId,GpsEventInput input,bool legacy,bool controlledDemo,CancellationToken cancellationToken)
     {
         GpsReceipt Reject(string reason) => new(input.EventoId, "rejeitado", reason);
         // PostgreSQL timestamps retain microseconds, while .NET supports 100ns.
@@ -33,7 +41,7 @@ public sealed class GpsIngestionService(MglDbContext db, TimeProvider? clock = n
         var actor = await db.Usuarios.AsNoTracking().SingleOrDefaultAsync(u => u.Id == actorId && u.Ativo, cancellationToken);
         bool admin = legacy && actor?.Perfil is "Admin" or "Administrador";
         if (actor == null || (!admin && actor.Perfil != "Motorista")) return Reject("autorizacao_revogada");
-        if (input.Simulado && !admin) return Reject("simulacao_nao_permitida");
+        if (input.Simulado && !admin && !controlledDemo) return Reject("simulacao_nao_permitida");
         var existing = await db.PosicoesGps.AsNoTracking().SingleOrDefaultAsync(p => p.EventoId == input.EventoId, cancellationToken);
         if (existing != null)
         {

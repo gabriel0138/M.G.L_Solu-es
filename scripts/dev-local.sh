@@ -6,6 +6,10 @@ umask 077
 project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 data_root="${MGL_LOCAL_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mglconnect/local-preview}"
 local_port="${MGL_LOCAL_PORT:-5284}"
+if [[ "${MGL_DEMO_ROUTES:-false}" != true && "${MGL_DEMO_ROUTES:-false}" != false ]]; then
+    echo 'MGL_DEMO_ROUTES deve ser true ou false.' >&2
+    exit 1
+fi
 if [[ ! "$local_port" =~ ^[0-9]+$ ]] || (( local_port < 1024 || local_port > 65535 )); then
     echo 'MGL_LOCAL_PORT deve estar entre 1024 e 65535.' >&2
     exit 1
@@ -34,6 +38,8 @@ exec env -u POSTGRES_URL -u DATABASE_URL -u POSTGRES_PRISMA_URL -u PORT -u VERCE
     DatabaseProvider=Sqlite \
     ConnectionStrings__DefaultConnection="Data Source=$data_root/mglconnect.db;Foreign Keys=True" \
     DataProtection__KeysPath="$data_root/keys" \
+    RoutingDemo__Enabled="${MGL_DEMO_ROUTES:-false}" \
+    RoutingDemo__Failure="${MGL_DEMO_ROUTE_FAILURE:-}" \
     DemoData__Enabled=true \
     DemoData__AdminPassword=admin123 \
     DemoData__DriverPassword=motorista123 \

@@ -29,6 +29,7 @@ namespace MglConnect.Web.Services
         private readonly ILogger<TruckRoutingService> _logger;
         private readonly IRouteDeviationEngine _deviationEngine;
         private readonly RouteTrustService? _trust;
+        private readonly ControlledRouteDemo? _demo;
         private readonly IExperimentalTruckRouter? _experimental;
         private readonly IHttpContextAccessor? _request;
         private CancellationToken Abort=>_request?.HttpContext?.RequestAborted??CancellationToken.None;
@@ -39,7 +40,7 @@ namespace MglConnect.Web.Services
             IMemoryCache routeCache,
             IConfiguration configuration,
             ILogger<TruckRoutingService> logger,
-            IRouteDeviationEngine deviationEngine, RouteTrustService? trust = null,IHttpContextAccessor? request = null,IExperimentalTruckRouter? experimental = null)
+            IRouteDeviationEngine deviationEngine, RouteTrustService? trust = null,IHttpContextAccessor? request = null,IExperimentalTruckRouter? experimental = null, ControlledRouteDemo? demo = null)
         {
             _context = context;
             _httpClientFactory = httpClientFactory;
@@ -47,7 +48,7 @@ namespace MglConnect.Web.Services
             _configuration = configuration;
             _logger = logger;
             _deviationEngine = deviationEngine;
-            _trust = trust;_request=request;_experimental=experimental;
+            _trust = trust;_request=request;_experimental=experimental;_demo=demo;
 
             // Validar gabarito físico imediatamente após injeção de dependência
             // (para garantir que parâmetros padrão sejam consistentes)
@@ -461,6 +462,8 @@ namespace MglConnect.Web.Services
             {
                 throw new ArgumentException("Entrega não encontrada.");
             }
+
+            if (_demo?.Enabled == true) return await _demo.ForTripAsync(entregaId, Abort);
 
             var cachedTrust=_trust==null?null:await _trust.CachedForReadAsync(entregaId);
             if(cachedTrust!=null)return new TruckRoutePlan{Confianca=cachedTrust,PerfilVeiculo=perfilVeiculo,RotaDisponivel=cachedTrust.Geometry.Count>1,

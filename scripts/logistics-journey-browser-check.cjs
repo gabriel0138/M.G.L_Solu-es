@@ -180,6 +180,11 @@ async function main() {
     await startShift(1,await issueCode(1));
     stage='driver GPS hit testing, geometry and responsive regression';
     await require('./driver-navigation-browser-check.cjs').checkDriverNavigation(profiles.driver);
+    if(process.env.MGL_DEMO_ROUTE_FAILURE){
+        console.log('Controlled provider failure scenario passed: '+process.env.MGL_DEMO_ROUTE_FAILURE);
+        console.log('Owned evidence: '+directory+'; driver screenshots: '+profiles.driver.directory);
+        assert.deepEqual(errors,[]);return;
+    }
     await drawAndSubmitPod(1,'Synthetic warmup receiver');
     await until(profiles.driver,`document.getElementById('btnSubmitPODNav').textContent==='Entrega confirmada'`,'Warmup POD confirmed');
     assert.equal(await ownedQueueCount(),0);
@@ -226,14 +231,19 @@ async function main() {
     await until(profiles.public,`document.getElementById('trackingConnectionStatus').dataset.state==='connected'`,'Public tracking subscription');
     await profiles.client.navigate('/Cliente/Pedido/'+orderId);
     await until(profiles.client,`document.getElementById('clientOrderDetails').dataset.hasDelivery==='true'`,'Private customer shipment');
+    const controlled=await profiles.driver.evaluate("!!document.getElementById('demoRouteControls')");
+    if(controlled) await require('./driver-navigation-browser-check.cjs').checkDriverNavigation(profiles.driver);
+    else {
     await profiles.driver.command('Browser.grantPermissions',{origin:baseUrl,permissions:['geolocation']});
     await profiles.driver.command('Emulation.setGeolocationOverride',{latitude:-23.5505,longitude:-46.6333,accuracy:8});
     await profiles.driver.evaluate(`document.getElementById('btnToggleGps').click()`);
     await until(profiles.driver,`document.getElementById('positionSourceBadge').dataset.state==='received'`,'Server receives synthetic GPS');
+    }
     await profiles.admin.navigate('/Operacoes');
     await until(profiles.admin,`document.getElementById('fleetTripList').textContent.includes(${JSON.stringify(trackingCode)}) && document.querySelectorAll('#fleetMap .leaflet-interactive').length===1`,'Actual map consumes persisted GPS');
     const position=await profiles.admin.evaluate(`fetch('/Operacoes/Posicoes').then(r=>r.json()).then(data=>data.items.find(item=>item.id===${deliveryId}))`);
-    assert.equal(position.latitude,-23.5505);assert.equal(position.longitude,-46.6333);
+    assert.equal(position.latitude,controlled?-23.5500:-23.5505);assert.equal(position.longitude,controlled?-46.6318:-46.6333);
+    if(controlled)assert.equal(position.isSimulated,true);
     await profiles.admin.screenshot('journey-map-observed-gps');
     await profiles.admin.navigate('/Entregas/Details/'+deliveryId);
     await until(profiles.admin,`document.getElementById('adminDeliveryDetails').dataset.deliveryStatus==='Em transporte'`,'Admin sees started shift');

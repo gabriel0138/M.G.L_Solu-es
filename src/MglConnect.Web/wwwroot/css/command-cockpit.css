@@ -94,3 +94,37 @@ body.cc-driver-navigation .cc-cockpit-controls {
     justify-self: end;
 }
 /* The grid can grow on landscape/keyboard resize or expanded queue details. */
+
+/* Driver cockpit: concise context, a usable map, and critical actions before diagnostics. */
+body.cc-driver-navigation .cc-cockpit { grid-template-rows: auto minmax(14rem, 1fr) auto; }
+.cc-driver-nav-header { padding: .45rem .7rem; }
+.cc-driver-nav-header h1 { font-size: .94rem; font-weight: 800; margin: 0; }
+.cc-driver-nav-header p { margin: .1rem 0 .55rem; font-size: .7rem; line-height: 1.4; }
+body.cc-driver-navigation .cc-cockpit-top { padding: .5rem !important; }
+body.cc-driver-navigation .cc-cockpit-bottom { padding: .5rem !important; }
+body.cc-driver-navigation .cc-cockpit-bottom .cc-cockpit-hud { padding: .65rem !important; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .35rem; }
+body.cc-driver-navigation .cc-cockpit-bottom .cc-cockpit-hud > * { grid-column: 1 / -1; margin: 0 !important; }
+body.cc-driver-navigation .cc-cockpit-bottom .cc-cockpit-hud > .d-grid { grid-column: 1; order: 4; }
+body.cc-driver-navigation .cc-cockpit-bottom .cc-cockpit-hud > .driver-emergency-button { grid-column: 2; order: 4; font-size: .8rem; }
+body.cc-driver-navigation .driver-pod-button { min-height: 46px !important; padding: .5rem !important; font-size: .8rem !important; }
+.cc-driver-diagnostics { order: 5; font-size: .7rem; color: var(--mgl-text-secondary); }
+.cc-driver-diagnostics > summary { display: flex; align-items: center; min-height: 44px; cursor: pointer; }
+.cc-driver-diagnostics > summary::before { content: '▸'; margin-inline-end: .5rem; }
+.cc-driver-diagnostics[open] > summary::before { content: '▾'; }
+body.cc-driver-navigation .driver-route-summary { min-height: 3.5rem; padding: .25rem 0; }
+body.cc-driver-navigation .driver-route-summary .driver-route-metric .fs-8 { font-size: .6rem !important; }
+body.cc-driver-navigation #positionSourceBadge { font-size: .6rem; }
+body.cc-driver-navigation .cc-cockpit-connection { font-size: .6rem; }
+body.cc-driver-navigation .cc-cockpit-controls { align-self: end; margin-block-end: 1.25rem; max-width: calc(100% - 1rem); }
+#demoRouteControls { display: flex; flex-direction: column; gap: .35rem; }
+#demoRouteControls .btn, #btnFollowPosition { font-size: .7rem; padding: .45rem .65rem; }
+body.cc-driver-navigation:has(#demoRouteControls[data-route-available="true"]) #btnToggleGps { display: none !important; }
+.cc-map-tile-state { position: absolute; z-index: 2; top: 7rem; left: 1rem; max-width: calc(100% - 2rem); margin: 0; padding: .35rem .55rem; background: var(--mgl-bg-surface); color: var(--mgl-text-main); border-radius: var(--mgl-radius-sm); font-size: .68rem; pointer-events: none; }
+@media (min-width: 650px) and (max-height: 600px) {
+    body.cc-driver-navigation .cc-cockpit { grid-template-columns: minmax(15rem,19rem) minmax(0,1fr); grid-template-rows: auto 1fr; }
+    body.cc-driver-navigation .cc-cockpit-top { grid-area: 1 / 1; }
+    body.cc-driver-navigation .cc-cockpit-bottom { grid-area: 2 / 1; align-self: start; }
+    body.cc-driver-navigation .cc-cockpit #cockpitMap, body.cc-driver-navigation .cc-cockpit-controls { grid-area: 1 / 2 / 3 / 3; }
+    body.cc-driver-navigation .cc-cockpit #cockpitMap { min-height: 100dvh; }
+    .cc-map-tile-state { left: 20rem; top: .5rem; max-width: calc(100% - 21rem); }
+}
