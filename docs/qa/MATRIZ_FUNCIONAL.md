@@ -1,6 +1,6 @@
 # Matriz funcional — primeira entrega, 2026-11-04
 
-> Registro da entrega 1. A implementação, validação e limitações atuais de circuito/GPS/cockpit estão na [Entrega 2](ENTREGA_2.md).
+> Registro da entrega 1. A evolução atual está na [Entrega 3](ENTREGA_3.md); circuito/GPS anterior na [Entrega 2](ENTREGA_2.md).
 
 Estados referem-se aos cenários descritos, não a todos os botões possíveis de uma página. APROVADO exige assertions executadas; NÃO TESTADO não é aprovação por compilação. Ver [resultados e comandos](RESULTADOS_E2E.md).
 

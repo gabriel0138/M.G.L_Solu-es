@@ -1,5 +1,7 @@
 # Entrega 2 — circuito controlado e cockpit mobile
 
+> Evolução atual de estados, custos e fontes viárias: [Entrega 3](ENTREGA_3.md). Este documento preserva os resultados da Entrega 2.
+
 Base preservada: `32d1057` e `21d14a5`. Implementação: `01a6f74`; regressão de reconexão: `a21844c`, na mesma branch `feat/mgl-functional-gps-mobile`. Sem alterações em main, PR #1, outras worktrees, push ou deploy.
 
 ## Abrir a demonstração
