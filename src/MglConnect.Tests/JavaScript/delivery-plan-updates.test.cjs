@@ -22,3 +22,8 @@ test('access revocation clears the private route, and pagehide ignores late repl
  const e=setup();e.requests[0]({ok:false,status:404});await flush();assert.equal(e.tracker.cleared,true);assert.equal(e.nodes.btnReviewRoute.disabled,true);
  const update=e.handlers.PlanningUpdated({entregaId:7,revision:2});e.events.pagehide();e.requests[1](response({planningId:'two',planRevision:2,rotaDisponivel:true,distanciaKm:2}));await update;assert.equal(e.applied.length,0);
 });
+for(const status of [401,403])test(`HTTP ${status} clears private geometry without deleting observed GPS or unsent fixes`,async()=>{
+ const e=setup();e.requests[0]({ok:false,status});await flush();
+ assert.equal(e.tracker.cleared,true);assert.equal(e.nodes.btnReviewRoute.disabled,true);
+ assert.equal(e.tracker.currentLatLng,e.observed);assert.equal(e.tracker.pending,e.pending);
+});

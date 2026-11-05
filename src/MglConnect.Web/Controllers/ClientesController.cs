@@ -49,15 +49,22 @@ namespace MglConnect.Web.Controllers
         {
             if (ModelState.IsValid)
             {
-                if (await _context.Clientes.AnyAsync(c => c.Cnpj == cliente.Cnpj))
+                if (await _context.Clientes.IgnoreQueryFilters().AnyAsync(c => c.Cnpj == cliente.Cnpj))
                 {
-                    ModelState.AddModelError("Cnpj", "Já existe um cliente cadastrado com este CNPJ.");
+                    ModelState.AddModelError("Cnpj", "CNPJ indisponível para cadastro. Verifique os dados.");
                     return View(cliente);
                 }
 
                 cliente.DataCadastro = DateTime.UtcNow;
                 _context.Clientes.Add(cliente);
-                await _context.SaveChangesAsync();
+                try { await _context.SaveChangesAsync(); }
+                catch (DbUpdateException)
+                {
+                    // The global unique index can also reject concurrent submissions.
+                    if (!await _context.Clientes.IgnoreQueryFilters().AnyAsync(c => c.Cnpj == cliente.Cnpj)) throw;
+                    ModelState.AddModelError("Cnpj", "CNPJ indisponível para cadastro. Verifique os dados.");
+                    return View(cliente);
+                }
                 TempData["MensagemSucesso"] = "Cliente cadastrado com sucesso!";
                 return RedirectToAction(nameof(Index));
             }
@@ -87,9 +94,9 @@ namespace MglConnect.Web.Controllers
 
             if (ModelState.IsValid)
             {
-                if (await _context.Clientes.AnyAsync(c => c.Cnpj == cliente.Cnpj && c.Id != cliente.Id))
+                if (await _context.Clientes.IgnoreQueryFilters().AnyAsync(c => c.Cnpj == cliente.Cnpj && c.Id != cliente.Id))
                 {
-                    ModelState.AddModelError("Cnpj", "Já existe outro cliente com este CNPJ.");
+                    ModelState.AddModelError("Cnpj", "CNPJ indisponível para cadastro. Verifique os dados.");
                     return View(cliente);
                 }
 
@@ -115,6 +122,12 @@ namespace MglConnect.Web.Controllers
                 {
                     if (!await _context.Clientes.AnyAsync(e => e.Id == cliente.Id)) return NotFound();
                     throw;
+                }
+                catch (DbUpdateException)
+                {
+                    if (!await _context.Clientes.IgnoreQueryFilters().AnyAsync(c => c.Cnpj == cliente.Cnpj && c.Id != id)) throw;
+                    ModelState.AddModelError("Cnpj", "CNPJ indisponível para cadastro. Verifique os dados.");
+                    return View(cliente);
                 }
                 return RedirectToAction(nameof(Index));
             }

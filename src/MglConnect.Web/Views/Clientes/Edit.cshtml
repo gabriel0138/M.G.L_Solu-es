@@ -3,7 +3,7 @@
     ViewData["Title"] = "Editar Cliente";
 }
 
-<div class="container py-4">
+<div class="container py-4 cc-customers">
     <div class="row justify-content-center">
         <div class="col-lg-8">
             <div class="card border-0 shadow-sm rounded-4 bg-white p-4 p-md-5">
@@ -120,4 +120,8 @@
             buscarCep('Cep', 'Logradouro', 'Bairro', 'Cidade', 'Estado');
         });
     </script>
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/command-customers.css" asp-append-version="true" />
 }

@@ -26,6 +26,29 @@ public sealed class PostgresIntegrityTests
     [PostgresFact,Trait("Provider","Postgres")]
     public async Task StageSevenATripProfileUpgradeIsAdditiveAndKeepsTheLegacyDeclaration()
     { await using var db=await CreateAsync();await db.Database.EnsureCreatedAsync();await TripProfileIsolationTests.VerifyStageSevenAUpgrade(db); }
+    [PostgresFact, Trait("Provider", "Postgres")]
+    public async Task DeliveryFiveRevisionUpgradePreservesHistoricalPlanningAndCanRunTwice()
+    {
+        await using var db = await CreateAsync();
+        await using var fixture = await SecurityHttpFixture.CreateAsync(postgresConnection: db.Database.GetConnectionString());
+        var trip = fixture.Deliveries[0];
+        var history = new DeliveryRoadPlan { Id = Guid.NewGuid(), TenantId = fixture.TenantA,
+            EntregaId = trip.Id, CreatedAtUtc = DateTime.UtcNow, ValidUntilUtc = DateTime.UtcNow.AddHours(1),
+            BindingHash = "historical-test-only", LocationsJson = "[]", PlanJson = "{\"historical\":true}" };
+        db.DeliveryRoadPlans.Add(history); await db.SaveChangesAsync();
+        await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"Entregas\" DROP COLUMN \"RoadPlanRevision\"; ALTER TABLE \"DeliveryRoadPlans\" DROP COLUMN \"Revision\";");
+        await DatabaseSchemaUpdater.EnsureOperationalSecuritySchemaAsync(db);
+        await DatabaseSchemaUpdater.EnsureOperationalSecuritySchemaAsync(db);
+        db.ChangeTracker.Clear();
+        var preserved = await db.DeliveryRoadPlans.SingleAsync();
+        Assert.Equal(history.Id, preserved.Id); Assert.Equal(history.PlanJson, preserved.PlanJson);
+        Assert.Equal(0, preserved.Revision);
+        Assert.Equal(0, (await db.Entregas.SingleAsync(e => e.Id == trip.Id)).RoadPlanRevision);
+        // Match the atomic revision reservation used by DeliveryRoadPlanning on a real provider.
+        Assert.Equal(1, await db.Entregas.Where(e => e.Id == trip.Id).ExecuteUpdateAsync(set => set.SetProperty(e => e.RoadPlanRevision, e => e.RoadPlanRevision + 1)));
+        Assert.Equal(1, (await db.Entregas.AsNoTracking().SingleAsync(e => e.Id == trip.Id)).RoadPlanRevision);
+    }
+
     internal static async Task<MglDbContext> CreateAsync()
     {
         var cs = new NpgsqlConnectionStringBuilder(Environment.GetEnvironmentVariable("MGLCONNECT_POSTGRES_TEST_CONNECTION"));

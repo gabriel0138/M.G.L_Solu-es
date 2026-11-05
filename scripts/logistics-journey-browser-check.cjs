@@ -86,7 +86,7 @@ async function startServer(restored, reusePort) {
 }
 async function login(client,name,password,landing) {
     await client.navigate('/Account/Login');
-    assert.ok(await client.evaluate(`document.querySelector('.cc-demo-access')?.textContent.includes(${JSON.stringify(name)})`),'Use only the owned Development demo.');
+    assert.ok(await client.evaluate(`document.querySelector('.cc-demo-access')?.textContent.includes(${JSON.stringify(name==='motorista.qa'?'carlos.motorista':name)})`),'Use only the owned Development demo.');
     await client.evaluate(`document.getElementById('Login').value=${JSON.stringify(name)};document.getElementById('Senha').value=${JSON.stringify(password)};document.querySelector('.cc-login-form').requestSubmit()`);
     await until(client,`location.pathname===${JSON.stringify(landing)} && document.readyState==='complete'`,name+' login');
 }
@@ -203,6 +203,41 @@ async function confirmGeography(client,id,{via=false}={}) {
     assert.equal(await client.evaluate("document.getElementById('routeResult').dataset.routeState"),'GenericUnverifiedTruck');
 }
 
+async function checkOperationalCrud(client) {
+    const fill=async(selector,fields)=>client.evaluate(`(()=>{const f=document.querySelector(${JSON.stringify(selector)});for(const[k,v]of Object.entries(${JSON.stringify(fields)})){if(!f.elements[k])throw new Error('Missing CRUD field '+k);f.elements[k].value=v;}f.requestSubmit();})()`);
+    await client.navigate('/Clientes/Create');
+    await fill('form[action="/Clientes/Create"]',{RazaoSocial:'ClienteSinteticoOperacionalSemEspacosParaTesteMobile',NomeFantasia:'Empresa fictícia QA',Cnpj:'00.000.000/0000-06',Telefone:'00000000000',Email:'qa-ficticio@example.invalid',Cidade:'Cidade de teste',Estado:'SP'});
+    await until(client,"location.pathname==='/Clientes'&&document.readyState==='complete'",'Administrative customer created');
+    const customer=await client.evaluate("(()=>{const row=[...document.querySelectorAll('tbody tr')].find(r=>r.textContent.includes('ClienteSinteticoOperacional'));return Number(new URL(row.querySelector('a[href*=\"/Clientes/Details/\"]').href).pathname.split('/').pop());})()");
+    await client.navigate('/Clientes/Edit/'+customer);await fill('form[action^="/Clientes/Edit"]',{NomeFantasia:'Empresa QA editada'});
+    await until(client,"location.pathname==='/Clientes'&&document.readyState==='complete'",'Customer update');
+    await client.navigate('/Clientes/Details/'+customer);
+    await client.screenshot('delivery6-before-customer-details');
+    assert.equal(await client.evaluate("document.querySelector('main').textContent.includes('<span')"),false,'Customer status renders a badge, not escaped HTML');
+    for(const theme of ['dark','light'])for(const width of [320,360,390,428,768,1024]) {
+        await client.viewport(width,width<500?844:1000);await client.evaluate(`document.documentElement.dataset.mglTheme=${JSON.stringify(theme)}`);
+        await client.evaluate("Promise.all(document.getElementById('commandSidebar').getAnimations().map(a=>a.finished.catch(()=>{})))");
+        await client.screenshot('delivery6-customer-'+theme+'-'+width);
+        assert.ok(await client.evaluate("(()=>{const b=document.querySelector('a[href*=\"/Clientes/Edit/\"]');b.scrollIntoView({block:'center',behavior:'instant'});const r=b.getBoundingClientRect();return r.height>=44&&b.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})()"),'Customer edit action reachable '+width);
+        assert.ok(await client.evaluate('document.documentElement.scrollWidth<=innerWidth'),'Customer mobile layout fits '+width);
+    }
+    await client.viewport(1440,1000);
+    await client.navigate('/Frota/NovoVeiculo');
+    await fill('#fleetVehicleForm',{Modelo:'Veículo fictício E2E',Placa:'QAQ6A01',CapacidadeCargaKg:'6000.50',PesoToneladas:'12.50',AlturaMetros:'3.20',LarguraMetros:'2.40',ComprimentoMetros:'8.50',QtdEixos:'2',TipoCarga:'Carga Geral Seca'});
+    await until(client,"new RegExp('^/Frota/Veiculo/[0-9]+$').test(location.pathname)&&document.readyState==='complete'",'Vehicle created');
+    const vehicle=await client.evaluate("Number(location.pathname.split('/').pop())");
+    await client.navigate('/Frota/EditarVeiculo/'+vehicle);await fill('#fleetVehicleForm',{Modelo:'Veículo fictício E2E editado',CapacidadeCargaKg:'6500.75'});
+    await until(client,`location.pathname==='/Frota/Veiculo/${vehicle}'&&document.readyState==='complete'`,'Vehicle edited');
+    await client.navigate('/Frota/NovoMotorista');
+    await fill('#fleetDriverForm',{Nome:'Motorista E2E cadastrado',Login:'motorista.qa',SenhaInicial:'Synthetic-driver-123!',Telefone:'00000000000'});
+    await until(client,"new RegExp('^/Frota/Motorista/[0-9]+$').test(location.pathname)&&document.readyState==='complete'",'Driver created');
+    const driver=await client.evaluate("Number(location.pathname.split('/').pop())");
+    await client.navigate('/Frota/EditarMotorista/'+driver);await fill('#fleetDriverForm',{Nome:'Motorista E2E editado'});
+    await until(client,`location.pathname==='/Frota/Motorista/${driver}'&&document.readyState==='complete'`,'Driver edited');
+    await client.screenshot('delivery6-driver-created-edited');
+    return {driverLogin:'motorista.qa',driverName:'Motorista E2E editado',vehicleName:'Veículo fictício E2E editado'};
+}
+
 async function main() {
     let baseUrl;
     if(process.env.MGL_PREVIEW_READY_DIR) {
@@ -212,7 +247,7 @@ async function main() {
         assert.notEqual(process.env.MGL_ROAD_PROXY,'true');
     }else baseUrl=await startServer();
     stage='open independent Chromium profiles';
-    profiles=Object.fromEntries(['admin','client','driver','public'].map(role=>[role,createBrowserClient({baseUrl})]));
+    profiles=Object.fromEntries((process.env.MGL_OPERATIONS_CHECK==='true'?['admin','client','driver','public','broker']:['admin','client','driver','public']).map(role=>[role,createBrowserClient({baseUrl})]));
     // Stagger startup; all four authenticated profiles remain independent and live.
     for(const [role,client] of Object.entries(profiles)) {
         await client.openBrowser();await client.command('Runtime.enable');
@@ -239,6 +274,7 @@ async function main() {
     await login(profiles.admin,'admin','admin123','/Dashboard');
     await login(profiles.client,'cliente.demo','cliente123','/Cliente');
     await login(profiles.driver,'carlos.motorista','motorista123','/Entregas');
+    if(profiles.broker)await login(profiles.broker,'intermediador.demo','cliente123','/Cliente');
     if(process.env.MGL_ROUTING_UI_CHECK){
         stage='routing page and provider protocol regression';
         await require('./route-restrictions-browser-check.cjs').checkRoutePlanning(profiles.admin,{historical:process.env.MGL_ROUTING_UI_CHECK==='historical',setMode:mode=>{roadMode=mode;}});
@@ -252,7 +288,7 @@ async function main() {
     ]) {
         assert.equal(await profiles[role].evaluate(`fetch(${JSON.stringify(path)}).then(r=>r.status)`),status,role+' '+path);
     }
-    for(const role of ['driver','client']) {
+    for(const role of (profiles.broker?['driver','client','broker']:['driver','client'])) {
         const denied=await profiles[role].evaluate(`fetch('/Dashboard').then(r=>({status:r.status,path:new URL(r.url).pathname}))`);
         assert.ok(denied.status===403 || denied.path==='/Account/AccessDenied',role+' administrative access denied');
     }
@@ -269,20 +305,39 @@ async function main() {
     await until(profiles.driver,`document.getElementById('btnSubmitPODNav').textContent==='Entrega confirmada'`,'Warmup POD confirmed');
     assert.equal(await ownedQueueCount(),0);
 
+    let resources;
+    if(process.env.MGL_OPERATIONS_CHECK==='true'){
+        stage='administrative customers, vehicles and drivers CRUD';resources=await checkOperationalCrud(profiles.admin);
+        await profiles.driver.navigate('/Entregas');
+        await profiles.driver.evaluate("document.querySelector('form[action=\"/Account/Logout\"]').requestSubmit()");
+        await until(profiles.driver,"location.pathname==='/Account/Login'&&document.readyState==='complete'",'Seed driver logout');
+        await login(profiles.driver,resources.driverLogin,'Synthetic-driver-123!','/Entregas');
+    }
+    const requester=process.env.MGL_REQUESTER==='broker'?profiles.broker:profiles.client;
+    assert.ok(requester);
     stage='customer creates a new order';
     const cargo='Browser journey '+Date.now();
-    await profiles.client.navigate('/Cliente/Pedido/Novo');
+    await requester.navigate('/Cliente/Pedido/Novo');
     const fields={Descricao:cargo,TipoCarga:'Carga Geral Seca',PesoKg:'1200.50',ValorTotal:'5000',
         OrigemEndereco:'Rua de coleta sintética',OrigemNumero:'10',OrigemBairro:'Distrito de teste',OrigemCidade:'Campinas',OrigemEstado:'SP',OrigemCep:'00000-000',
         DestinoEndereco:'Rua de destino sintético',DestinoNumero:'20',DestinoBairro:'Distrito de teste',DestinoCidade:'Santos',DestinoEstado:'SP',DestinoCep:'00000-000'};
     if(process.env.MGL_LINKED_ROAD==='true')Object.assign(fields,{
         OrigemEndereco:'Avenida Paulista · MASP (marco público de teste)',OrigemNumero:'1578',OrigemBairro:'Bela Vista',OrigemCidade:'São Paulo',OrigemEstado:'SP',OrigemCep:'01310-200',
         DestinoEndereco:'Praça da Sé · marco público de teste',DestinoNumero:'s/n',DestinoBairro:'Sé',DestinoCidade:'São Paulo',DestinoEstado:'SP',DestinoCep:'01001-000'});
-    await profiles.client.evaluate(`(()=>{const form=document.getElementById('clientOrderForm');for(const[name,value]of Object.entries(${JSON.stringify(fields)})){if(!form.elements[name])throw new Error('Missing field '+name);form.elements[name].value=value;}form.requestSubmit();})()`);
-    await until(profiles.client,`new RegExp('^/Cliente/Pedido/[0-9]+$').test(location.pathname) && document.readyState==='complete'`,'Customer order saved');
-    const orderId=await profiles.client.evaluate(`Number(location.pathname.split('/').pop())`);
-    assert.equal(await profiles.client.evaluate(`document.getElementById('clientOrderDetails').dataset.hasDelivery`),'false');
-    await profiles.client.screenshot('journey-customer-order-created');
+    const replayFields=await requester.evaluate(`(()=>{const form=document.getElementById('clientOrderForm');for(const[name,value]of Object.entries(${JSON.stringify(fields)})){if(!form.elements[name])throw new Error('Missing field '+name);form.elements[name].value=value;}const replay=[...new FormData(form).entries()];form.requestSubmit();return replay;})()`);
+    await until(requester,`new RegExp('^/Cliente/Pedido/[0-9]+$').test(location.pathname) && document.readyState==='complete'`,'Customer order saved');
+    const orderId=await requester.evaluate(`Number(location.pathname.split('/').pop())`);
+    assert.equal(await requester.evaluate(`document.getElementById('clientOrderDetails').dataset.hasDelivery`),'false');
+    await requester.screenshot('journey-customer-order-created');
+    if(profiles.broker) {
+        const outsider=requester===profiles.broker?profiles.client:profiles.broker;
+        assert.equal(await outsider.evaluate(`fetch('/Cliente/Pedido/${orderId}').then(r=>r.status)`),404,'Other customer cannot inspect order');
+        assert.equal(await outsider.evaluate(`fetch('/Cliente/Pedido/${orderId}/Comprovante').then(r=>r.status)`),404,'Other customer cannot read POD');
+        const replay=await requester.evaluate(`fetch('/Cliente/Pedido/Novo',{method:'POST',body:new URLSearchParams(${JSON.stringify(replayFields)})}).then(r=>({status:r.status,path:new URL(r.url).pathname}))`);
+        assert.equal(replay.path,'/Cliente/Pedido/'+orderId,'Duplicate order submission keeps the original order');
+        assert.equal(replay.status,200);
+    }
+
 
     stage='administrator validates and dispatches';
     await profiles.admin.navigate('/Pedidos?termo='+encodeURIComponent(cargo));
@@ -293,8 +348,8 @@ async function main() {
     await profiles.admin.navigate('/Entregas/Create?pedidoId='+orderId);
     await profiles.admin.evaluate(`(()=>{
         const form=document.getElementById('dispatchOrderForm');
-        const driver=[...form.elements.MotoristaId.options].find(option=>option.textContent.includes('Motorista de Demonstração'));
-        const vehicle=[...form.elements.VeiculoId.options].find(option=>option.textContent.includes('Scania'));
+        const driver=[...form.elements.MotoristaId.options].find(option=>option.textContent.includes(${JSON.stringify(resources?.driverName||'Motorista de Demonstração')}));
+        const vehicle=[...form.elements.VeiculoId.options].find(option=>option.textContent.includes(${JSON.stringify(resources?.vehicleName||'Scania')}));
         if(!driver||!vehicle)throw new Error('Expected owned demo resources.');
         form.elements.MotoristaId.value=driver.value;form.elements.VeiculoId.value=vehicle.value;
         form.elements.MotoristaId.dispatchEvent(new Event('change'));form.elements.VeiculoId.dispatchEvent(new Event('change'));
@@ -337,8 +392,8 @@ async function main() {
     }
     await profiles.public.navigate('/Rastreio/'+trackingCode);
     await until(profiles.public,`document.getElementById('trackingConnectionStatus').dataset.state==='connected'`,'Public tracking subscription');
-    await profiles.client.navigate('/Cliente/Pedido/'+orderId);
-    await until(profiles.client,`document.getElementById('clientOrderDetails').dataset.hasDelivery==='true'`,'Private customer shipment');
+    await requester.navigate('/Cliente/Pedido/'+orderId);
+    await until(requester,`document.getElementById('clientOrderDetails').dataset.hasDelivery==='true'`,'Private customer shipment');
     const controlled=await profiles.driver.evaluate("!!document.getElementById('demoRouteControls')");
     if(process.env.MGL_ROAD_PROXY==='true') {
         stage='linked provider failure, no-route and recovery in actual cockpits';
@@ -407,7 +462,7 @@ async function main() {
         const observed=await profiles.admin.evaluate(`fetch('/Entregas/${deliveryId}/Planejamento').then(r=>r.json()).then(x=>x.plan)`);
         assert.deepEqual(observed.trajetoCoordenadas,roadResult.plan.trajetoCoordenadas);
         assert.equal(await profiles.public.evaluate(`fetch('/Entregas/${deliveryId}/Planejamento',{redirect:'manual'}).then(r=>r.status)`),0);
-        const history=await profiles.client.evaluate(`fetch('/api/gps/historico/${deliveryId}').then(r=>r.json())`);
+        const history=await requester.evaluate(`fetch('/api/gps/historico/${deliveryId}').then(r=>r.json())`);
         assert.equal(history.total,0,'Synthetic fixes are absent from customer GPS projection');
     }
     if(controlled)assert.equal(position.isSimulated,true);
@@ -430,7 +485,7 @@ async function main() {
     assert.equal(lost,1);assert.equal(await ownedQueueCount(),1);
     await profiles.driver.screenshot('journey-pod-pending-after-lost-receipt');
     await until(profiles.public,`document.getElementById('publicDeliveryStatus').textContent==='Entregue'`,'Public real event confirms completion');
-    await until(profiles.client,`!!document.getElementById('clientOrderPodHeading')`,'Private customer POD appears without page reload');
+    await until(requester,`!!document.getElementById('clientOrderPodHeading')`,'Private customer POD appears without page reload');
     await until(profiles.admin,`document.getElementById('adminDeliveryDetails').dataset.deliveryStatus==='Entregue'`,'Private administrator status/POD refreshes without page reload');
 
     stage='recover identical receipt and stop the completed cockpit';
@@ -445,13 +500,13 @@ async function main() {
     await profiles.driver.evaluate(`document.getElementById('modalPODNavegacao').querySelector('[data-bs-dismiss="modal"]').click()`);
     await until(profiles.driver,`!document.querySelector('.modal-backdrop')`,'POD dialog closes after confirmed receipt');
     await profiles.driver.screenshot('journey-completed-driver-cockpit');
-    await profiles.client.screenshot('journey-customer-completed-pod');
+    await requester.screenshot('journey-customer-completed-pod');
     await profiles.admin.screenshot('journey-admin-completed-pod');
     await profiles.public.screenshot('journey-public-completed');
     stage='desktop, tablet and mobile final states';
     for(const role of ['admin','client','driver','public']) await responsive(profiles[role],role);
 
-    const pdf=await profiles.client.evaluate(`(async()=>{const response=await fetch(document.querySelector('#clientOrderPodHeading').closest('header').querySelector('a').href);const bytes=new Uint8Array(await response.arrayBuffer());return{status:response.status,type:response.headers.get('Content-Type'),magic:String.fromCharCode(...bytes.slice(0,4))};})()`);
+    const pdf=await requester.evaluate(`(async()=>{const response=await fetch(document.querySelector('#clientOrderPodHeading').closest('header').querySelector('a').href);const bytes=new Uint8Array(await response.arrayBuffer());return{status:response.status,type:response.headers.get('Content-Type'),magic:String.fromCharCode(...bytes.slice(0,4))};})()`);
     assert.equal(pdf.status,200);assert.equal(pdf.type,'application/pdf');assert.equal(pdf.magic,'%PDF');
     assert.equal(await profiles.public.evaluate(`document.querySelector('.cc-tracking').textContent.includes('PRIVATE-BROWSER-DOC')`),false);
     await profiles.driver.navigate('/Entregas');
@@ -486,8 +541,8 @@ async function main() {
         await profiles.admin.navigate(historyPath);
         const after=await profiles.admin.evaluate(`fetch('/GpsHistorico/Dados?entregaId=${deliveryId}').then(async r=>{if(!r.ok)throw new Error('Restored history denied');return r.json()})`);
         assert.deepEqual(after.items.map(p=>p.eventoId),before.items.map(p=>p.eventoId));assert.equal(after.total,before.total);
-        await profiles.client.navigate('/Cliente/Pedido/'+orderId);
-        const recoveredPdf=await profiles.client.evaluate(`fetch('/Cliente/Pedido/${orderId}/Comprovante').then(async r=>({status:r.status,magic:new TextDecoder().decode((await r.arrayBuffer()).slice(0,4))}))`);
+        await requester.navigate('/Cliente/Pedido/'+orderId);
+        const recoveredPdf=await requester.evaluate(`fetch('/Cliente/Pedido/${orderId}/Comprovante').then(async r=>({status:r.status,magic:new TextDecoder().decode((await r.arrayBuffer()).slice(0,4))}))`);
         assert.deepEqual(recoveredPdf,{status:200,magic:'%PDF'});
         await profiles.driver.navigate('/Entregas');
         assert.equal(await profiles.driver.evaluate(`!!document.querySelector('main a[href="/Entregas/Navegar/${deliveryId}"]')`),false);

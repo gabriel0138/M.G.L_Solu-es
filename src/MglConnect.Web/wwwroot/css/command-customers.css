@@ -1,0 +1,11 @@
+/* Customer records share the existing command-center theme and touch targets. */
+.cc-customers { overflow-wrap: anywhere; }
+.cc-customers .row > *, .cc-customers .d-flex > * { min-width: 0; }
+.cc-customers .d-flex { flex-wrap: wrap; gap: .75rem; }
+.cc-customers .btn { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+.cc-customers .table-responsive { max-width: 100%; }
+@media (max-width: 575.98px) {
+    .cc-customers .card { padding: 1rem !important; }
+    .cc-customers h3 { font-size: 1.35rem; }
+    .cc-customers h4, .cc-customers h5 { font-size: 1.15rem; }
+}

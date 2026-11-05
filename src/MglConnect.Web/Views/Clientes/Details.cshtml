@@ -3,7 +3,7 @@
     ViewData["Title"] = "Detalhes do Cliente";
 }
 
-<div class="container py-4">
+<div class="container py-4 cc-customers">
     <div class="d-flex align-items-center justify-content-between mb-4">
         <div>
             <h3 class="fw-bold text-dark mb-1">
@@ -30,7 +30,7 @@
                     <li class="mb-2"><strong>Nome Fantasia:</strong> @(Model.NomeFantasia ?? "—")</li>
                     <li class="mb-2"><strong>Telefone:</strong> @Model.Telefone</li>
                     <li class="mb-2"><strong>E-mail:</strong> @(Model.Email ?? "—")</li>
-                    <li class="mb-2"><strong>Status:</strong> @(Model.Ativo ? "<span class='badge bg-success'>Ativo</span>" : "<span class='badge bg-danger'>Inativo</span>")</li>
+                    <li class="mb-2"><strong>Status:</strong> <span class="badge @(Model.Ativo ? "bg-success" : "bg-danger")">@(Model.Ativo ? "Ativo" : "Inativo")</span></li>
                 </ul>
 
                 <h6 class="fw-bold mt-4 mb-2 text-dark border-bottom pb-2">Endereço</h6>
@@ -104,3 +104,7 @@
         </div>
     </div>
 </div>
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/command-customers.css" asp-append-version="true" />
+}

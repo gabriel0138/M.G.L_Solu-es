@@ -164,7 +164,12 @@ namespace MglConnect.Web.Data
                 DataCadastro = DateTime.UtcNow
             };
 
-            context.Usuarios.AddRange(admin, motorista1, usuarioCliente);
+            var intermediador = new Usuario {
+                Nome="Intermediador de Demonstração",Login="intermediador.demo",
+                SenhaHash=hasher.HashPassword(demoCredentials.ClientPassword),Perfil="Intermediador",ClienteId=cliente2.Id,
+                Telefone="00000000000",Cpf="000.000.000-00",Ativo=true,DataCadastro=DateTime.UtcNow
+            };
+            context.Usuarios.AddRange(admin, motorista1, usuarioCliente, intermediador);
             await context.SaveChangesAsync();
 
             // 4. Criar Pedidos

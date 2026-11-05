@@ -464,6 +464,27 @@ public class B01HttpAuthorizationTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CustomerCnpjCollisionAcrossTenantsReturnsValidationWithoutChangingEitherRecord(bool edit)
+    {
+        await using var fixture = await SecurityHttpFixture.CreateAsync();
+        using var admin = await fixture.LoginAsync("admin-a");
+        var own = fixture.Customers[0];
+        var foreign = fixture.Customers[2];
+        var form = CustomerForm(own.Id, await SecurityHttpFixture.AntiForgeryAsync(admin.Client, "/Clientes/Create"));
+        form["Cnpj"] = foreign.Cnpj;
+        using var response = await admin.Client.PostAsync(edit ? $"/Clientes/Edit/{own.Id}" : "/Clientes/Create", new FormUrlEncodedContent(form));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var html = await response.Content.ReadAsStringAsync();
+        Assert.Contains("indispon", html);
+        Assert.DoesNotContain(foreign.RazaoSocial, html);
+        await using var db = new MglConnect.Web.Data.MglDbContext(fixture.Options);
+        Assert.Equal(3, await db.Clientes.CountAsync());
+        Assert.Equal(own.Cnpj, (await db.Clientes.SingleAsync(c => c.Id == own.Id)).Cnpj);
+    }
+
     private static Dictionary<string, string> CustomerForm(int id, string token) => new()
     {
         ["Id"] = id.ToString(), ["RazaoSocial"] = "Authorized edit", ["Cnpj"] = "B01-edit", ["Telefone"] = "00000000",

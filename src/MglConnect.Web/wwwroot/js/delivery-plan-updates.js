@@ -15,7 +15,7 @@ window.mglDeliveryPlanUpdates=(tracker,trip,initial)=>{
             if(stopped||ticket!==generation)return;
             if(!response.ok||response.redirected){
                 if(response.status===404&&!planId&&!notification)return;
-                if(response.status===403||response.status===404||response.redirected){tracker.clearPlannedRoute();if(review)review.disabled=true;notice.hidden=false;text.textContent='Planejamento indisponível ou acesso alterado. Consulte a operação.';}
+                if(response.status===401||response.status===403||response.status===404||response.redirected){tracker.clearPlannedRoute();if(review)review.disabled=true;notice.hidden=false;text.textContent='Planejamento indisponível ou acesso alterado. Consulte a operação.';}
                 return;
             }
             const {plan}=await response.json();if(stopped||ticket!==generation||!plan||plan.planRevision<revision)return;

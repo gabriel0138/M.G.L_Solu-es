@@ -1,14 +1,15 @@
 @model IEnumerable<MglConnect.Web.Models.Pedido>
 @{
-    ViewData["Title"] = "Portal do cliente";
+    var intermediary = User.IsInRole("Intermediador");
+    ViewData["Title"] = intermediary ? "Portal do intermediador" : "Portal do cliente";
 }
 
 <div class="cc-dashboard cc-portal">
     <header class="cc-section-heading cc-page-heading">
         <div>
-            <span class="cc-eyebrow">COMMAND CENTER / PORTAL DO CLIENTE</span>
+            <span class="cc-eyebrow">@(intermediary ? "COMMAND CENTER / INTERMEDIADOR" : "COMMAND CENTER / PORTAL DO CLIENTE")</span>
             <h1>Suas operações, conectadas</h1>
-            <p>Envie pedidos, acompanhe suas cargas e encontre o histórico das suas entregas.</p>
+            <p>@(intermediary ? "Crie e acompanhe pedidos exclusivamente do cliente vinculado à sua conta." : "Envie pedidos, acompanhe suas cargas e encontre o histórico das suas entregas.")</p>
         </div>
         <div class="cc-quick-actions">
             <a asp-action="Pedidos" class="btn btn-outline-secondary">
