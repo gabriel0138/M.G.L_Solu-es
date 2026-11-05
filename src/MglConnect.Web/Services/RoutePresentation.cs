@@ -17,7 +17,7 @@ public sealed record RoutePresentation(RouteDisplayState State, bool HasGeometry
         bool valid=ValidGeometry(plan)&&plan.DistanciaKm>0;
         bool synthetic=plan.GeometrySource=="SyntheticCircuit" || plan.DemonstracaoControlada;
         bool heavy=plan.PerfilVeiculo!="Leve";
-        var state=!requested?RouteDisplayState.AwaitingParameters:
+        var state=plan.IsCalculating?RouteDisplayState.Calculating:!requested?RouteDisplayState.AwaitingParameters:
             !valid ? plan.ProviderFailure is ProviderFailure.Disabled or ProviderFailure.InvalidConfiguration or ProviderFailure.HttpError or ProviderFailure.Timeout or ProviderFailure.Network or ProviderFailure.RateLimited or ProviderFailure.InvalidResponse
                 ? RouteDisplayState.ProviderUnavailable : plan.ProviderFailure==ProviderFailure.MissingVehicleData?RouteDisplayState.InsufficientVehicleData:RouteDisplayState.NoRoute:
             synthetic?RouteDisplayState.SyntheticDemo:

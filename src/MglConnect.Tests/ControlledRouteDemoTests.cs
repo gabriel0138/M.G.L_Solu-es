@@ -41,6 +41,15 @@ public sealed class ControlledRouteDemoTests
         var failed=ControlledRouteDemo.Plan(failure:"Indisponível");Assert.Empty(failed.TrajetoCoordenadas);Assert.Equal(0,failed.DistanciaKm);Assert.Equal(0,failed.TempoEstimadoMinutos);
     }
 
+    [Fact]
+    public void SyntheticRecalculationKeepsOnlyStillPendingWaypoints()
+    {
+        var plan=ControlledRouteDemo.Plan();plan.RequestedStops=[plan.TrajetoCoordenadas[0],plan.TrajetoCoordenadas[2],plan.TrajetoCoordenadas[4],plan.TrajetoCoordenadas[^1]];
+        Assert.Equal(2,ControlledRouteDemo.RemainingStops(plan,0).Count);
+        var pending=Assert.Single(ControlledRouteDemo.RemainingStops(plan,3));Assert.Equal(plan.TrajetoCoordenadas[4].Latitude,pending.Latitude);Assert.Equal(plan.TrajetoCoordenadas[4].Longitude,pending.Longitude);
+        Assert.Empty(ControlledRouteDemo.RemainingStops(plan,5));
+    }
+
     private static Dictionary<string,string> Settings(string? fault=null) => new() {
         ["ASPNETCORE_ENVIRONMENT"]="Development",["RoutingDemo__Enabled"]="true",["DemoData__Enabled"]="true",["RoutingDemo__Failure"]=fault??"" };
 

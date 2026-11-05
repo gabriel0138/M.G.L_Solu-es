@@ -13,9 +13,10 @@ window.mglDemoNavigation = (tracker, map, trip) => {
     function pause(){clearTimeout(timer);timer=null;button.setAttribute('aria-pressed','false');button.textContent='Iniciar GPS sintético';}
     function apply(data) {
         const plan=data.plan;
+        if((plan?.planRevision||0)<(tracker.planRevision||0))return;
         panel.dataset.routeAvailable=String(plan?.rotaDisponivel===true);
         if(!plan?.rotaDisponivel || plan.trajetoCoordenadas.length<2) {
-            pause();routeKey='';pending=null;tracker.suspendNavigation();stops.clearLayers();
+            pause();routeKey='';pending=null;tracker.clearPlannedRoute();stops.clearLayers();
             for(const key of ['routePolyline','routePolylineOutline','destinationMarker'])if(tracker[key]){map.removeLayer(tracker[key]);tracker[key]=null;}
             tracker.routeCoordinates=[];
             button.disabled=detourButton.disabled=true;

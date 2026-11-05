@@ -11,6 +11,7 @@ const directory = mkdtempSync(join(tmpdir(),'mgl-e2e-journey-'));
 const pause = ms => new Promise(resolve=>setTimeout(resolve,ms));
 let server;
 let roadProvider;let roadMode="ok";
+let photonProvider;
 let profiles = {};
 let stage = 'start isolated server';
 const errors = [];
@@ -44,6 +45,15 @@ async function startServer(restored, reusePort) {
         });
         await new Promise(resolve=>roadProvider.listen(0,'127.0.0.1',resolve));
     }
+    if(process.env.MGL_GEOGRAPHIC_CHECK==='true'&&!photonProvider){
+        const http=require('node:http'),fs=require('node:fs');
+        const recorded=JSON.parse(fs.readFileSync(resolve(__dirname,'../src/MglConnect.Tests/Fixtures/geocoding/photon-public-landmarks.json'),'utf8'));
+        photonProvider=http.createServer((req,res)=>{
+            const query=new URL(req.url,'http://127.0.0.1').searchParams.get('q')?.toLowerCase()||'';
+            res.setHeader('Content-Type','application/json');
+            res.end(JSON.stringify(query.includes('sé')?recorded.destination:query.includes('museu')||query.includes('paulista')?recorded.origin:{features:[]}));
+        });await new Promise(resolve=>photonProvider.listen(0,'127.0.0.1',resolve));
+    }
     const port=reusePort||await new Promise((resolve,reject)=>{
         const probe=net.createServer();probe.once('error',reject);
         probe.listen(0,'127.0.0.1',()=>{const port=probe.address().port;probe.close(()=>resolve(port));});
@@ -51,6 +61,7 @@ async function startServer(restored, reusePort) {
     const log=createWriteStream(join(directory,'server.log'));
     const env={...process.env,MGL_LOCAL_PORT:String(port),MGL_LOCAL_DATA_DIR:join(directory,'database'),GpsHistory__DiasAntesCompactar:'0'};
     if(process.env.MGL_ROUTING_UI_CHECK==='historical')env.MGL_ROAD_CAPTURE=resolve(__dirname,'../src/MglConnect.Tests/Fixtures/route-trust-public-landmarks.json');
+    if(photonProvider){env.MGL_PHOTON_ENABLED='true';env.MGL_PHOTON_BASE_URL='http://127.0.0.1:'+photonProvider.address().port;}
     if(roadProvider)env.MGL_OSRM_BASE_URL='http://127.0.0.1:'+roadProvider.address().port;
     if(restored) {
         for(const name of ['POSTGRES_URL','DATABASE_URL','POSTGRES_PRISMA_URL','PORT','VERCEL','GOOGLE_MAPS_API_KEY'])delete env[name];
@@ -163,6 +174,35 @@ async function responsive(client, role) {
     await client.key('Tab');
     assert.equal(await client.evaluate(`!!document.activeElement?.closest('[inert]')`),false,role+' keyboard focus must stay outside inert content');
 }
+async function confirmGeography(client,id,{via=false}={}) {
+    await client.navigate('/Roteamento?entregaId='+id);
+    const before=await client.evaluate("document.getElementById('linkedRoadPlan')?.dataset.planId||null");
+    for(const index of [0,1]) {
+        if(process.env.MGL_PREVIEW_READY_DIR)await client.evaluate(`(()=>{const input=document.querySelectorAll('#geographicPlanning fieldset')[${index}].querySelector('input[type=text]');input.value=${JSON.stringify(index===0?'Museu de Arte de São Paulo Assis Chateaubriand, São Paulo':'Praça da Sé, São Paulo')};input.dispatchEvent(new Event('input'));})()`);
+        await client.evaluate(`document.querySelectorAll('#geographicPlanning fieldset')[${index}].querySelector('button').click()`);
+        await until(client,`document.querySelectorAll('#geographicPlanning fieldset')[${index}].querySelectorAll('.cc-geographic-results button').length>0`,'Photon candidates '+index);
+        assert.equal(await client.evaluate(`document.querySelectorAll('#geographicPlanning fieldset')[${index}].querySelector('input[type=checkbox]').checked`),false);
+        await client.evaluate(`(()=>{const f=document.querySelectorAll('#geographicPlanning fieldset')[${index}];f.querySelector('.cc-geographic-results button').click();f.querySelector('input[type=checkbox]').click();})()`);
+    }
+    if(via) {
+        await client.evaluate("document.getElementById('addGeographicStop').click()");
+        await client.evaluate(`(()=>{const f=document.querySelectorAll('#geographicPlanning fieldset')[1],input=f.querySelector('input[type=text]');input.value='Parada fictícia · Bela Vista (seleção no mapa)';input.dispatchEvent(new Event('input'));f.querySelectorAll('button')[1].click();window.mglPlanningMap.stop();window.mglPlanningMap.setView([-23.5555,-46.6535],16,{animate:false,reset:true});})()`);
+        await until(client,"!window.mglPlanningMap._animatingZoom&&!window.mglPlanningMap._panAnim?._inProgress",'Map animation settled');
+        await client.pause(150);
+        const center=await client.evaluate("(()=>{const map=window.mglPlanningMap,r=document.getElementById('truckMap').getBoundingClientRect(),p=map.latLngToContainerPoint([-23.5555,-46.6535]);if(p.x<0||p.x>r.width||p.y<0||p.y>r.height)throw new Error('Intended waypoint outside current viewport');return {x:r.x+p.x,y:r.y+p.y};})()");
+        await client.command('Input.dispatchMouseEvent',{type:'mousePressed',...center,button:'left',buttons:1,clickCount:1});
+        await client.command('Input.dispatchMouseEvent',{type:'mouseReleased',...center,button:'left',clickCount:1});
+        assert.equal(await client.evaluate("document.querySelectorAll('#geographicPlanning fieldset')[1].querySelector('input[type=checkbox]').checked"),false);
+        await client.evaluate("document.querySelectorAll('#geographicPlanning fieldset')[1].querySelector('input[type=checkbox]').click()");
+    }
+    assert.equal(await client.evaluate("document.getElementById('saveConfirmedRoute').disabled"),false);
+    await client.pause(300);
+    await client.screenshot(via?'delivery5-three-points-confirmed':'delivery5-photon-points-confirmed');
+    await client.evaluate("document.getElementById('saveConfirmedRoute').click()");
+    await until(client,`document.readyState==='complete'&&!!document.getElementById('linkedRoadPlan')&&document.getElementById('linkedRoadPlan').dataset.planId!==${JSON.stringify(before)}`,'Confirmed road planning persisted');
+    assert.equal(await client.evaluate("document.getElementById('routeResult').dataset.routeState"),'GenericUnverifiedTruck');
+}
+
 async function main() {
     let baseUrl;
     if(process.env.MGL_PREVIEW_READY_DIR) {
@@ -269,7 +309,8 @@ async function main() {
         stage='calculate road route and bind to the dispatched delivery';
         await profiles.admin.navigate('/Roteamento?entregaId='+deliveryId);
         await profiles.admin.screenshot('delivery4-before-linked-planning');
-        await profiles.admin.evaluate(`(()=>{const f=document.getElementById('deliveryRoadPlanForm');f.elements.coordenadas.value='-46.6559,-23.5614;-46.6333,-23.5505';f.requestSubmit();})()`);
+        if(process.env.MGL_GEOGRAPHIC_CHECK==='true')await confirmGeography(profiles.admin,deliveryId);
+        else await profiles.admin.evaluate(`(()=>{const f=document.getElementById('deliveryRoadPlanForm');f.elements.coordenadas.value='-46.6559,-23.5614;-46.6333,-23.5505';f.requestSubmit();})()`);
         await until(profiles.admin,"!!document.getElementById('linkedRoadPlan')&&document.readyState==='complete'",'Road planning persisted');
         assert.equal(await profiles.admin.evaluate("document.getElementById('routeResult').dataset.routeState"),'GenericUnverifiedTruck');
         for(const theme of ['dark','light']) {
@@ -319,6 +360,30 @@ async function main() {
         await until(profiles.driver,"!!window.mglControlledDemo?.tracker.routePolyline",'Recovered persisted road plan');
     }
 
+    if(process.env.MGL_GEOGRAPHIC_CHECK==='true') {
+        stage='private live geographic planning revision without reloading driver';
+        const old=await profiles.driver.evaluate(`(()=>{window.__mglDelivery5Document=true;const t=window.mglControlledDemo.tracker;t.setFollowVehicle(false);return {id:document.getElementById('demoRouteControls').dataset.planId,revision:t.planRevision,coords:t.routeCoordinates,center:[t.map.getCenter().lat,t.map.getCenter().lng]};})()`);
+        await profiles.driver.screenshot('delivery5-before-live-change');
+        await confirmGeography(profiles.admin,deliveryId,{via:true});
+        const saved=await profiles.admin.evaluate(`fetch('/Entregas/${deliveryId}/Planejamento').then(r=>r.json()).then(x=>x.plan)`);
+        await profiles.admin.screenshot('delivery5-saved-v2-admin');
+        assert.ok(saved.planRevision>old.revision);assert.equal(saved.confirmedStops.length,3);assert.equal(saved.confirmedStops[1].source,'Map');assert.ok(Math.abs(saved.confirmedStops[1].latitude+23.5555)<0.00015&&Math.abs(saved.confirmedStops[1].longitude+46.6535)<0.00015,'Native map selection targets the intended public waypoint');assert.notDeepEqual(saved.trajetoCoordenadas.map(p=>[p.latitude,p.longitude]),old.coords,'A changed waypoint changes actual provider geometry');
+        await until(profiles.driver,`document.getElementById('planningUpdateNotice').dataset.revision===${JSON.stringify(String(saved.planRevision))}&&document.getElementById('demoRouteControls').dataset.planId===${JSON.stringify(saved.planningId)}`,'Driver receives private revision and reloads geometry automatically');
+        assert.equal(await profiles.driver.evaluate('window.__mglDelivery5Document'),true,'Document was not reloaded');
+        const current=await profiles.driver.evaluate('(()=>{const t=window.mglControlledDemo.tracker;return {coords:t.routeCoordinates,center:[t.map.getCenter().lat,t.map.getCenter().lng],allowed:t.navigationAllowed};})()');
+        assert.deepEqual(current.coords,saved.trajetoCoordenadas.map(p=>[p.latitude,p.longitude]));assert.deepEqual(current.center,old.center,'A manually controlled viewport is preserved');assert.equal(current.allowed,false);
+        assert.equal(await ownedQueueCount(),0);await profiles.driver.screenshot('delivery5-after-live-change');
+        await profiles.driver.evaluate("document.getElementById('btnReviewRoute').click()");
+        await profiles.driver.screenshot('delivery5-review-new-route');
+        await profiles.admin.navigate('/Operacoes');
+        await until(profiles.admin,"!!document.querySelector('#fleetTripList button')",'Operation lists linked trip before GPS');
+        await profiles.admin.evaluate("document.querySelector('#fleetTripList button').click()");
+        await until(profiles.admin,`document.getElementById('fleetMap').dataset.planId===${JSON.stringify(saved.planningId)}`,'Operation displays same new revision before GPS');
+        await profiles.admin.screenshot('delivery5-same-revision-operation');
+        await profiles.driver.evaluate("if(document.getElementById('btnFollowPosition').getAttribute('aria-pressed')==='false')document.getElementById('btnFollowPosition').click()");
+        console.log('Geographic integration passed: Photon candidates, explicit operator confirmations, native map-selected stop, persisted revision and private automatic driver update without reload/recenter.');
+    }
+    stage='linked driver geometry, GPS and mobile regression';
     let roadResult;
     if(controlled) roadResult=await require('./driver-navigation-browser-check.cjs').checkDriverNavigation(profiles.driver,process.env.MGL_ROAD_PROXY==='true'?{
         setMode:mode=>{roadMode=mode;},recover:async()=>{
@@ -444,4 +509,4 @@ main().catch(async error=>{
     console.error('Failed stage: '+stage+'\n'+error.message);
     for(const[role,client]of Object.entries(profiles))try{await client.screenshot('journey-failed-'+role);console.error(role+': '+client.directory);}catch{}
     console.error('Owned evidence: '+directory);process.exitCode=1;
-}).finally(()=>{for(const client of Object.values(profiles))client.closeBrowser();server?.kill('SIGTERM');roadProvider?.closeAllConnections();roadProvider?.close();});
+}).finally(()=>{for(const client of Object.values(profiles))client.closeBrowser();server?.kill('SIGTERM');roadProvider?.closeAllConnections();roadProvider?.close();photonProvider?.closeAllConnections();photonProvider?.close();});

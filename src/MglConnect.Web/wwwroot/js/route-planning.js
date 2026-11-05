@@ -13,10 +13,12 @@
     const data=JSON.parse(document.getElementById('routePresentation').textContent);
     const parameters=document.getElementById('routeParameters'),compact=matchMedia('(max-width:767px)');
     const adaptParameters=()=>{parameters.open=!data.hasGeometry || !compact.matches;};
-    adaptParameters();compact.addEventListener('change',adaptParameters);
+    adaptParameters();if(document.getElementById('geographicPlanning'))parameters.open=false;compact.addEventListener('change',adaptParameters);
     const element=document.getElementById('truckMap'),status=document.getElementById('routeMapStatus');
     if(!window.L){status.textContent='Biblioteca de mapa indisponível. Os resultados continuam acima.';return;}
     const map=L.map(element,{zoomControl:true});
+    window.mglPlanningMap=map;
+    map.on('dragstart',()=>{map.mglManualView=true;});
     const tiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'});
     let success=0,failed=0;
     tiles.on('loading',()=>{success=0;failed=0;status.textContent='Carregando mapa…';element.dataset.tileState='loading';});
@@ -35,6 +37,11 @@
         map.fitBounds(bounds,{padding:[24,24]});
     }
     // No fictional center: without geometry or GPS there are no tiles to request.
-    const observer=new ResizeObserver(()=>{map.invalidateSize({pan:false});if(bounds)map.fitBounds(bounds,{padding:[24,24],animate:false});});observer.observe(element);
+    const observer=new ResizeObserver(()=>{
+        let center=null,zoom=null;try{center=map.getCenter();zoom=map.getZoom();}catch{}
+        map.invalidateSize({pan:false});
+        if(map.mglManualView&&center)map.setView(center,zoom,{animate:false,reset:true});
+        else if(bounds)map.fitBounds(bounds,{padding:[24,24],animate:false});
+    });observer.observe(element);
     window.addEventListener('pagehide',()=>{observer.disconnect();compact.removeEventListener('change',adaptParameters);map.remove();},{once:true});
 })();

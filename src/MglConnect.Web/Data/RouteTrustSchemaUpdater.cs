@@ -36,5 +36,7 @@ public static class RouteTrustSchemaUpdater
             {(sql?"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_DeliveryRoadPlans_TenantId_EntregaId_CreatedAtUtc' AND object_id=OBJECT_ID('DeliveryRoadPlans')) CREATE INDEX":"CREATE INDEX IF NOT EXISTS")} "IX_DeliveryRoadPlans_TenantId_EntregaId_CreatedAtUtc" ON "DeliveryRoadPlans" ("TenantId","EntregaId","CreatedAtUtc");
             """;
         await command.ExecuteNonQueryAsync();
+        await DatabaseSchemaUpdater.EnsureColumnAsync(connection,provider,"Entregas","RoadPlanRevision","integer",transaction:transaction);
+        await DatabaseSchemaUpdater.EnsureColumnAsync(connection,provider,"DeliveryRoadPlans","Revision","integer",transaction:transaction);
     }
 }

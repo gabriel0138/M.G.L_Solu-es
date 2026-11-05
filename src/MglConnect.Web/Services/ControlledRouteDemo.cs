@@ -62,8 +62,28 @@ public sealed class ControlledRouteDemo(IConfiguration configuration, IWebHostEn
         var code=await db.Entregas.Where(e=>e.Id==trip).Select(e=>e.CodigoRastreio).SingleAsync(ct);
         return GpsIngestionService.Receipt(row,code,"confirmado",false).Posicao;
     }
-    public Task<TruckRoutePlan?> RecalculateRoadAsync(int trip,RouteTrust.RouteLocation position,RouteTrust.RouteLocation destination,int driver,CancellationToken ct)
-        => planning==null?Task.FromResult<TruckRoutePlan?>(null):planning.CalculateAsync(trip,[position,destination],ct,expectedDriver:driver);
+    // Only synthetic vertex replay supplies this progress index. No physical GPS is snapped here.
+    public static List<RouteTrust.RouteLocation> RemainingStops(TruckRoutePlan plan,int sample)
+    {
+        var remaining=new List<RouteTrust.RouteLocation>();int from=0;
+        foreach(var stop in plan.RequestedStops.Skip(1).SkipLast(1)) {
+            int best=from;double distance=double.MaxValue;
+            for(int i=from;i<plan.TrajetoCoordenadas.Count;i++) {
+                var p=plan.TrajetoCoordenadas[i];var d=Distance((stop.Latitude,stop.Longitude),(p.Latitude,p.Longitude));
+                if(d<distance){best=i;distance=d;}
+            }
+            from=best;if(best>sample)remaining.Add(new(stop.Latitude,stop.Longitude));
+        }
+        return remaining;
+    }
+    public async Task<TruckRoutePlan?> RecalculateRoadAsync(int trip,RouteTrust.RouteLocation position,TruckRoutePlan previous,int sample,int driver,CancellationToken ct)
+    {
+        if(planning==null)return null;
+        var points=new List<RouteTrust.RouteLocation>{position};points.AddRange(RemainingStops(previous,sample));
+        var end=previous.TrajetoCoordenadas[^1];points.Add(new(end.Latitude,end.Longitude));
+        try{return await planning.CalculateAsync(trip,points,ct,expectedDriver:driver,expectedPlanId:previous.PlanningId,originLabel:"Posição GPS sintética de ensaio");}
+        catch(PlanningContextChangedException){return null;}
+    }
     public async Task<TruckRoutePlan> ForTripAsync(int trip, CancellationToken ct=default)
     {
         if(planning!=null && await planning.ReadAsync(trip,ct) is {} road) {

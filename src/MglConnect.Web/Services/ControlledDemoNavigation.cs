@@ -52,8 +52,9 @@ public sealed class ControlledDemoNavigation(ControlledRouteDemo demo, MglDbCont
         var receipt=await ingestion.AcceptControlledDemoAsync(scope.Actor.Id,new(input.EventId,trip,shift,
             point.Lat,point.Lng,5,input.CapturedAt,20,0,true),ct);
         var latest=await demo.LatestAsync(trip,ct);
-        if(road && input.Detour && receipt.Estado=="confirmado")
-            await demo.RecalculateRoadAsync(trip,new(point.Lat,point.Lng),new(path[^1].Lat,path[^1].Lng),scope.Actor.Id,ct);
+        bool roadRecalculated=false;
+        if(road && input.Detour && receipt.Estado=="confirmado" && latest?.EventId==input.EventId)
+            roadRecalculated=await demo.RecalculateRoadAsync(trip,new(point.Lat,point.Lng),plan,input.Sample,scope.Actor.Id,ct)!=null;
         var activePlan=await demo.ForTripAsync(trip,ct);
         if(receipt.Estado=="confirmado" && latest?.EventId==input.EventId)
         {
@@ -62,6 +63,6 @@ public sealed class ControlledDemoNavigation(ControlledRouteDemo demo, MglDbCont
                 .Select(s=>s.ConnectionId).Intersect(audience).ToArray();
             if(permitted.Length>0)await hub.Clients.Clients(permitted).SendAsync("ReceiveDemoState",new { plan=activePlan,latest },ct);
         }
-        return new { receipt, plan=activePlan, latest, recalculated=input.Detour && latest?.EventId==input.EventId };
+        return new { receipt, plan=activePlan, latest, recalculated=road?roadRecalculated:input.Detour && latest?.EventId==input.EventId };
     }
 }

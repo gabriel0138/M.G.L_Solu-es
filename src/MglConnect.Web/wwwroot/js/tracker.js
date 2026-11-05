@@ -149,8 +149,11 @@ class MglCockpitTracker {
                 this.mapResizeFrame = requestAnimationFrame(() => {
                     this.mapResizeFrame = null;
                     if (!this.destroyed) {
+                        let center=null,zoom=null;
+                        try{center=this.map.getCenter?.();zoom=this.map.getZoom?.();}catch{ /* map not initialized yet */ }
                         this.map.invalidateSize({ pan: false });
-                        if(this.followVehicle && this.currentLatLng)this.map.panTo?.(this.currentLatLng,{animate:false});
+                        if(!this.followVehicle&&center&&Number.isFinite(zoom))this.map.setView(center,zoom,{animate:false,reset:true});
+                        else if(this.followVehicle && this.currentLatLng)this.map.panTo?.(this.currentLatLng,{animate:false});
                         else if(this.followVehicle)this.fitPlannedRoute();
                     }
                 });
@@ -170,7 +173,7 @@ class MglCockpitTracker {
         this.map.fitBounds(this.routePolyline.getBounds(),{paddingTopLeft:[24,top],paddingBottomRight:[24,bottom],animate:false});
     }
 
-    setupRouteLayers(coordinates) {
+    setupRouteLayers(coordinates, { fit=true } = {}) {
         if (!coordinates || coordinates.length === 0) return;
         this.routeCoordinates = coordinates;
         this.routeCumulativeMeters = [0];
@@ -204,8 +207,11 @@ class MglCockpitTracker {
             lineJoin: 'round'
         }).addTo(this.map);
 
-        this.fitPlannedRoute();
+        if(fit)this.fitPlannedRoute();
 
+        const origin=coordinates[0];
+        if(this.originMarker)this.originMarker.setLatLng(origin);
+        else this.originMarker=L.circleMarker(origin,{radius:8,color:'#00c9b7',fillOpacity:1}).bindTooltip('Origem planejada').addTo(this.map);
         // Marcador de Destino
         const destCoord = coordinates[coordinates.length - 1];
         if (!this.destinationMarker) {
@@ -215,7 +221,7 @@ class MglCockpitTracker {
                 color: '#FFFFFF',
                 weight: 3,
                 fillOpacity: 1
-            }).addTo(this.map).bindPopup('<b>Destino Final</b><br>Polo Logístico de Entrega');
+            }).addTo(this.map).bindPopup('Destino planejado');
         } else {
             this.destinationMarker.setLatLng(destCoord);
         }
@@ -389,19 +395,40 @@ class MglCockpitTracker {
             });
     }
 
+    clearPlannedRoute() {
+        this.suspendNavigation();
+        for(const key of ['routePolyline','routePolylineOutline','destinationMarker','originMarker'])if(this[key]){this.map.removeLayer(this[key]);this[key]=null;}
+        this.routeCoordinates=[];this.steps=[];
+    }
+    applyPersistedPlan(plan,{preserveView=true}={}) {
+        if(this.destroyed||!plan?.planningId||!Number.isInteger(plan.planRevision)||plan.planRevision<(this.planRevision||0))return false;
+        this.planRevision=plan.planRevision;
+        // A generic plan never grants heavy navigation authorization.
+        this.navigationAllowed=false;
+        if(!plan.rotaDisponivel){this.clearPlannedRoute();return true;}
+        const coords=(plan.trajetoCoordenadas||[]).map(c=>[c.latitude,c.longitude]);
+        if(coords.length<2||coords.some(c=>!c.every(Number.isFinite)||Math.abs(c[0])>90||Math.abs(c[1])>180)){this.clearPlannedRoute();return false;}
+        this.totalDistKm=plan.distanciaKm;this.tempoBaseMinutos=plan.tempoEstimadoMinutos;this.steps=plan.passosNavegacao||[];
+        this.demoRouteAvailable=this.demoMode&&plan.simulationEnabled===true;
+        this.setupRouteLayers(coords,{fit:!preserveView});this.currentStepIndex=0;
+        if(this.currentLatLng)this.updateRouteProgress(this.currentLatLng.lat,this.currentLatLng.lng);
+        else if(this.demoRouteAvailable){
+            this.updateArrivalEstimate(null);
+            if(this.distElem)this.distElem.textContent=Number(plan.distanciaKm).toLocaleString('pt-BR',{maximumFractionDigits:1})+' km';
+        }
+        return true;
+    }
     applyControlledDemoState(data) {
         if (!this.demoMode || this.destroyed || (data?.plan?.demonstracaoControlada !== true && data?.plan?.simulationEnabled !== true)) return false;
         const plan=data.plan;
-        if(!plan.rotaDisponivel){
-            this.suspendNavigation();
-            for(const key of ['routePolyline','routePolylineOutline','destinationMarker'])if(this[key]){this.map.removeLayer(this[key]);this[key]=null;}
-            this.routeCoordinates=[];this.steps=[];return false;
-        }
+        if((plan.planRevision||0)<(this.planRevision||0))return false;
+        if(!plan.rotaDisponivel){this.clearPlannedRoute();return false;}
         const coords=(plan.trajetoCoordenadas||[]).map(c=>[c.latitude,c.longitude]);
         if(coords.length<2||coords.some(c=>!c.every(Number.isFinite)||Math.abs(c[0])>90||Math.abs(c[1])>180))return false;
+        this.planRevision=plan.planRevision||0;
         this.demoRouteAvailable=true;this.totalDistKm=plan.distanciaKm;this.tempoBaseMinutos=plan.tempoEstimadoMinutos;this.steps=plan.passosNavegacao||[];
         if(JSON.stringify(coords)!==JSON.stringify(this.routeCoordinates)){
-            this.setupRouteLayers(coords);this.currentStepIndex=0;
+            this.setupRouteLayers(coords,{fit:!plan.planningId});this.currentStepIndex=0;
         }
         if(data.latest)this.applyTelemetryPosition(data.latest);
         return true;

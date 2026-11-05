@@ -7,7 +7,7 @@ namespace MglConnect.Web.Controllers;
 [Authorize(Roles="Admin,Motorista")]
 [Route("Entregas/{id:int}/Planejamento")]
 [ResponseCache(NoStore=true,Location=ResponseCacheLocation.None)]
-public sealed class DeliveryRoadPlanController(GpsHistoryAccess access,DeliveryRoadPlanning plans) : Controller
+public sealed class DeliveryRoadPlanController(GpsHistoryAccess access,DeliveryRoadPlanning plans,ControlledRouteDemo demo) : Controller
 {
     [HttpGet]
     public async Task<IActionResult> Read(int id,CancellationToken ct)
@@ -15,6 +15,8 @@ public sealed class DeliveryRoadPlanController(GpsHistoryAccess access,DeliveryR
         var scope=await access.ResolveAsync(User,id,ct);
         if(scope==null||(!scope.Admin&&scope.Actor.Perfil!="Motorista"))return NotFound();
         var plan=await plans.ReadAsync(id,ct);
-        return plan==null?NotFound():Json(new {plan});
+        if(plan==null)return NotFound();
+        plan.SimulationEnabled=demo.Enabled;
+        return Json(new {plan});
     }
 }

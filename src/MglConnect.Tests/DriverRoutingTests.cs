@@ -51,7 +51,7 @@ public class DriverRoutingTests
             if (request.RequestUri.Host == "photon.komoot.io")
             {
                 return JsonResponse(
-                    @"{""features"":[{""geometry"":{""type"":""LineString"",""coordinates"":[-46.63,-23.55]}}]}");
+                    @"{""features"":[{""geometry"":{""type"":""Point"",""coordinates"":[-46.63,-23.55]},""properties"":{""name"":""Local de teste""}}]}");
             }
 
             return JsonResponse(
@@ -110,7 +110,7 @@ public class DriverRoutingTests
             if (request.RequestUri.Host == "photon.komoot.io")
             {
                 return JsonResponse(
-                    @"{""features"":[{""geometry"":{""type"":""LineString"",""coordinates"":[-46.63,-23.55]}}]}");
+                    @"{""features"":[{""geometry"":{""type"":""Point"",""coordinates"":[-46.63,-23.55]},""properties"":{""name"":""Local de teste""}}]}");
             }
 
             return JsonResponse(

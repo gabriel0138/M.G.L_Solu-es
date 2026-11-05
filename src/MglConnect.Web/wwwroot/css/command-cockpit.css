@@ -135,3 +135,7 @@ body.cc-driver-navigation .cc-cockpit-bottom { padding-bottom:max(.5rem,env(safe
 body.cc-driver-navigation .cc-cockpit-bottom .cc-cockpit-hud { border-radius:1.35rem 1.35rem .75rem .75rem !important; }
 .cc-driver-diagnostics[open] { max-block-size:min(32dvh,18rem); overflow-y:auto; overscroll-behavior:contain; }
 .cc-driver-diagnostics > summary { position:sticky; top:0; background:var(--mgl-bg-surface); z-index:1; }
+
+.cc-planning-update { display:flex; gap:.5rem; align-items:center; font-size:.67rem; line-height:1.35; padding-block:.4rem; color:var(--mgl-amber); pointer-events:auto; }
+.cc-planning-update[hidden] { display:none; }
+.cc-planning-update .btn { min-height:44px; flex-shrink:0; font-size:.7rem; }

@@ -39,6 +39,31 @@ namespace MglConnect.Web.Controllers
             return RedirectToAction(nameof(Index),new {entregaId});
         }
 
+        [HttpPost,ValidateAntiForgeryToken]
+        [ResponseCache(NoStore=true,Location=ResponseCacheLocation.None)]
+        public async Task<IActionResult> Sugestoes(int entregaId,string? endereco,[FromServices] PhotonGeocoder geocoder,CancellationToken ct)
+        {
+            var scope=_access==null?null:await _access.ResolveAsync(User,entregaId,ct);
+            if(scope?.Admin!=true)return NotFound();
+            return Json(await geocoder.SearchAsync(endereco,ct));
+        }
+        [HttpPost,ValidateAntiForgeryToken]
+        public async Task<IActionResult> Confirmar(int entregaId,string? confirmedStops,string? binding,CancellationToken ct)
+        {
+            var scope=_access==null?null:await _access.ResolveAsync(User,entregaId,ct);
+            if(scope?.Admin!=true||_planning==null)return NotFound();
+            if(confirmedStops==null||confirmedStops.Length>16000||string.IsNullOrWhiteSpace(binding))return BadRequest("Confirme os pontos e o vínculo do pedido.");
+            List<ConfirmedRouteStop>? stops;
+            try{stops=System.Text.Json.JsonSerializer.Deserialize<List<ConfirmedRouteStop>>(confirmedStops,new System.Text.Json.JsonSerializerOptions{PropertyNameCaseInsensitive=true});}
+            catch(System.Text.Json.JsonException){return BadRequest("Confirmação inválida.");}
+            if(stops==null||stops.Count is <2 or >10||stops.Any(p=>p==null||!p.IsValid()))return BadRequest("Confirme endereço e posição de cada parada no mapa.");
+            try {
+                var plan=await _planning.CalculateAsync(entregaId,stops.Select(p=>new MglConnect.Web.Services.RouteTrust.RouteLocation(p.Latitude,p.Longitude)).ToList(),ct,confirmedStops:stops,expectedBinding:binding);
+                if(plan==null)return Conflict("Entrega indisponível para planejamento.");
+            }catch(PlanningContextChangedException){return Conflict("Pedido, endereço ou atribuição mudou. Atualize a página e confirme os pontos novamente.");}
+            return RedirectToAction(nameof(Index),new {entregaId});
+        }
+
         [HttpGet]
         public async Task<IActionResult> Index(
             int? entregaId, 
@@ -122,6 +147,7 @@ namespace MglConnect.Web.Controllers
                 consumoCustom: consumoKmL
             );
 
+            ViewBag.GeographyContext=entregaId.HasValue&&_planning!=null?await _planning.ContextAsync(entregaId.Value,HttpContext.RequestAborted):null;
             ViewBag.HistoricalCaptureEnabled=_roads?.HistoricalCaptureEnabled==true;
             ViewBag.RoutePresentation = RoutePresentation.From(plano,custoViagem,requested);
             ViewBag.PerfilVeiculo = perfil;

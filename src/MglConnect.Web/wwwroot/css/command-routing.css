@@ -43,3 +43,20 @@
 
 #deliveryRoadPlanForm { min-width:0; overflow-wrap:anywhere; }
 @media(min-width:1200px){#deliveryRoadPlanForm { grid-column:1/-1; grid-row:8; }}
+
+#geographicPlanning { min-width:0; }
+#geographicPlanning h2 { font-size:1rem; }
+.cc-geographic-stop { min-width:0; border-bottom:1px solid var(--mgl-border-subtle); padding-block:.5rem 1rem; }
+.cc-geographic-stop legend { font-size:.85rem; font-weight:700; }
+.cc-geographic-stop label { font-size:.75rem; }
+.cc-geographic-actions { display:flex; flex-wrap:wrap; gap:.4rem; margin-block:.5rem; }
+.cc-geographic-actions .btn { flex:1; font-size:.7rem; }
+.cc-geographic-results { display:grid; gap:.4rem; }
+.cc-geographic-results .btn { text-align:left; white-space:normal; overflow-wrap:anywhere; font-size:.75rem; }
+.cc-geographic-confirm { display:flex; align-items:center; gap:.6rem; min-height:44px; cursor:pointer; }
+.cc-geographic-confirm input { min-width:20px; min-height:20px; }
+@media(min-width:1200px){
+ .cc-routing:has(#geographicPlanning) #geographicPlanning { grid-area:2/1/7/2; }
+ .cc-routing:has(#geographicPlanning) .cc-route-parameters-panel { grid-area:8/1/9/3; }
+ .cc-routing:has(#geographicPlanning) #deliveryRoadPlanForm { grid-area:9/1/10/3; }
+}

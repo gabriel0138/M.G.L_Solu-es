@@ -113,7 +113,7 @@ public sealed class TripProfileIsolationTests
         using var handler=new ValhallaContractTests.Handler((request,_)=>
         {
             Assert.Equal("photon.invalid",request.RequestUri!.Host);
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){Content=new StringContent("{\"features\":[{\"geometry\":{\"coordinates\":[-46.656,-23.561]}}]}")});
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){Content=new StringContent("{\"features\":[{\"geometry\":{\"type\":\"Point\",\"coordinates\":[-46.656,-23.561]},\"properties\":{\"name\":\"Public test landmark\"}}]}")});
         });
         var experimental=new Mock<IExperimentalTruckRouter>();experimental.SetupGet(e=>e.Enabled).Returns(true);
         experimental.Setup(e=>e.RouteAsync(It.IsAny<ProviderRouteRequest>(),It.IsAny<CancellationToken>())).ReturnsAsync(ValhallaExperimentalRouter.Parse(ValhallaContractTests.Response));

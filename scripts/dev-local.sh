@@ -44,7 +44,7 @@ exec env -u POSTGRES_URL -u DATABASE_URL -u POSTGRES_PRISMA_URL -u PORT -u VERCE
     DemoData__AdminPassword=admin123 \
     DemoData__DriverPassword=motorista123 \
     DemoData__ClientPassword=cliente123 \
-    Geocoding__PhotonEnabled=false Routing__LocalRoadEngine="${MGL_LOCAL_ROAD_ENGINE:-false}" \
+    Geocoding__PhotonEnabled="${MGL_PHOTON_ENABLED:-false}" Geocoding__PhotonBaseUrl="${MGL_PHOTON_BASE_URL:-https://photon.komoot.io}" Routing__LocalRoadEngine="${MGL_LOCAL_ROAD_ENGINE:-false}" \
   Routing__OsrmEngineVersion="${MGL_OSRM_ENGINE_VERSION:-}" \
   Routing__DatasetVersion="${MGL_OSRM_DATASET_VERSION:-}" \
   Routing__DatasetReference="${MGL_OSRM_DATASET_REFERENCE:-}" \

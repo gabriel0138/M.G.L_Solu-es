@@ -14,6 +14,7 @@ namespace MglConnect.Web.Models
 
         // ── Multi-Tenancy ──
         public Guid TenantId { get; set; } = Guid.Empty;
+        public int RoadPlanRevision { get; set; }
         public Guid? RotaCalculoAtualId { get; set; }
 
         [Required]

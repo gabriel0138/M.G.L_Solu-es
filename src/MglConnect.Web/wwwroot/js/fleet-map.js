@@ -202,10 +202,10 @@ class MglFleetMap {
             for(const [index,label] of [[0,'Origem planejada'],[coords.length-1,'Destino planejado']])
                 this.leaflet.circleMarker(coords[index],{radius:7,color:'#00c9b7',fillOpacity:1}).bindTooltip(label).addTo(this.routeLayer);
             this.map.fitBounds(this.leaflet.latLngBounds(coords),{padding:[32,32]});
-            this.mapElement.dataset.planId=plan.planningId;
+            this.mapElement.dataset.planId=plan.planningId;this.mapElement.dataset.planRevision=String(plan.planRevision||0);
             const source=plan.geometrySource==='HistoricalRoadCapture'?'Captura viária histórica':plan.geometrySource==='LocalProviderFixture'?'Provedor local simulado':plan.providerName;
             this.mapElement.dataset.routeSource=plan.geometrySource;
-            this.planLabel?.remove();this.planLabel=this.node('span','',source+' · rota genérica; caminhão não validado. Planejamento '+plan.planningId);this.detailElement?.append(this.planLabel);
+            this.planLabel?.remove();this.planLabel=this.node('span','',source+' · v'+(plan.planRevision||0)+' · rota genérica; caminhão não validado. Planejamento '+plan.planningId);this.detailElement?.append(this.planLabel);
         } catch { /* Authorization/network failure never draws an inferred route. */ }
     }
     select(id) {

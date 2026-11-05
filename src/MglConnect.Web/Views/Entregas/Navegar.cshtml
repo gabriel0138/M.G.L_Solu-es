@@ -43,6 +43,7 @@
                         <a asp-action="Index" class="cc-cockpit-close btn btn-outline-light ms-auto" aria-label="Voltar às viagens"><i class="bi bi-x-lg" aria-hidden="true"></i></a>
                     </div>
                     <p id="maneuverInstruction">@navigationHint</p>
+                    <div id="planningUpdateNotice" class="cc-planning-update" role="status" hidden><span id="planningUpdateText"></span><button id="btnReviewRoute" type="button" class="btn btn-outline-light">Ver rota</button></div>
                     <span id="maneuverDist" hidden></span>
                     <span id="routeTrustBadge" hidden data-confidence="@(roadRehearsal ? "GENÉRICA NÃO VALIDADA" : demoMode ? "SINTÉTICA" : "NÃO VERIFICADA")" data-navigation-allowed="@(guidanceAllowed ? "true" : "false")"></span>
                     <div class="progress cc-cockpit-progress"><div id="tripProgressBar" class="progress-bar" role="progressbar" aria-label="@(roadRehearsal ? "Progresso do GPS sintético sobre rota viária" : demoMode ? "Progresso no circuito sintético" : "Progresso estimado sobre o trajeto")" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" style="width:0%"></div></div>
@@ -52,6 +53,7 @@
     }
     else
     {
+    <div id="planningUpdateNotice" class="cc-planning-update" role="status" hidden><span id="planningUpdateText"></span><button id="btnReviewRoute" type="button" class="btn btn-outline-light">Ver rota</button></div>
     <!-- Instrução atual e contexto do trajeto planejado. -->
     <div class="cc-cockpit-top position-absolute top-0 start-0 end-0 p-3 z-3">
         <div class="container-fluid cc-cockpit-panel-width">
@@ -392,6 +394,7 @@
 @section Scripts {
     <script src="~/js/pod-signature.js" asp-append-version="true"></script>
     <script src="~/js/tracker.js" asp-append-version="true"></script>
+    <script src="~/js/delivery-plan-updates.js" asp-append-version="true"></script>
     <script src="~/js/controlled-demo-navigation.js" asp-append-version="true"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
@@ -496,6 +499,7 @@
                 activeLayerName: "OpenStreetMap (ruas)"
             });
 
+            if(!isFinalDelivery)window.mglDeliveryPlanUpdates?.(tracker,@Model.Id,@Html.Raw(System.Text.Json.JsonSerializer.Serialize(new{id=plano.PlanningId,revision=plano.PlanRevision,stopCount=plano.RequestedStops.Count,distance=plano.RotaDisponivel?(decimal?)plano.DistanciaKm:null,validUntil=plano.ValidUntilUtc})));
             const savedGps = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(savedGps));
             tracker.applyTelemetryPosition(savedGps, { snap: true });
             if(demoMode && !isFinalDelivery)window.mglDemoNavigation?.(tracker, map, @Model.Id);

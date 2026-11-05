@@ -1,0 +1,326 @@
+{
+  "description": "Recorded Photon public landmark candidates; deterministic protocol regression, not a current provider response",
+  "capturedAtUtc": "2026-11-05T01:01:57.132509+00:00",
+  "source": "https://photon.komoot.io/api/",
+  "queries": [
+    "Museu de Arte de São Paulo Assis Chateaubriand",
+    "Praça da Sé São Paulo"
+  ],
+  "origin": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "osm_type": "W",
+          "osm_id": 1370081491,
+          "osm_key": "tourism",
+          "osm_value": "museum",
+          "type": "house",
+          "housenumber": "1578",
+          "name": "Museu de Arte de São Paulo",
+          "street": "Av. Paulista",
+          "locality": "Morro dos Ingleses",
+          "district": "Bela Vista",
+          "city": "São Paulo",
+          "state": "São Paulo",
+          "country": "Brasil",
+          "postcode": "01310-200",
+          "countrycode": "BR",
+          "extent": [
+            -46.6563185,
+            -23.5611808,
+            -46.6556147,
+            -23.5618152
+          ]
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -46.6559677,
+            -23.5614961
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "osm_type": "R",
+          "osm_id": 18874084,
+          "osm_key": "tourism",
+          "osm_value": "museum",
+          "type": "house",
+          "housenumber": "1500",
+          "name": "Museu de Arte de São Paulo - Edifício Pietro Maria Bardi",
+          "street": "Avenida Paulista",
+          "locality": "Morro dos Ingleses",
+          "district": "Bela Vista",
+          "city": "São Paulo",
+          "state": "São Paulo",
+          "country": "Brasil",
+          "postcode": "01310-100",
+          "countrycode": "BR",
+          "extent": [
+            -46.6556091,
+            -23.5615952,
+            -46.6551338,
+            -23.561984
+          ]
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -46.6553299,
+            -23.5617698
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "osm_type": "R",
+          "osm_id": 6711205,
+          "osm_key": "tourism",
+          "osm_value": "museum",
+          "type": "house",
+          "name": "Museu de Arte Sacra de São Paulo",
+          "street": "Avenida Tiradentes",
+          "locality": "Bairro da Luz",
+          "district": "Bom Retiro",
+          "city": "São Paulo",
+          "state": "São Paulo",
+          "country": "Brasil",
+          "postcode": "01102-000",
+          "countrycode": "BR",
+          "extent": [
+            -46.6315705,
+            -23.5299113,
+            -46.6308358,
+            -23.530711
+          ]
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -46.6313139,
+            -23.5302965
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "osm_type": "W",
+          "osm_id": 104410401,
+          "osm_key": "tourism",
+          "osm_value": "museum",
+          "type": "house",
+          "name": "Museu de Arte Sacra",
+          "street": "Avenida Tiradentes",
+          "locality": "Bairro da Luz",
+          "district": "Bom Retiro",
+          "city": "São Paulo",
+          "state": "São Paulo",
+          "country": "Brasil",
+          "postcode": "01102-000",
+          "countrycode": "BR",
+          "extent": [
+            -46.6315705,
+            -23.5299113,
+            -46.6308358,
+            -23.530711
+          ]
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -46.6312047,
+            -23.530308
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "osm_type": "N",
+          "osm_id": 5646851035,
+          "osm_key": "tourism",
+          "osm_value": "museum",
+          "type": "house",
+          "housenumber": "903",
+          "name": "Museus de Arte Brasileira da FAAP",
+          "street": "Rua Alagoas",
+          "district": "Consolação",
+          "city": "São Paulo",
+          "state": "São Paulo",
+          "country": "Brasil",
+          "postcode": "01241-020",
+          "countrycode": "BR"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -46.6627025,
+            -23.5450801
+          ]
+        }
+      }
+    ]
+  },
+  "destination": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "osm_type": "W",
+          "osm_id": 75488634,
+          "osm_key": "leisure",
+          "osm_value": "park",
+          "type": "other",
+          "name": "Praça da Sé",
+          "locality": "Glicério",
+          "district": "Sé",
+          "city": "São Paulo",
+          "state": "São Paulo",
+          "country": "Brasil",
+          "postcode": "01001-000",
+          "countrycode": "BR",
+          "extent": [
+            -46.6342888,
+            -23.5491629,
+            -46.6319455,
+            -23.5517242
+          ]
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -46.633081,
+            -23.5503898
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "osm_type": "W",
+          "osm_id": 8093737,
+          "osm_key": "amenity",
+          "osm_value": "place_of_worship",
+          "type": "house",
+          "name": "Catedral da Sé",
+          "street": "Praça da Sé",
+          "locality": "Glicério",
+          "district": "Sé",
+          "city": "São Paulo",
+          "state": "São Paulo",
+          "country": "Brasil",
+          "postcode": "01001-000",
+          "countrycode": "BR",
+          "extent": [
+            -46.6347316,
+            -23.550749,
+            -46.6339676,
+            -23.5517658
+          ]
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -46.6343705,
+            -23.5512688
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "osm_type": "N",
+          "osm_id": 2135983920,
+          "osm_key": "tourism",
+          "osm_value": "artwork",
+          "type": "house",
+          "name": "Marco zero da cidade de São Paulo",
+          "street": "Praça da Sé",
+          "locality": "Glicério",
+          "district": "Sé",
+          "city": "São Paulo",
+          "state": "São Paulo",
+          "country": "Brasil",
+          "postcode": "01001-001",
+          "countrycode": "BR"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -46.6339471,
+            -23.5503953
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "osm_type": "W",
+          "osm_id": 23013076,
+          "osm_key": "highway",
+          "osm_value": "secondary",
+          "type": "street",
+          "name": "Praça da Sé",
+          "locality": "Glicério",
+          "district": "Sé",
+          "city": "São Paulo",
+          "state": "São Paulo",
+          "country": "Brasil",
+          "postcode": "01016-010",
+          "countrycode": "BR",
+          "extent": [
+            -46.6331864,
+            -23.5488698,
+            -46.6329951,
+            -23.5494387
+          ]
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -46.6330688,
+            -23.5491612
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "osm_type": "W",
+          "osm_id": 933354646,
+          "osm_key": "highway",
+          "osm_value": "primary",
+          "type": "street",
+          "name": "Praça da Sé",
+          "locality": "Glicério",
+          "district": "Sé",
+          "city": "São Paulo",
+          "state": "São Paulo",
+          "country": "Brasil",
+          "postcode": "01001-001",
+          "countrycode": "BR",
+          "extent": [
+            -46.6342229,
+            -23.5500724,
+            -46.6341114,
+            -23.5502882
+          ]
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -46.6341671,
+            -23.5501803
+          ]
+        }
+      }
+    ]
+  }
+}

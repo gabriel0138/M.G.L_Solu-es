@@ -19,10 +19,10 @@ namespace MglConnect.Web.Services
     {
         private const double CajamarDepotLatitude = -23.355797;
         private const double CajamarDepotLongitude = -46.877658;
-        private static readonly PublicApiThrottle PhotonThrottle = new(TimeSpan.FromSeconds(1));
         private ProviderRouteReply? _lastOsrmReply;
         private readonly OsrmRoadRouter? _osrm;
         private readonly DeliveryRoadPlanning? _planning;
+        private readonly PhotonGeocoder? _photon;
 
         private readonly IConfiguration _configuration;
         private readonly MglDbContext _context;
@@ -42,7 +42,7 @@ namespace MglConnect.Web.Services
             IMemoryCache routeCache,
             IConfiguration configuration,
             ILogger<TruckRoutingService> logger,
-            IRouteDeviationEngine deviationEngine, RouteTrustService? trust = null,IHttpContextAccessor? request = null,IExperimentalTruckRouter? experimental = null, ControlledRouteDemo? demo = null, OsrmRoadRouter? osrm = null, DeliveryRoadPlanning? planning = null)
+            IRouteDeviationEngine deviationEngine, RouteTrustService? trust = null,IHttpContextAccessor? request = null,IExperimentalTruckRouter? experimental = null, ControlledRouteDemo? demo = null, OsrmRoadRouter? osrm = null, DeliveryRoadPlanning? planning = null,PhotonGeocoder? photon = null)
         {
             _context = context;
             _httpClientFactory = httpClientFactory;
@@ -50,7 +50,7 @@ namespace MglConnect.Web.Services
             _configuration = configuration;
             _logger = logger;
             _deviationEngine = deviationEngine;
-            _trust = trust;_request=request;_experimental=experimental;_demo=demo;_osrm=osrm;_planning=planning;
+            _trust = trust;_request=request;_experimental=experimental;_demo=demo;_osrm=osrm;_planning=planning;_photon=photon;
 
             // Validar gabarito físico imediatamente após injeção de dependência
             // (para garantir que parâmetros padrão sejam consistentes)
@@ -162,66 +162,8 @@ namespace MglConnect.Web.Services
 
         private async Task<(double Latitude, double Longitude)?> GeocodificarComPhotonAsync(string endereco)
         {
-            var baseUrl = _configuration["Geocoding:PhotonBaseUrl"] ?? "https://photon.komoot.io";
-            if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var baseUri)
-                || baseUri.Scheme != Uri.UriSchemeHttps)
-            {
-                _logger.LogWarning("A URL do Photon deve ser uma URL HTTPS absoluta.");
-                return null;
-            }
-
-            var url = $"{baseUrl.TrimEnd('/')}/api/?q={Uri.EscapeDataString(endereco.Trim())}"
-                + "&limit=1&bbox=-75,-34,-34,6";
-
-            try
-            {
-                var client = _httpClientFactory.CreateClient();
-                client.Timeout = TimeSpan.FromSeconds(8);
-                client.DefaultRequestHeaders.UserAgent.ParseAdd("MglConnect-LogisticsEngine/2.0");
-                using var response = baseUri.Host.Equals("photon.komoot.io", StringComparison.OrdinalIgnoreCase)
-                    ? await PhotonThrottle.GetAsync(client, url,Abort)
-                    : await client.GetAsync(url,Abort);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    _logger.LogWarning("Photon retornou HTTP {StatusCode} para a geocodificação.", response.StatusCode);
-                    return null;
-                }
-
-                using var stream = await response.Content.ReadAsStreamAsync();
-                using var document = await JsonDocument.ParseAsync(stream);
-                var root = document.RootElement;
-                if (!root.TryGetProperty("features", out var features)
-                    || features.ValueKind != JsonValueKind.Array
-                    || features.GetArrayLength() == 0
-                    || !features[0].TryGetProperty("geometry", out var geometry)
-                    || !geometry.TryGetProperty("coordinates", out var coordinates)
-                    || coordinates.ValueKind != JsonValueKind.Array
-                    || coordinates.GetArrayLength() < 2
-                    || !coordinates[0].TryGetDouble(out var longitude)
-                    || !coordinates[1].TryGetDouble(out var latitude)
-                    || !CoordenadaDentroDoBrasil(latitude, longitude))
-                {
-                    _logger.LogWarning("Photon não encontrou coordenadas válidas no Brasil para o endereço informado.");
-                    return null;
-                }
-
-                return (latitude, longitude);
-            }
-            catch (HttpRequestException ex)
-            {
-                _logger.LogWarning("Não foi possível consultar o serviço público Photon ({ErrorType}).", ex.GetType().Name);
-            }
-            catch (TaskCanceledException ex)
-            {
-                _logger.LogWarning("Tempo esgotado ao consultar o serviço público Photon ({ErrorType}).", ex.GetType().Name);
-            }
-            catch (JsonException ex)
-            {
-                _logger.LogWarning("Resposta inválida do serviço público Photon ({ErrorType}).", ex.GetType().Name);
-            }
-
-            return null;
+            var reply=await (_photon??new PhotonGeocoder(_httpClientFactory,_configuration)).SearchAsync(endereco,Abort);
+            var first=reply.Suggestions.FirstOrDefault();return first==null?null:(first.Latitude,first.Longitude);
         }
 
         private static bool CoordenadaDentroDoBrasil(double latitude, double longitude) =>

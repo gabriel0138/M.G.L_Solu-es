@@ -6,12 +6,29 @@
     var deliveries=ViewBag.Entregas as List<MglConnect.Web.Models.Entrega> ?? new();
     var cost=ViewBag.CustoViagem as TripCostResult ?? new();
     int? selected=ViewBag.EntregaSelecionadaId as int?;
+    var geo=ViewBag.GeographyContext as PlanningAddressContext;
+    var editableStops=Model.ConfirmedStops.Count>=2 ? Model.ConfirmedStops : Model.RequestedStops.Select((p,i)=>new ConfirmedRouteStop(
+        i==0 ? string.IsNullOrWhiteSpace(Model.Origem)?geo?.Origin??"Origem declarada":Model.Origem
+        : i==Model.RequestedStops.Count-1 ? string.IsNullOrWhiteSpace(Model.Destino)?geo?.Destination??"Destino declarado":Model.Destino
+        : $"Parada planejada {i}",p.Latitude,p.Longitude,"Manual",false,"Coordenada anterior; reconfirme no mapa")).ToList();
     var invariant=System.Globalization.CultureInfo.InvariantCulture;
 }
 <section class="cc-routing" id="routeResult" data-route-state="@state.State" data-has-geometry="@state.HasGeometry.ToString().ToLowerInvariant()">
     <header class="cc-routing-heading"><div><span class="cc-driver-eyebrow">Planejamento de viagem</span><h1>Roteamento</h1><p id="routeStateLabel" role="status">@state.Label</p></div>
         @if(selected.HasValue){<a class="btn btn-outline-secondary" href="/Entregas/Navegar/@selected">Abrir cockpit</a>}
     </header>
+    @if(geo!=null && selected.HasValue){
+        <form id="geographicPlanning" action="/Roteamento/Confirmar" method="post" class="cc-panel p-3">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="entregaId" value="@selected" /><input type="hidden" name="binding" value="@geo.Binding" />
+            <h2>Confirmar pontos do pedido</h2><p class="small">Busque um endereço no Photon ou escolha no mapa. Confirmação do operador não garante precisão cadastral ou acesso de caminhão.</p>
+            <div data-stops></div>
+            <button id="addGeographicStop" type="button" class="btn btn-outline-secondary my-2">Adicionar parada</button>
+            <p data-message role="status" class="small">A busca envia ao Photon somente o endereço consultado ao clicar.</p>
+            <button id="saveConfirmedRoute" type="submit" class="btn btn-mgl-teal" disabled>Calcular e salvar pontos confirmados</button>
+        </form>
+        <script id="geographyContext" type="application/json">@Html.Raw(System.Text.Json.JsonSerializer.Serialize(new {origin=geo.Origin,destination=geo.Destination,stops=editableStops.Select(s=>new{address=s.Address,latitude=s.Latitude,longitude=s.Longitude,source=s.Source,candidateLabel=s.CandidateLabel})}))</script>
+    }
     <details id="routeParameters" class="cc-route-parameters-panel" open><summary>Parâmetros do percurso</summary>
     <form method="get" id="rotaForm" class="cc-panel cc-route-parameters">
         <input type="hidden" name="calcular" value="true" />
@@ -37,7 +54,7 @@
             <input id="deliveryRoadLocations" name="coordenadas" class="form-control my-2" required value="@(string.Join(";",Model.RequestedStops.Select(p=>$"{p.Longitude.ToString(invariant)},{p.Latitude.ToString(invariant)}")))" placeholder="Origem; paradas opcionais; destino" />
             <button id="saveDeliveryRoadPlan" type="submit" class="btn btn-mgl-teal">Calcular e vincular à entrega</button>
             <p class="small mb-0 mt-2">Confirme as coordenadas do pedido. O cálculo genérico não verifica acesso de caminhões.</p>
-            @if(Model.PlanningId.HasValue){<p id="linkedRoadPlan" data-plan-id="@Model.PlanningId">Planejamento @Model.PlanningId · calculado @Model.CalculatedAtUtc?.ToString("u") · validade @Model.ValidUntilUtc?.ToString("u")</p>}
+            @if(Model.PlanningId.HasValue){<p id="linkedRoadPlan" data-plan-id="@Model.PlanningId" data-revision="@Model.PlanRevision">Versão @Model.PlanRevision · planejamento @Model.PlanningId · calculado @Model.CalculatedAtUtc?.ToString("u") · validade @Model.ValidUntilUtc?.ToString("u")</p>}
         </form>
     }
     <div class="cc-routing-notice" role="status">@state.Notice</div>
@@ -60,4 +77,5 @@
 @section Scripts {
 <script id="routePresentation" type="application/json">@Html.Raw(System.Text.Json.JsonSerializer.Serialize(new {state=state.State.ToString(),hasGeometry=state.HasGeometry,coordinates=state.HasGeometry?Model.TrajetoCoordenadas:new List<RouteCoordinate>(),stops=ViewBag.RouteStops as List<MglConnect.Web.Services.RouteTrust.RouteLocation>??Model.RequestedStops.Select(p=>new MglConnect.Web.Services.RouteTrust.RouteLocation(p.Latitude,p.Longitude)).ToList(),provider=state.Provider,profile=state.Profile,source=state.GeometrySource,distanceKm=state.DistanceKm,durationSeconds=state.DurationSeconds,routeToll=state.RouteToll,fuelCost=state.FuelCost,fixedTollScenario=state.FixedTollScenario,scenarioCost=state.ScenarioCost}))</script>
 <script src="~/js/route-planning.js" asp-append-version="true"></script>
+<script src="~/js/geographic-planning.js" asp-append-version="true"></script>
 }

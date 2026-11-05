@@ -41,6 +41,9 @@ namespace MglConnect.Web.Services
 
     public class TruckRoutePlan
     {
+        public int PlanRevision { get; set; }
+        public bool IsCalculating { get; set; }
+        public List<ConfirmedRouteStop> ConfirmedStops { get; set; } = new();
         public Guid? PlanningId { get; set; }
         public DateTime? CalculatedAtUtc { get; set; }
         public DateTime? ValidUntilUtc { get; set; }
