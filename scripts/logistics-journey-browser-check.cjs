@@ -184,18 +184,54 @@ async function confirmGeography(client,id,{via=false}={}) {
         assert.equal(await client.evaluate(`document.querySelectorAll('#geographicPlanning fieldset')[${index}].querySelector('input[type=checkbox]').checked`),false);
         await client.evaluate(`(()=>{const f=document.querySelectorAll('#geographicPlanning fieldset')[${index}];f.querySelector('.cc-geographic-results button').click();f.querySelector('input[type=checkbox]').click();})()`);
     }
-    if(via) {
+    if(via) for(const [offset,latitude,longitude] of (process.env.MGL_DRAFT_ROUTE_CHECK==='true'?[[0,-23.5555,-46.6535],[1,-23.557,-46.648]]:[[0,-23.5555,-46.6535]])) {
         await client.evaluate("document.getElementById('addGeographicStop').click()");
-        await client.evaluate(`(()=>{const f=document.querySelectorAll('#geographicPlanning fieldset')[1],input=f.querySelector('input[type=text]');input.value='Parada fictícia · Bela Vista (seleção no mapa)';input.dispatchEvent(new Event('input'));f.querySelectorAll('button')[1].click();window.mglPlanningMap.stop();window.mglPlanningMap.setView([-23.5555,-46.6535],16,{animate:false,reset:true});})()`);
+        await client.evaluate(`(()=>{const f=document.querySelectorAll('#geographicPlanning fieldset')[${offset+1}],input=f.querySelector('input[type=text]');input.value='Parada fictícia ${offset+1} · Bela Vista (seleção no mapa)';input.dispatchEvent(new Event('input'));f.querySelectorAll('button')[1].click();window.mglPlanningMap.stop();window.mglPlanningMap.setView([${latitude},${longitude}],16,{animate:false,reset:true});})()`);
         await until(client,"!window.mglPlanningMap._animatingZoom&&!window.mglPlanningMap._panAnim?._inProgress",'Map animation settled');
         await client.pause(150);
-        const center=await client.evaluate("(()=>{const map=window.mglPlanningMap,r=document.getElementById('truckMap').getBoundingClientRect(),p=map.latLngToContainerPoint([-23.5555,-46.6535]);if(p.x<0||p.x>r.width||p.y<0||p.y>r.height)throw new Error('Intended waypoint outside current viewport');return {x:r.x+p.x,y:r.y+p.y};})()");
+        const center=await client.evaluate(`(()=>{const map=window.mglPlanningMap,r=document.getElementById('truckMap').getBoundingClientRect(),p=map.latLngToContainerPoint([${latitude},${longitude}]);if(p.x<0||p.x>r.width||p.y<0||p.y>r.height)throw new Error('Intended waypoint outside current viewport');return {x:r.x+p.x,y:r.y+p.y};})()`);
         await client.command('Input.dispatchMouseEvent',{type:'mousePressed',...center,button:'left',buttons:1,clickCount:1});
         await client.command('Input.dispatchMouseEvent',{type:'mouseReleased',...center,button:'left',clickCount:1});
-        assert.equal(await client.evaluate("document.querySelectorAll('#geographicPlanning fieldset')[1].querySelector('input[type=checkbox]').checked"),false);
-        await client.evaluate("document.querySelectorAll('#geographicPlanning fieldset')[1].querySelector('input[type=checkbox]').click()");
+        assert.equal(await client.evaluate(`document.querySelectorAll('#geographicPlanning fieldset')[${offset+1}].querySelector('input[type=checkbox]').checked`),false);
+        await client.evaluate(`document.querySelectorAll('#geographicPlanning fieldset')[${offset+1}].querySelector('input[type=checkbox]').click()`);
+    }
+    assert.equal(await client.evaluate("document.getElementById('saveConfirmedRoute').disabled"),true,'Publishing requires a fresh route preview');
+    const preview=async()=>{await client.evaluate("document.getElementById('previewConfirmedRoute').click()");await until(client,"['ready','unavailable','error'].includes(document.getElementById('geographicPreview').dataset.state)",'Draft preview completed');};
+    await preview();
+    assert.equal(await client.evaluate("document.getElementById('geographicPreview').dataset.state"),'ready');
+    assert.equal(await client.evaluate("document.getElementById('linkedRoadPlan')?.dataset.planId||null"),before,'Preview cannot publish or replace the saved plan');
+    assert.ok(await client.evaluate("[...document.querySelectorAll('#truckMap path')].some(p=>p.getAttribute('stroke-dasharray')==='8 10')"),'Draft geometry is visible and distinct');
+    if(process.env.MGL_DRAFT_ROUTE_CHECK==='true') {
+        await client.evaluate("document.querySelector('#geographicPlanning input[type=checkbox]').click()");
+        assert.equal(await client.evaluate("document.getElementById('saveConfirmedRoute').disabled"),true);
+        assert.equal(await client.evaluate("document.getElementById('geographicPreview').hidden"),true);
+        await client.evaluate("document.querySelector('#geographicPlanning input[type=checkbox]').click()");
+        roadMode='unavailable';await preview();
+        assert.equal(await client.evaluate("document.getElementById('geographicPreview').dataset.state"),'unavailable');
+        assert.equal(await client.evaluate("document.getElementById('saveConfirmedRoute').disabled"),true);
+        assert.equal(await client.evaluate("document.getElementById('linkedRoadPlan')?.dataset.planId||null"),before);
+        await client.screenshot('delivery8-preview-unavailable');roadMode='ok';
+        await client.evaluate("window.__draftFetch=window.fetch;window.fetch=async(...a)=>{const r=await window.__draftFetch(...a);if(String(a[0]).includes('/Roteamento/Previa'))await new Promise(resolve=>setTimeout(resolve,600));return r;};document.getElementById('previewConfirmedRoute').click()");
+        await until(client,"document.getElementById('geographicPreview').dataset.state==='calculating'",'Preview request in flight');
+        await client.evaluate("document.querySelector('#geographicPlanning input[type=checkbox]').click()");await client.pause(850);
+        assert.equal(await client.evaluate("document.getElementById('saveConfirmedRoute').disabled"),true,'Late draft cannot authorize a changed confirmation');
+        assert.equal(await client.evaluate("document.getElementById('geographicPreview').hidden"),true);
+        await client.evaluate("window.fetch=window.__draftFetch;delete window.__draftFetch;document.querySelector('#geographicPlanning input[type=checkbox]').click()");await preview();
+        assert.equal(await client.evaluate("document.getElementById('geographicPreview').dataset.state"),'ready');
     }
     assert.equal(await client.evaluate("document.getElementById('saveConfirmedRoute').disabled"),false);
+    await client.screenshot(via?'delivery8-preview-with-stop':'delivery8-preview-origin-destination');
+    await client.evaluate("document.getElementById('viewDraftOnMap').click()");
+    await until(client,"(()=>{const r=document.getElementById('truckMap').getBoundingClientRect();return r.bottom>0&&r.top<innerHeight;})()",'Draft map reachable from confirmation');
+    await client.evaluate("document.querySelector('#geographicPreviewMap a').click()");
+    if(process.env.MGL_DRAFT_ROUTE_CHECK==='true'&&via) {
+        for(const theme of ['dark','light'])for(const width of [320,360,390,428,768,1024,1440]) {
+            await client.viewport(width,width<500?844:1000);await client.evaluate(`document.documentElement.dataset.mglTheme=${JSON.stringify(theme)}`);
+            assert.ok(await client.evaluate('document.documentElement.scrollWidth<=innerWidth'),'Draft planning layout fits '+width);
+            assert.ok(await client.evaluate("(()=>{const e=document.getElementById('saveConfirmedRoute');e.scrollIntoView({block:'center',behavior:'instant'});const r=e.getBoundingClientRect();return r.height>=44&&e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})()"),'Publish action reachable '+width);
+            if(width===390)await client.screenshot('delivery8-preview-mobile-'+theme);
+        }
+    }
     await client.pause(300);
     await client.screenshot(via?'delivery5-three-points-confirmed':'delivery5-photon-points-confirmed');
     await client.evaluate("document.getElementById('saveConfirmedRoute').click()");
@@ -422,11 +458,12 @@ async function main() {
         await confirmGeography(profiles.admin,deliveryId,{via:true});
         const saved=await profiles.admin.evaluate(`fetch('/Entregas/${deliveryId}/Planejamento').then(r=>r.json()).then(x=>x.plan)`);
         await profiles.admin.screenshot('delivery5-saved-v2-admin');
-        assert.ok(saved.planRevision>old.revision);assert.equal(saved.confirmedStops.length,3);assert.equal(saved.confirmedStops[1].source,'Map');assert.ok(Math.abs(saved.confirmedStops[1].latitude+23.5555)<0.00015&&Math.abs(saved.confirmedStops[1].longitude+46.6535)<0.00015,'Native map selection targets the intended public waypoint');assert.notDeepEqual(saved.trajetoCoordenadas.map(p=>[p.latitude,p.longitude]),old.coords,'A changed waypoint changes actual provider geometry');
+        assert.ok(saved.planRevision>old.revision);assert.equal(saved.confirmedStops.length,process.env.MGL_DRAFT_ROUTE_CHECK==='true'?4:3);assert.equal(saved.confirmedStops[1].source,'Map');assert.ok(Math.abs(saved.confirmedStops[1].latitude+23.5555)<0.00015&&Math.abs(saved.confirmedStops[1].longitude+46.6535)<0.00015,'Native map selection targets the intended public waypoint');assert.notDeepEqual(saved.trajetoCoordenadas.map(p=>[p.latitude,p.longitude]),old.coords,'A changed waypoint changes actual provider geometry');
         await until(profiles.driver,`document.getElementById('planningUpdateNotice').dataset.revision===${JSON.stringify(String(saved.planRevision))}&&document.getElementById('demoRouteControls').dataset.planId===${JSON.stringify(saved.planningId)}`,'Driver receives private revision and reloads geometry automatically');
         assert.equal(await profiles.driver.evaluate('window.__mglDelivery5Document'),true,'Document was not reloaded');
         const current=await profiles.driver.evaluate('(()=>{const t=window.mglControlledDemo.tracker;return {coords:t.routeCoordinates,center:[t.map.getCenter().lat,t.map.getCenter().lng],allowed:t.navigationAllowed};})()');
         assert.deepEqual(current.coords,saved.trajetoCoordenadas.map(p=>[p.latitude,p.longitude]));assert.deepEqual(current.center,old.center,'A manually controlled viewport is preserved');assert.equal(current.allowed,false);
+        assert.match(await profiles.driver.evaluate("document.getElementById('planningUpdateText').textContent"),new RegExp('paradas intermediárias 0 → '+(process.env.MGL_DRAFT_ROUTE_CHECK==='true'?2:1)));
         assert.equal(await ownedQueueCount(),0);await profiles.driver.screenshot('delivery5-after-live-change');
         await profiles.driver.evaluate("document.getElementById('btnReviewRoute').click()");
         await profiles.driver.screenshot('delivery5-review-new-route');

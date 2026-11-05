@@ -27,3 +27,12 @@ for(const status of [401,403])test(`HTTP ${status} clears private geometry witho
  assert.equal(e.tracker.cleared,true);assert.equal(e.nodes.btnReviewRoute.disabled,true);
  assert.equal(e.tracker.currentLatLng,e.observed);assert.equal(e.tracker.pending,e.pending);
 });
+test('route update counts intermediate stops consistently with geographic planning',async()=>{
+ const e=setup({id:'one',revision:1,distance:1,stopCount:2});
+ e.requests[0](response({planningId:'two',planRevision:2,rotaDisponivel:true,distanciaKm:2,requestedStops:[{},{},{},{}]}));await flush();
+ assert.match(e.nodes.planningUpdateText.textContent,/paradas intermediárias 0 → 2/);
+});
+test('missing stop metadata is reported as unknown rather than inventing zero stops',async()=>{
+ const e=setup();e.requests[0](response({planningId:'two',planRevision:2,rotaDisponivel:true,distanciaKm:2}));await flush();
+ assert.match(e.nodes.planningUpdateText.textContent,/paradas intermediárias não informadas → não informadas/);
+});

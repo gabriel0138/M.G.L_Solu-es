@@ -4,17 +4,23 @@
     const context=JSON.parse(document.getElementById('geographyContext').textContent);
     const list=form.querySelector('[data-stops]'),message=form.querySelector('[data-message]');
     const save=document.getElementById('saveConfirmedRoute'),add=document.getElementById('addGeographicStop');
-    const layer=L.layerGroup().addTo(map);let active=null,closed=false;
+    const previewButton=document.getElementById('previewConfirmedRoute'),previewSummary=document.getElementById('geographicPreview');
+    const previewLink=document.getElementById('viewDraftOnMap'),mapPreview=document.getElementById('geographicPreviewMap');
+    const layer=L.layerGroup().addTo(map);let active=null,closed=false,previewLine=null,previewAbort=null,previewBusy=false,publishing=false,generation=0,previewFingerprint=null;
+    const snapshot=()=>JSON.stringify(stops.map(({address,latitude,longitude,source,confirmed,candidateLabel})=>({address,latitude,longitude,source,confirmed,candidateLabel})));
+    function resetPreview(){generation++;previewAbort?.abort();previewAbort=null;previewBusy=false;previewFingerprint=null;previewLink.hidden=true;mapPreview.hidden=true;if(previewLine){map.removeLayer(previewLine);previewLine=null;}previewSummary.hidden=true;previewSummary.dataset.state='stale';}
     const initial=context.stops?.length>=2?context.stops:[{address:context.origin},{address:context.destination}];
     const stops=initial.map(s=>({...s,confirmed:false}));
     const valid=p=>Number.isFinite(p.latitude)&&Number.isFinite(p.longitude)&&Math.abs(p.latitude)<=90&&Math.abs(p.longitude)<=180;
     function node(tag,text){const el=document.createElement(tag);if(text)el.textContent=text;return el;}
     function label(index){return index===0?'Origem':index===stops.length-1?'Destino':`Parada ${index}`;}
-    function update(){
+    function update(invalidate=true){
+        if(invalidate)resetPreview();
         layer.clearLayers();
         stops.forEach((s,i)=>{if(valid(s)){const text=node('span',`${label(i)} · ${s.confirmed?'confirmado pelo operador':'aguardando confirmação'}`);L.circleMarker([s.latitude,s.longitude],{radius:8,color:s.confirmed?'#00c9b7':'#ffb020',fillOpacity:1}).bindTooltip(text).addTo(layer);}});
         const draft=stops.filter(valid);if(!map._loaded&&draft.length)map.fitBounds(L.latLngBounds(draft.map(p=>[p.latitude,p.longitude])),{padding:[24,24],maxZoom:17,animate:false});
-        save.disabled=!stops.every(s=>s.confirmed&&valid(s)&&s.address?.trim().length>=3);add.disabled=stops.length>=10;
+        const ready=stops.every(s=>s.confirmed&&valid(s)&&s.address?.trim().length>=3);
+        previewButton.disabled=publishing||previewBusy||!ready;save.disabled=publishing||previewBusy||!ready||previewFingerprint!==snapshot();add.disabled=publishing||stops.length>=10;
     }
     function select(s,p,source,candidate){
         Object.assign(s,{latitude:p.latitude,longitude:p.longitude,source,candidateLabel:candidate,confirmed:false});
@@ -65,11 +71,34 @@
     }
     map.on('click',event=>{if(!active)return;if(map._animatingZoom||map._panAnim?._inProgress){message.textContent='Aguarde o mapa parar antes de escolher o ponto.';return;}const point=event.originalEvent?map.mouseEventToLatLng(event.originalEvent):event.latlng;select(active,{latitude:point.lat,longitude:point.lng},'Map','Seleção visual do operador');active=null;form.querySelectorAll('[aria-pressed]').forEach(b=>b.setAttribute('aria-pressed','false'));message.textContent='Ponto marcado. Confira e confirme para incluí-lo no cálculo.';});
     add.addEventListener('click',()=>{if(stops.length>=10)return;stops.splice(stops.length-1,0,{address:'',confirmed:false});render();});
-    form.addEventListener('submit',async event=>{
-        event.preventDefault();if(save.disabled)return;save.disabled=true;message.textContent='Calculando e salvando planejamento confirmado…';
-        const body=new FormData(form);body.set('confirmedStops',JSON.stringify(stops.map(({address,latitude,longitude,source,confirmed,candidateLabel})=>({address,latitude,longitude,source,confirmed,candidateLabel}))));
-        try{const response=await fetch(form.action,{method:'POST',body,credentials:'same-origin'});if(!response.ok){message.textContent=await response.text();update();return;}if(response.redirected)location.assign(response.url);else throw new Error();}
-        catch{message.textContent='Não foi possível confirmar o resultado. Atualize antes de tentar novamente.';update();}
+    previewButton.addEventListener('click',async()=>{
+        if(previewButton.disabled)return;resetPreview();const ticket=generation,fingerprint=snapshot(),controller=new AbortController();
+        previewAbort=controller;previewBusy=true;update(false);previewSummary.hidden=false;previewSummary.dataset.state='calculating';previewSummary.textContent='Calculando prévia sem publicar…';
+        const body=new FormData(form);body.set('confirmedStops',fingerprint);
+        try {
+            const response=await fetch('/Roteamento/Previa',{method:'POST',body,credentials:'same-origin',signal:controller.signal});
+            if(closed||ticket!==generation||snapshot()!==fingerprint)return;
+            if(!response.ok||response.redirected){previewSummary.dataset.state='error';previewSummary.textContent=response.redirected?'Acesso alterado. Entre novamente.':await response.text();return;}
+            const draft=await response.json();if(closed||ticket!==generation||snapshot()!==fingerprint)return;
+            const coords=(draft.coordinates||[]).map(p=>[p.latitude,p.longitude]);
+            const available=draft.available&&coords.length>=2&&coords.every(c=>Number.isFinite(c[0])&&Math.abs(c[0])<=90&&Number.isFinite(c[1])&&Math.abs(c[1])<=180);
+            previewSummary.dataset.state=available?'ready':'unavailable';
+            if(!available){previewSummary.textContent=`${draft.label||'Prévia indisponível'}. Nenhum planejamento foi publicado; a rota salva permanece inalterada.`;return;}
+            previewLine=L.polyline(coords,{color:'#ffb020',weight:6,dashArray:'8 10',opacity:1}).addTo(map);map.mglManualView=true;map.fitBounds(previewLine.getBounds(),{padding:[28,28],maxZoom:17,animate:false});
+            const distance=Number.isFinite(draft.distanceKm)?draft.distanceKm.toLocaleString('pt-BR',{maximumFractionDigits:2})+' km':'distância indisponível';
+            const duration=Number.isFinite(draft.durationSeconds)?Math.ceil(draft.durationSeconds/60)+' min do provedor':'duração indisponível';
+            const before=Number.isFinite(context.currentDistanceKm)?context.currentDistanceKm.toLocaleString('pt-BR',{maximumFractionDigits:2})+' km':'sem rota salva';
+            previewSummary.textContent=`Prévia não publicada · ${before} → ${distance} · ${duration} · ${stops.length-2} parada(s) · ${draft.provider}/${draft.profile}. Caminhão não validado. Confira o traçado antes de publicar.`;
+            previewFingerprint=fingerprint;previewLink.hidden=false;mapPreview.hidden=false;
+        }catch(error){if(error.name!=='AbortError'&&ticket===generation){previewSummary.dataset.state='error';previewSummary.textContent='Falha na prévia. A rota salva não foi alterada. Tente novamente.';}}
+        finally{if(previewAbort===controller){previewAbort=null;previewBusy=false;update(false);}}
     });
-    window.addEventListener('pagehide',()=>{closed=true;stops.forEach(s=>s.abort?.abort());},{once:true});render();
+    form.addEventListener('submit',async event=>{
+        event.preventDefault();if(publishing||save.disabled)return;let navigating=false;publishing=true;save.disabled=true;message.textContent='Calculando e salvando planejamento confirmado…';
+        const body=new FormData(form);body.set('confirmedStops',snapshot());form.inert=true;
+        try{const response=await fetch(form.action,{method:'POST',body,credentials:'same-origin'});if(!response.ok){message.textContent=await response.text();resetPreview();return;}if(response.redirected){navigating=true;location.assign(response.url);}else throw new Error();}
+        catch{message.textContent='Não foi possível confirmar o resultado. Atualize antes de tentar novamente.';resetPreview();}
+        finally{if(!navigating){publishing=false;form.inert=false;update(false);}}
+    });
+    window.addEventListener('pagehide',()=>{closed=true;resetPreview();stops.forEach(s=>s.abort?.abort());},{once:true});render();
 })();

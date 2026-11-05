@@ -26,6 +26,21 @@ public sealed class DeliveryRoadPlanning(MglDbContext db, OsrmRoadRouter router,
         e.Pedido?.OrigemEndereco,e.Pedido?.OrigemNumero,e.Pedido?.OrigemBairro,e.Pedido?.OrigemCidade,e.Pedido?.OrigemEstado,e.Pedido?.OrigemCep
     }))));
     private Task<Entrega?> Delivery(int id,CancellationToken ct) => db.Entregas.AsNoTracking().Include(e=>e.Pedido).SingleOrDefaultAsync(e=>e.Id==id,ct);
+    // A draft is never a planning revision, GPS sample or published notification.
+    public async Task<TruckRoutePlan?> PreviewAsync(int id,IReadOnlyList<ConfirmedRouteStop> stops,string binding,CancellationToken ct=default)
+    {
+        if(stops.Count is <2 or >10||stops.Any(p=>p==null||!p.IsValid()))return null;
+        var points=stops.Select(p=>new RouteLocation(p.Latitude,p.Longitude)).ToList();
+        if(points.Distinct().Count()<2)return null;
+        var before=await Delivery(id,ct);
+        if(before==null||before.StatusEntrega is "Entregue" or "Cancelada")return null;
+        if(Binding(before)!=binding)throw new PlanningContextChangedException();
+        var plan=(await router.RouteAsync(points,ct)).ToPlan();
+        var after=await Delivery(id,ct);
+        if(after==null||Binding(after)!=binding||after.StatusEntrega is "Entregue" or "Cancelada")throw new PlanningContextChangedException();
+        plan.PerfilVeiculo="Pesado";plan.RotaAprovada=false;plan.RotaHomologadaParaVeiculo=false;plan.Confianca=null;
+        return plan;
+    }
     public async Task<PlanningAddressContext?> ContextAsync(int id,CancellationToken ct=default)
     {
         var e=await Delivery(id,ct);if(e==null)return null;

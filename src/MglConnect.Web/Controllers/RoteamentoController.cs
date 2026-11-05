@@ -29,6 +29,33 @@ namespace MglConnect.Web.Controllers
             _fuelService = fuelService;_roads=roads;_planning=planning;_access=access;
         }
 
+        private static List<ConfirmedRouteStop>? ConfirmedPoints(string json)
+        {
+            try {
+                var points=System.Text.Json.JsonSerializer.Deserialize<List<ConfirmedRouteStop>>(json,new System.Text.Json.JsonSerializerOptions{PropertyNameCaseInsensitive=true});
+                return points is {Count: >=2 and <=10} && points.All(p=>p!=null&&p.IsValid())?points:null;
+            }catch(System.Text.Json.JsonException){return null;}
+        }
+
+        [HttpPost,ValidateAntiForgeryToken]
+        [ResponseCache(NoStore=true,Location=ResponseCacheLocation.None)]
+        public async Task<IActionResult> Previa(int entregaId,string? confirmedStops,string? binding,CancellationToken ct)
+        {
+            var scope=_access==null?null:await _access.ResolveAsync(User,entregaId,ct);
+            if(scope?.Admin!=true||_planning==null)return NotFound();
+            if(confirmedStops==null||confirmedStops.Length>16000||string.IsNullOrWhiteSpace(binding))return BadRequest("Confirme os pontos e o vínculo do pedido.");
+            var stops=ConfirmedPoints(confirmedStops);
+            if(stops==null)return BadRequest("Confirme endereço e posição de cada parada no mapa.");
+            try {
+                var plan=await _planning.PreviewAsync(entregaId,stops,binding,ct);
+                if(plan==null)return Conflict("Entrega indisponível para prévia.");
+                if((await _access!.ResolveAsync(User,entregaId,ct))?.Admin!=true)return NotFound();
+                var view=RoutePresentation.From(plan);
+                return Json(new{state=view.State.ToString(),label=view.Label,available=view.HasGeometry,view.DistanceKm,view.DurationSeconds,
+                    coordinates=view.HasGeometry?plan.TrajetoCoordenadas:[],provider=plan.ProviderName,profile=plan.ProviderProfile,geometrySource=plan.GeometrySource});
+            }catch(PlanningContextChangedException){return Conflict("Pedido, endereço ou atribuição mudou. Atualize a página e confirme os pontos novamente.");}
+        }
+
         [HttpPost,ValidateAntiForgeryToken]
         public async Task<IActionResult> Planejar(int entregaId,string? coordenadas,CancellationToken ct)
         {
@@ -53,10 +80,8 @@ namespace MglConnect.Web.Controllers
             var scope=_access==null?null:await _access.ResolveAsync(User,entregaId,ct);
             if(scope?.Admin!=true||_planning==null)return NotFound();
             if(confirmedStops==null||confirmedStops.Length>16000||string.IsNullOrWhiteSpace(binding))return BadRequest("Confirme os pontos e o vínculo do pedido.");
-            List<ConfirmedRouteStop>? stops;
-            try{stops=System.Text.Json.JsonSerializer.Deserialize<List<ConfirmedRouteStop>>(confirmedStops,new System.Text.Json.JsonSerializerOptions{PropertyNameCaseInsensitive=true});}
-            catch(System.Text.Json.JsonException){return BadRequest("Confirmação inválida.");}
-            if(stops==null||stops.Count is <2 or >10||stops.Any(p=>p==null||!p.IsValid()))return BadRequest("Confirme endereço e posição de cada parada no mapa.");
+            var stops=ConfirmedPoints(confirmedStops);
+            if(stops==null)return BadRequest("Confirme endereço e posição de cada parada no mapa.");
             try {
                 var plan=await _planning.CalculateAsync(entregaId,stops.Select(p=>new MglConnect.Web.Services.RouteTrust.RouteLocation(p.Latitude,p.Longitude)).ToList(),ct,confirmedStops:stops,expectedBinding:binding);
                 if(plan==null)return Conflict("Entrega indisponível para planejamento.");

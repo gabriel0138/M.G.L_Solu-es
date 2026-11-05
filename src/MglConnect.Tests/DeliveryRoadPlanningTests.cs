@@ -23,6 +23,73 @@ public sealed class DeliveryRoadPlanningTests
             return new HttpResponseMessage(Fail?HttpStatusCode.InternalServerError:HttpStatusCode.OK){Content=new StringContent(OsrmRoadRouterTests.ValidResponse)};
         }
     }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PreviewCancellationOrChangedContextCannotBecomePublished(bool cancel)
+    {
+        await using var f=await SecurityHttpFixture.CreateAsync(startServer:false);
+        using var db=new MglDbContext(f.Options);var handler=new ReorderedHandler();
+        var factory=new Mock<IHttpClientFactory>();factory.Setup(x=>x.CreateClient("OsrmRoad")).Returns(new HttpClient(handler));
+        var service=new DeliveryRoadPlanning(db,new OsrmRoadRouter(factory.Object,new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?>{{"Routing:OsrmBaseUrl","https://fixture.invalid"}}).Build()));
+        var id=f.Deliveries[0].Id;var binding=(await service.ContextAsync(id))!.Binding;using var ct=new CancellationTokenSource();
+        var pending=service.PreviewAsync(id,[new("Synthetic origin",-23.55,-46.63,"Map",true),new("Synthetic destination",-23.551,-46.632,"Map",true)],binding,ct.Token);
+        await handler.Entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        if(cancel){ct.Cancel();await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>pending);}
+        else {
+            await using var other=new MglDbContext(f.Options);var trip=await other.Entregas.SingleAsync(e=>e.Id==id);trip.EnderecoDestino="Changed synthetic address";await other.SaveChangesAsync();
+            handler.Release.SetResult();await Assert.ThrowsAsync<PlanningContextChangedException>(()=>pending);
+        }
+        Assert.Empty(await db.DeliveryRoadPlans.ToListAsync());Assert.Equal(0,(await db.Entregas.AsNoTracking().SingleAsync(e=>e.Id==id)).RoadPlanRevision);
+    }
+
+    [Fact]
+    public async Task PreviewUsesRoadProviderWithoutPublishingOrReservingARevision()
+    {
+        await using var f=await SecurityHttpFixture.CreateAsync(startServer:false);
+        using var db=new MglDbContext(f.Options);var handler=new Handler();
+        var factory=new Mock<IHttpClientFactory>();factory.Setup(x=>x.CreateClient("OsrmRoad")).Returns(new HttpClient(handler));
+        var router=new OsrmRoadRouter(factory.Object,new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?>{{"Routing:OsrmBaseUrl","https://fixture.invalid"}}).Build());
+        var service=new DeliveryRoadPlanning(db,router);var id=f.Deliveries[0].Id;
+        var context=(await service.ContextAsync(id))!;
+        ConfirmedRouteStop[] stops=[new("Synthetic origin",-23.55,-46.63,"Map",true),new("Synthetic destination",-23.551,-46.632,"Map",true)];
+        var preview=(await service.PreviewAsync(id,stops,context.Binding))!;
+        Assert.True(RoutePresentation.ValidGeometry(preview));Assert.Null(preview.PlanningId);Assert.False(preview.RotaHomologadaParaVeiculo);
+        Assert.Empty(await db.DeliveryRoadPlans.ToListAsync());Assert.Equal(0,(await db.Entregas.SingleAsync(e=>e.Id==id)).RoadPlanRevision);
+        var published=(await service.CalculateAsync(id,[new(-23.55,-46.63),new(-23.551,-46.632)],confirmedStops:stops,expectedBinding:context.Binding))!;
+        Assert.Equal(1,published.PlanRevision);
+        handler.Fail=true;var failed=(await service.PreviewAsync(id,stops,context.Binding))!;
+        Assert.False(failed.RotaDisponivel);Assert.Null(RoutePresentation.From(failed).DistanceKm);
+        Assert.Equal(published.PlanningId,(await service.ReadAsync(id))!.PlanningId);Assert.Single(await db.DeliveryRoadPlans.ToListAsync());
+        await Assert.ThrowsAsync<PlanningContextChangedException>(()=>service.PreviewAsync(id,stops,"obsolete"));
+        Assert.Null(await service.PreviewAsync(id,[stops[0] with{Confirmed=false},stops[1]],context.Binding));
+        Assert.Null(await service.PreviewAsync(id,[stops[0],stops[0]],context.Binding));
+        Assert.Empty(await db.PosicoesGps.ToListAsync());
+    }
+
+    [Fact]
+    public async Task PreviewHttpRequiresScopeCsrfConfirmationAndNeverPersistsProviderFailure()
+    {
+        await using var f=await SecurityHttpFixture.CreateAsync();var id=f.Deliveries[0].Id;
+        using var admin=await f.LoginAsync("admin-a");using var foreign=await f.LoginAsync("admin-b");using var driver=await f.LoginAsync("driver-a");
+        using var db=new MglDbContext(f.Options);
+        var contextService=new DeliveryRoadPlanning(db,new OsrmRoadRouter(Mock.Of<IHttpClientFactory>(),new ConfigurationBuilder().Build()));
+        var binding=(await contextService.ContextAsync(id))!.Binding;
+        var form=new Dictionary<string,string>{{"entregaId",id.ToString()},{"binding",binding},{"confirmedStops",JsonSerializer.Serialize(new[]{new ConfirmedRouteStop("Synthetic origin",-23.55,-46.63,"Map",true),new ConfirmedRouteStop("Synthetic destination",-23.551,-46.632,"Map",true)})}};
+        Assert.Equal(HttpStatusCode.BadRequest,(await admin.Client.PostAsync("/Roteamento/Previa",new FormUrlEncodedContent(form))).StatusCode);
+        form["__RequestVerificationToken"]=await SecurityHttpFixture.AntiForgeryAsync(foreign.Client,"/Roteamento");
+        Assert.Equal(HttpStatusCode.NotFound,(await foreign.Client.PostAsync("/Roteamento/Previa",new FormUrlEncodedContent(form))).StatusCode);
+        Assert.Contains((await driver.Client.PostAsync("/Roteamento/Previa",new FormUrlEncodedContent(form))).StatusCode,new[]{HttpStatusCode.Redirect,HttpStatusCode.Forbidden});
+        form["__RequestVerificationToken"]=await SecurityHttpFixture.AntiForgeryAsync(admin.Client,"/Roteamento?entregaId="+id);
+        var response=await admin.Client.PostAsync("/Roteamento/Previa",new FormUrlEncodedContent(form));Assert.Equal(HttpStatusCode.OK,response.StatusCode);
+        var reply=JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.False(reply.GetProperty("available").GetBoolean());Assert.Equal(JsonValueKind.Null,reply.GetProperty("distanceKm").ValueKind);
+        Assert.True(response.Headers.CacheControl!.NoStore);
+        form["binding"]="outdated";Assert.Equal(HttpStatusCode.Conflict,(await admin.Client.PostAsync("/Roteamento/Previa",new FormUrlEncodedContent(form))).StatusCode);
+        form["confirmedStops"]="[null]";Assert.Equal(HttpStatusCode.BadRequest,(await admin.Client.PostAsync("/Roteamento/Previa",new FormUrlEncodedContent(form))).StatusCode);
+        Assert.Empty(await db.DeliveryRoadPlans.ToListAsync());Assert.Equal(0,(await db.Entregas.SingleAsync(e=>e.Id==id)).RoadPlanRevision);
+    }
+
     [Fact]
     public async Task LinkedPlanningPersistsSeparatelyAndFailureCannotFallBackToOldGeometry()
     {

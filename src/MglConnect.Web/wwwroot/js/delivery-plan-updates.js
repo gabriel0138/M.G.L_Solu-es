@@ -4,7 +4,7 @@ window.mglDeliveryPlanUpdates=(tracker,trip,initial)=>{
     if(!notice||!tracker.hubConnection)return;
     const review=document.getElementById('btnReviewRoute');
     let revision=initial.revision||0,planId=initial.id||null,generation=0,stopped=false;
-    let stopCount=initial.stopCount||0;
+    let stopCount=Number.isInteger(initial.stopCount)&&initial.stopCount>=2?initial.stopCount-2:null;
     let distance=initial.distance,expiry=initial.validUntil;
     tracker.planRevision=revision;
     async function refresh(notification=null){
@@ -29,8 +29,8 @@ window.mglDeliveryPlanUpdates=(tracker,trip,initial)=>{
             notice.dataset.revision=String(revision);notice.dataset.planId=planId;notice.hidden=false;
             const before=Number.isFinite(distance)?distance.toLocaleString('pt-BR',{maximumFractionDigits:2})+' km':'sem estimativa';
             const after=plan.rotaDisponivel?Number(plan.distanciaKm).toLocaleString('pt-BR',{maximumFractionDigits:2})+' km':'sem rota';
-            const count=plan.requestedStops?.length||0;
-            text.textContent=`Planejamento v${revision} carregado · ${before} → ${after} · paradas ${stopCount} → ${count}. Confira o trajeto; caminhão não validado.`;
+            const count=Array.isArray(plan.requestedStops)&&plan.requestedStops.length>=2?plan.requestedStops.length-2:null;
+            text.textContent=`Planejamento v${revision} carregado · ${before} → ${after} · paradas intermediárias ${stopCount??'não informadas'} → ${count??'não informadas'}. Confira o trajeto; caminhão não validado.`;
             stopCount=count;
             distance=plan.rotaDisponivel?Number(plan.distanciaKm):null;
             if(tracker.demoMode)await window.mglControlledDemo?.refresh();
