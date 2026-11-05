@@ -136,6 +136,9 @@ class MglCockpitTracker {
     }
 
     init() {
+        this.mapDragHandler=()=>this.setFollowVehicle(false);
+        this.mapDragRegistered=typeof this.map?.on==='function';
+        if(this.mapDragRegistered)this.map.on('dragstart',this.mapDragHandler);
         this.setupRouteLayers(this.initialCoordinates);
         this.setupSignalR();
         this.setupTrafficLayerMatch();
@@ -148,11 +151,23 @@ class MglCockpitTracker {
                     if (!this.destroyed) {
                         this.map.invalidateSize({ pan: false });
                         if(this.followVehicle && this.currentLatLng)this.map.panTo?.(this.currentLatLng,{animate:false});
+                        else if(this.followVehicle)this.fitPlannedRoute();
                     }
                 });
             });
             this.mapResizeObserver.observe(this.map.getContainer());
         }
+    }
+
+    fitPlannedRoute() {
+        if(!this.routePolyline)return;
+        const container=this.map.getContainer?.();
+        const controls=typeof document!=='undefined'?document.querySelector?.('.cc-cockpit-controls'):null;
+        const rect=container?.getBoundingClientRect?.(),panel=controls?.getBoundingClientRect?.();
+        let bottom=24,top=24;
+        if(rect&&panel&&panel.bottom>rect.top&&panel.top<rect.bottom)
+            bottom=Math.min(Math.max(24,rect.bottom-panel.top+12),Math.max(24,rect.height*.45));
+        this.map.fitBounds(this.routePolyline.getBounds(),{paddingTopLeft:[24,top],paddingBottomRight:[24,bottom],animate:false});
     }
 
     setupRouteLayers(coordinates) {
@@ -189,7 +204,7 @@ class MglCockpitTracker {
             lineJoin: 'round'
         }).addTo(this.map);
 
-        this.map.fitBounds(this.routePolyline.getBounds(), { padding: [50, 50] });
+        this.fitPlannedRoute();
 
         // Marcador de Destino
         const destCoord = coordinates[coordinates.length - 1];
@@ -375,10 +390,13 @@ class MglCockpitTracker {
     }
 
     applyControlledDemoState(data) {
-        if (!this.demoMode || this.destroyed || data?.plan?.demonstracaoControlada !== true) return false;
-        if(data.latest && Date.parse(data.latest.timestamp)<this.lastPositionTimestamp)return false;
+        if (!this.demoMode || this.destroyed || (data?.plan?.demonstracaoControlada !== true && data?.plan?.simulationEnabled !== true)) return false;
         const plan=data.plan;
-        if(!plan.rotaDisponivel){this.suspendNavigation();return false;}
+        if(!plan.rotaDisponivel){
+            this.suspendNavigation();
+            for(const key of ['routePolyline','routePolylineOutline','destinationMarker'])if(this[key]){this.map.removeLayer(this[key]);this[key]=null;}
+            this.routeCoordinates=[];this.steps=[];return false;
+        }
         const coords=(plan.trajetoCoordenadas||[]).map(c=>[c.latitude,c.longitude]);
         if(coords.length<2||coords.some(c=>!c.every(Number.isFinite)||Math.abs(c[0])>90||Math.abs(c[1])>180))return false;
         this.demoRouteAvailable=true;this.totalDistKm=plan.distanciaKm;this.tempoBaseMinutos=plan.tempoEstimadoMinutos;this.steps=plan.passosNavegacao||[];
@@ -697,6 +715,7 @@ class MglCockpitTracker {
 
     setFollowVehicle(enabled) {
         this.followVehicle = Boolean(enabled);
+        document.getElementById('btnFollowPosition')?.setAttribute('aria-pressed',String(this.followVehicle));
         if (this.followVehicle && this.currentLatLng && this.map && typeof this.map.setView === 'function') {
             const zoom = typeof this.map.getZoom === 'function' ? this.map.getZoom() : 15;
             this.map.setView(this.currentLatLng, Number.isFinite(zoom) ? Math.max(zoom, 15) : 15, { animate: true });
@@ -803,7 +822,7 @@ class MglCockpitTracker {
             this.updateRouteProgress(this.currentLatLng.lat, this.currentLatLng.lng);
             this.updateNavigationGuidance(this.currentLatLng.lat, this.currentLatLng.lng);
         }
-        this.map.fitBounds(this.routePolyline.getBounds(), { padding: [50, 50] });
+        this.fitPlannedRoute();
         this.showToastAlert('Nova rota recalculada a partir da posição atual.', 'bi-sign-turn-right-fill', '#FFB020');
     }
 
@@ -889,6 +908,7 @@ class MglCockpitTracker {
         this.destroyed = true;
         if (this.trafficTimer) clearInterval(this.trafficTimer);
         if (this.positionFreshnessTimer) clearInterval(this.positionFreshnessTimer);
+        if(this.mapDragRegistered)this.map.off?.('dragstart',this.mapDragHandler);
         this.mapResizeObserver?.disconnect();
         if (this.mapResizeFrame) cancelAnimationFrame(this.mapResizeFrame);
         window.removeEventListener('online', this.onlineHandler);

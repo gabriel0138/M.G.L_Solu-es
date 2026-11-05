@@ -175,7 +175,7 @@ public class SqlServerIntegrityTests(ITestOutputHelper output)
 
     private static async Task AssertTrustedForeignKeysAsync(MglDbContext context)
     {
-        Assert.Equal(37, await context.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM sys.foreign_keys").SingleAsync());
+        Assert.Equal(38, await context.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM sys.foreign_keys").SingleAsync());
         Assert.Equal(0, await context.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM sys.foreign_keys WHERE is_disabled = 1 OR is_not_trusted = 1").SingleAsync());
         Assert.Equal(6, await context.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM sys.indexes WHERE has_filter = 1").SingleAsync());
     }

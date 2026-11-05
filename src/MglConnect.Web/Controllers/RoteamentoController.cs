@@ -16,15 +16,27 @@ namespace MglConnect.Web.Controllers
         private readonly ITruckRoutingService _routingService;
         private readonly IFuelCostService _fuelService;
         private readonly OsrmRoadRouter? _roads;
+        private readonly DeliveryRoadPlanning? _planning;
+        private readonly GpsHistoryAccess? _access;
 
         public RoteamentoController(
             MglDbContext context, 
             ITruckRoutingService routingService,
-            IFuelCostService fuelService, OsrmRoadRouter? roads = null)
+            IFuelCostService fuelService, OsrmRoadRouter? roads = null, DeliveryRoadPlanning? planning = null, GpsHistoryAccess? access = null)
         {
             _context = context;
             _routingService = routingService;
-            _fuelService = fuelService;_roads=roads;
+            _fuelService = fuelService;_roads=roads;_planning=planning;_access=access;
+        }
+
+        [HttpPost,ValidateAntiForgeryToken]
+        public async Task<IActionResult> Planejar(int entregaId,string? coordenadas,CancellationToken ct)
+        {
+            var scope=_access==null?null:await _access.ResolveAsync(User,entregaId,ct);
+            if(scope?.Admin!=true||_planning==null)return NotFound();
+            if(!OsrmRoadRouter.TryLocations(coordenadas,out var points))return BadRequest("Informe de 2 a 10 coordenadas válidas, longitude/latitude.");
+            if(await _planning.CalculateAsync(entregaId,points,ct)==null)return Conflict("Entrega indisponível para planejamento.");
+            return RedirectToAction(nameof(Index),new {entregaId});
         }
 
         [HttpGet]
@@ -55,6 +67,7 @@ namespace MglConnect.Web.Controllers
                 ? "Leve" 
                 : "Pesado";
 
+            ViewBag.EntregaSelecionadaId=entregaId;
             TruckRoutePlan plano;
             decimal valorPedido = 0m;
 

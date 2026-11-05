@@ -2,7 +2,8 @@
 // Exercises real Leaflet, responsive layout and pointer hit testing in Chromium.
 const assert = require('node:assert/strict');
 
-async function checkDriverNavigation(client) {
+async function checkDriverNavigation(client,options={}) {
+    if(await client.evaluate("document.getElementById('demoRouteControls')?.dataset.roadRehearsal==='true'"))return checkLinkedRoad(client,options);
     if(await client.evaluate("!!document.getElementById('demoRouteControls')"))return checkControlledDemo(client);
     const navigationPath = await client.evaluate('location.pathname');
     console.log('No-route initial map: '+JSON.stringify(await client.evaluate("({tiles:document.querySelectorAll('#cockpitMap .leaflet-tile').length,position:document.getElementById('positionSourceBadge').dataset.state,...document.getElementById('cockpitMap').dataset})")));
@@ -208,4 +209,92 @@ async function checkUnavailableDemo(client) {
     assert.equal(await client.evaluate("document.getElementById('etaValue').textContent"),'--:--');
     await client.screenshot('delivery2-unavailable-position-preserved');
     console.log('Unavailable route passed: no fabricated geometry, distance or ETA; device position still received.');
+}
+
+// Same harness, but geometry/metrics must come from the delivery's persisted provider plan.
+async function checkLinkedRoad(client,options={}) {
+    const wait=async expr=>{for(let i=0;i<200;i++){if(await client.evaluate(expr))return;await client.pause(100);}throw new Error('Linked road timeout: '+expr);};
+    await wait('!!window.mglControlledDemo?.tracker.routePolyline');
+    const endpoint=await client.evaluate("'/Entregas/'+document.getElementById('demoRouteControls').dataset.delivery+'/Planejamento'");
+    const original=await client.evaluate(`fetch(${JSON.stringify(endpoint)}).then(r=>r.json()).then(x=>x.plan)`);
+    assert.equal(original.geometrySource,'RoadNetwork');assert.equal(original.demonstracaoControlada,false);assert.ok(original.providerDurationSeconds>0);
+    assert.ok(original.trajetoCoordenadas.length>10);assert.equal(original.rotaHomologadaParaVeiculo,false);
+    assert.deepEqual(await client.evaluate('window.mglControlledDemo.tracker.routeCoordinates'),original.trajetoCoordenadas.map(p=>[p.latitude,p.longitude]));
+    for(const theme of ['dark','light']) {
+        await client.evaluate(`document.documentElement.dataset.mglTheme=${JSON.stringify(theme)}`);
+        for(const [width,height] of [[360,844],[390,844],[428,844],[768,1000],[1024,1000],[1440,1000],[844,390],[390,500]]) {
+            await client.viewport(width,height);
+            assert.ok(await client.evaluate('document.documentElement.scrollWidth<=innerWidth'));
+            for(const selector of ['#btnDemoGps','#btnDemoDetour','#btnFollowPosition','.driver-pod-button','.driver-emergency-button']) {
+                assert.ok(await client.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});e.scrollIntoView({block:'center',behavior:'instant'});const r=e.getBoundingClientRect();return r.height>=44&&!!document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest(${JSON.stringify(selector)});})()`),'Road action receives pointer: '+selector);
+            }
+            await client.pause(120);
+            assert.ok(await client.evaluate(`(()=>{const t=window.mglControlledDemo.tracker,rect=document.getElementById('cockpitMap').getBoundingClientRect();return [t.routeCoordinates[0],t.routeCoordinates.at(-1)].every(c=>{const p=t.map.latLngToContainerPoint(c);return p.x>=0&&p.x<=rect.width&&p.y>=0&&p.y<=rect.height;});})()`),'Origin and destination remain in the map after resize');
+            await client.screenshot('delivery4-road-'+theme+'-'+width+'x'+height);
+        }
+    }
+    await client.viewport(390,844);
+    await client.evaluate("document.getElementById('btnDemoGps').click()");
+    await wait("document.getElementById('positionSourceBadge').dataset.state==='simulated'");
+    await client.evaluate('window.mglControlledDemo.pause()');
+    await wait('!window.mglControlledDemo.busy');
+    const count=original.trajetoCoordenadas.length,index=Math.floor(count/2);
+    const result=await client.evaluate(`window.mglControlledDemo.sendSample(${index})`);
+    assert.equal(result.receipt.estado,'confirmado');
+    assert.ok(await client.evaluate("Number(document.getElementById('tripProgressBar').getAttribute('aria-valuenow'))>0"));
+    await client.screenshot('delivery4-road-progress');
+    await client.evaluate("void window.mglControlledDemo.tracker.map.fire('dragstart')");
+    assert.equal(await client.evaluate("document.getElementById('btnFollowPosition').getAttribute('aria-pressed')"),'false');
+    await client.evaluate("document.getElementById('btnFollowPosition').click()");
+    assert.equal(await client.evaluate("document.getElementById('btnFollowPosition').getAttribute('aria-pressed')"),'true');
+    const input={eventId:result.receipt.eventoId,sample:index,detour:false,capturedAt:result.receipt.capturadoEmUtc,planId:original.planningId};
+    assert.equal((await client.evaluate(`window.mglControlledDemo.sendSample(${index},false,${JSON.stringify(input)})`)).receipt.estado,'duplicado');
+    const delayed={eventId:require('node:crypto').randomUUID(),sample:1,detour:false,capturedAt:new Date(Date.parse(result.receipt.capturadoEmUtc)-1).toISOString(),planId:original.planningId};
+    const late=await client.evaluate(`window.mglControlledDemo.sendSample(1,false,${JSON.stringify(delayed)})`);
+    assert.equal(late.latest.eventId,result.latest.eventId,'Late GPS cannot rewind current position');
+    const before=await client.evaluate('[window.mglControlledDemo.tracker.currentLatLng.lat,window.mglControlledDemo.tracker.currentLatLng.lng]');
+    const point=original.trajetoCoordenadas[index];
+    await client.evaluate(`window.mglControlledDemo.tracker.updateRouteProgress(${point.latitude-0.02},${point.longitude})`);
+    assert.equal(await client.evaluate('window.mglControlledDemo.tracker.routeProjectionOffRoute'),true);
+    assert.deepEqual(await client.evaluate('[window.mglControlledDemo.tracker.currentLatLng.lat,window.mglControlledDemo.tracker.currentLatLng.lng]'),before,'Projection does not move observed GPS');
+    await client.evaluate(`window.mglControlledDemo.tracker.updateRouteProgress(${point.latitude},${point.longitude})`);
+    assert.equal(await client.evaluate('window.mglControlledDemo.tracker.routeProjectionOffRoute'),false);
+    let rerouted=await client.evaluate(`window.mglControlledDemo.sendSample(${index},true)`);
+    assert.equal(rerouted.recalculated,true);assert.ok(rerouted.plan.rotaDisponivel);assert.notEqual(rerouted.plan.planningId,original.planningId);
+    assert.notDeepEqual(rerouted.plan.trajetoCoordenadas,original.trajetoCoordenadas);
+    assert.equal(rerouted.plan.geometrySource,'RoadNetwork');
+    await client.screenshot('delivery4-osrm-recalculated');
+    if(options.setMode&&options.recover) {
+        options.setMode('unavailable');
+        const failed=await client.evaluate('window.mglControlledDemo.sendSample(1,true)');
+        assert.equal(failed.plan.rotaDisponivel,false);
+        assert.equal(await client.evaluate('window.mglControlledDemo.tracker.routeCoordinates.length'),0);
+        assert.equal(await client.evaluate("document.getElementById('distanceRemaining').textContent"),'—');
+        await client.screenshot('delivery4-recalculation-provider-failed');
+        options.setMode('ok');await options.recover();
+        await client.evaluate('window.mglControlledDemo.refresh()');
+        rerouted=await client.evaluate(`fetch(${JSON.stringify(endpoint)}).then(r=>r.json())`);
+        assert.ok(rerouted.plan.rotaDisponivel);
+    }
+    const path=await client.evaluate('location.pathname');await client.navigate(path);
+    await wait("document.getElementById('positionSourceBadge').dataset.state==='simulated'");
+    assert.equal(await client.evaluate("document.getElementById('demoRouteControls').dataset.planId"),rerouted.plan.planningId);
+    const connection=await client.evaluate(`(()=>{const t=window.mglControlledDemo.tracker;const id=t.hubConnection.connectionId;const ws=window.__mglTestSockets.find(x=>x.readyState===WebSocket.OPEN&&x.url.includes('/telemetryHub'));if(!ws)throw new Error('Missing socket');t.currentLatLng=null;t.lastPositionTimestamp=null;ws.close();return id;})()`);
+    await wait(`window.mglControlledDemo.tracker.hubConnection.connectionId!==${JSON.stringify(connection)}&&!!window.mglControlledDemo.tracker.currentLatLng&&document.getElementById('telemetryConnectionState').dataset.state==='connected'`);
+    await client.evaluate("document.getElementById('cockpitMap').style.setProperty('width','280px','important')");await client.pause(150);
+    assert.equal(await client.evaluate('window.mglControlledDemo.tracker.map.getSize().x'),280);
+    await client.evaluate("document.getElementById('cockpitMap').style.removeProperty('width')");
+    await client.command('Network.setBlockedURLs',{urls:['https://tile.openstreetmap.org/*']});
+    await client.evaluate('void window.mglControlledDemo.tracker.map.setZoom(window.mglControlledDemo.tracker.map.getZoom()+1)');
+    await wait("Number(document.getElementById('cockpitMap').dataset.tilesFailed)>0");
+    assert.ok(await client.evaluate('!!window.mglControlledDemo.tracker.routePolyline&&!!window.mglControlledDemo.tracker.vehicleMarker'));
+    await client.screenshot('delivery4-road-tiles-failed');
+    await client.command('Network.setBlockedURLs',{urls:[]});
+    await client.evaluate('void window.mglControlledDemo.tracker.map.eachLayer(x=>{if(x instanceof L.TileLayer)x.redraw()})');
+    await wait("document.getElementById('cockpitMap').dataset.tileState==='loaded'");
+    const final=await client.evaluate(`window.mglControlledDemo.sendSample(${rerouted.plan.trajetoCoordenadas.length-1})`);
+    assert.equal(await client.evaluate("document.getElementById('tripProgressBar').getAttribute('aria-valuenow')"),'100');
+    await client.screenshot('delivery4-road-arrived-still-in-transit');
+    console.log('Linked road passed: persisted OSRM geometry, sixteen layouts, raw synthetic GPS, progress, stale/duplicate, real recalculation, reload, reconnect, tiles and resize.');
+    return {plan:rerouted.plan,latest:final.latest};
 }

@@ -100,7 +100,7 @@ public sealed class ValhallaExperimentalRouter(IHttpClientFactory clients, IConf
             if (points.All(p => p.Latitude == points[0].Latitude && p.Longitude == points[0].Longitude)) throw new JsonException();
             var summary = trip.GetProperty("summary"); var distance = summary.GetProperty("length").GetDecimal(); var seconds = summary.GetProperty("time").GetDouble();
             if (distance <= 0 || distance > 50000 || !double.IsFinite(seconds) || seconds < 0 || seconds > 60 * 60 * 24 * 30) throw new JsonException();
-            return new() { Geometry = points, DistanceKm = distance, EstimatedMinutes = (int)Math.Ceiling(seconds / 60),
+            return new() { Geometry = points, DistanceKm = distance, DurationSeconds = seconds, EstimatedMinutes = (int)Math.Ceiling(seconds / 60),
                 ResponseSha256 = Convert.ToHexString(SHA256.HashData(body)), ReceivedAtUtc = DateTime.UtcNow,
                 Detail = "Sucesso técnico. /route não comprova versão do grafo, IDs direcionais das vias nem cobertura de restrições. Todas as categorias permanecem desconhecidas." };
         }

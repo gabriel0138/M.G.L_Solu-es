@@ -64,6 +64,22 @@ public sealed class OsrmRoadRouterTests
         Assert.Contains("-46.630000,-23.550000;-46.631000,-23.550500;-46.632000,-23.551000",requested!.OriginalString);
         Assert.Contains("geometries=geojson",requested.Query);
     }
+    [Fact]public void CapturedLocalEngineFixturePreservesStepsWaypointsAndNoTruckPermission()
+    {
+        var dir=new DirectoryInfo(AppContext.BaseDirectory);while(dir!=null&&!File.Exists(Path.Combine(dir.FullName,"MglConnect.sln")))dir=dir.Parent;
+        var reply=OsrmRoadRouter.Parse(File.ReadAllBytes(Path.Combine(dir!.FullName,"src/MglConnect.Tests/Fixtures/osrm/central-sp-20261105.response.json")));
+        Assert.Equal(ProviderFailure.None,reply.Failure);Assert.Equal(134,reply.Geometry.Count);Assert.Equal(3.1077m,reply.DistanceKm);Assert.Equal(357.9,reply.DurationSeconds);
+        Assert.Equal(2,reply.Waypoints.Count);Assert.NotEmpty(reply.Steps);Assert.Contains(reply.Steps,s=>s.DistanciaMetros>0&&s.DuracaoSegundos>0);Assert.Contains(reply.Steps,s=>s.ManobraModificador!="straight");
+        Assert.False(reply.ToPlan().RotaHomologadaParaVeiculo);Assert.Null(reply.ToPlan().Confianca);
+    }
+    [Fact]public async Task ReversedProviderGeometryIsRejectedBeforePresentation()
+    {
+        var body=ValidResponse.Replace("[[-46.63,-23.55],[-46.632,-23.551]]","[[-46.632,-23.551],[-46.63,-23.55]]");
+        var reply=await Router(new Handler((_,_)=>Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){Content=new StringContent(body)}))).RouteAsync([new(-23.55,-46.63),new(-23.551,-46.632)]);
+        Assert.Equal(ProviderFailure.InvalidResponse,reply.Failure);Assert.Empty(reply.Geometry);
+    }
+    [Theory][InlineData("NoRoute")][InlineData("NoSegment")]
+    public void RoadCoverageFailuresNeverSupplyZeroSuccess(string code){var reply=OsrmRoadRouter.Parse(Encoding.UTF8.GetBytes("{\"code\":\""+code+"\"}"));Assert.Equal(ProviderFailure.NoCoverage,reply.Failure);Assert.Null(reply.ToPlan().ProviderDurationSeconds);Assert.False(reply.ToPlan().RotaDisponivel);}
     private static OsrmRoadRouter Router(HttpMessageHandler handler,IMemoryCache? cache=null){var factory=new Mock<IHttpClientFactory>();factory.Setup(f=>f.CreateClient(It.IsAny<string>())).Returns(()=>new HttpClient(handler,false));return new(factory.Object,new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?>{{"Routing:OsrmBaseUrl","https://fixture.invalid"},{"Routing:TimeoutSeconds","1"}}).Build(),cache);}
     private sealed class Handler(Func<HttpRequestMessage,CancellationToken,Task<HttpResponseMessage>> callback):HttpMessageHandler{protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken ct)=>callback(request,ct);}
 }

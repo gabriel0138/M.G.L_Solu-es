@@ -41,8 +41,9 @@ public sealed class OsrmRoadRouter(IHttpClientFactory clients,IConfiguration con
         bool locked=false;
         try {
             if(publicDemo){await PublicGate.WaitAsync(deadline.Token);locked=true;var delay=nextPublicRequest-DateTimeOffset.UtcNow;if(delay>TimeSpan.Zero)await Task.Delay(delay,deadline.Token);nextPublicRequest=DateTimeOffset.UtcNow.AddSeconds(1);}
+            var radiuses=string.Join(';',points.Select(_=>"100"));
             var coordinates=string.Join(';',points.Select(p=>FormattableString.Invariant($"{p.Longitude:F6},{p.Latitude:F6}")));
-            using var request=new HttpRequestMessage(HttpMethod.Get,uri.AbsoluteUri.TrimEnd('/')+"/route/v1/driving/"+coordinates+"?overview=full&geometries=geojson&steps=true");
+            using var request=new HttpRequestMessage(HttpMethod.Get,uri.AbsoluteUri.TrimEnd('/')+"/route/v1/driving/"+coordinates+"?overview=full&geometries=geojson&steps=true&alternatives=true&radiuses="+radiuses);
             request.Headers.UserAgent.ParseAdd("MglConnect-RoutePrototype/3.0");
             using var response=await clients.CreateClient("OsrmRoad").SendAsync(request,HttpCompletionOption.ResponseHeadersRead,deadline.Token);
             if(response.StatusCode==HttpStatusCode.TooManyRequests){var requestedWait=response.Headers.RetryAfter?.Delta??response.Headers.RetryAfter?.Date-DateTimeOffset.UtcNow??TimeSpan.FromSeconds(30);var wait=TimeSpan.FromSeconds(Math.Clamp(requestedWait.TotalSeconds,1,3600));cache?.Set(backoff,DateTimeOffset.UtcNow+wait,wait);return Failed(ProviderFailure.RateLimited);}
@@ -50,7 +51,13 @@ public sealed class OsrmRoadRouter(IHttpClientFactory clients,IConfiguration con
             if(response.Content.Headers.ContentLength>2*1024*1024)return Failed(ProviderFailure.InvalidResponse);
             await using var stream=await response.Content.ReadAsStreamAsync(deadline.Token);using var bytes=new MemoryStream();var buffer=new byte[8192];int read;
             while((read=await stream.ReadAsync(buffer,deadline.Token))>0){if(bytes.Length+read>2*1024*1024)return Failed(ProviderFailure.InvalidResponse);bytes.Write(buffer,0,read);}
-            var result=Parse(bytes.ToArray());if(!response.IsSuccessStatusCode && result.Failure!=ProviderFailure.NoCoverage)return Failed(ProviderFailure.HttpError);result.SourceReference=uri.GetLeftPart(UriPartial.Authority)+"/route/v1/driving";result.GeometrySource=uri.IsLoopback?"LocalProviderFixture":"RoadNetwork";
+            var result=Parse(bytes.ToArray());if(!response.IsSuccessStatusCode && result.Failure!=ProviderFailure.NoCoverage)return Failed(ProviderFailure.HttpError);result.SourceReference=uri.GetLeftPart(UriPartial.Authority)+"/route/v1/driving";if(result.Failure==ProviderFailure.None)result.GeometrySource=uri.IsLoopback && !configuration.GetValue<bool>("Routing:LocalRoadEngine")?"LocalProviderFixture":"RoadNetwork";
+            result.EngineVersion=configuration["Routing:OsrmEngineVersion"];
+            result.DatasetReference=configuration["Routing:DatasetReference"];
+            result.GraphVersion??=configuration["Routing:DatasetVersion"];
+            if(result.Failure==ProviderFailure.None && (result.Waypoints.Count>0&&result.Waypoints.Count!=points.Count
+                || ControlledRouteDemo.Distance((points[0].Latitude,points[0].Longitude),(result.Geometry[0].Latitude,result.Geometry[0].Longitude))>110
+                || ControlledRouteDemo.Distance((points[^1].Latitude,points[^1].Longitude),(result.Geometry[^1].Latitude,result.Geometry[^1].Longitude))>110))return Failed(ProviderFailure.InvalidResponse);
             // A response does not disclose the OSM graph revision or restriction coverage.
             return result;
         }
@@ -74,11 +81,29 @@ public sealed class OsrmRoadRouter(IHttpClientFactory clients,IConfiguration con
             if(route.TryGetProperty("legs",out var legs))foreach(var leg in legs.EnumerateArray())if(leg.TryGetProperty("steps",out var steps))foreach(var step in steps.EnumerateArray()){
                 var maneuver=step.GetProperty("maneuver");var location=maneuver.GetProperty("location");var point=new RouteLocation(location[1].GetDouble(),location[0].GetDouble());if(!point.Valid)throw new JsonException();
                 result.Steps.Add(new(){Latitude=point.Latitude,Longitude=point.Longitude,NomeVia=step.TryGetProperty("name",out var name)?name.GetString()??"Via sem nome":"Via sem nome",
+                    DistanciaMetros=step.TryGetProperty("distance",out var stepDistance)?NonNegative(stepDistance):0,
+                    DuracaoSegundos=step.TryGetProperty("duration",out var stepDuration)?NonNegative(stepDuration):0,
+                    ManobraModificador=maneuver.TryGetProperty("modifier",out var modifier)?modifier.GetString()??"straight":"straight",
                     ManobraTipo=maneuver.GetProperty("type").GetString()??"turn",Instrucao="Consulte a manobra do percurso genérico",Ordem=result.Steps.Count});
                 if(result.Steps.Count>20000)throw new JsonException();
             }
+            if(root.TryGetProperty("waypoints",out var waypoints))foreach(var waypoint in waypoints.EnumerateArray()) {
+                if(result.Waypoints.Count>=10)throw new JsonException();
+                var location=waypoint.GetProperty("location");if(location.GetArrayLength()!=2)throw new JsonException();
+                var p=new RouteLocation(location[1].GetDouble(),location[0].GetDouble());if(!p.Valid)throw new JsonException();
+                result.Waypoints.Add(new(){Latitude=p.Latitude,Longitude=p.Longitude,Nome=waypoint.TryGetProperty("name",out var n)?n.GetString():null});
+            }
+            if(routes.GetArrayLength()>4)throw new JsonException();
+            foreach(var alternative in routes.EnumerateArray().Skip(1)) {
+                var d=NonNegative(alternative.GetProperty("distance"));var t=NonNegative(alternative.GetProperty("duration"));
+                if(d<=0||d>50000000||t<=0||t>2592000||alternative.GetProperty("geometry").GetProperty("type").GetString()!="LineString")throw new JsonException();
+                result.Alternatives.Add(new(ReadGeometry(alternative.GetProperty("geometry").GetProperty("coordinates")),(decimal)d/1000,t));
+            }
             return result;
         }catch(Exception e) when(e is JsonException or InvalidOperationException or KeyNotFoundException or IndexOutOfRangeException or FormatException or OverflowException){return Failed(ProviderFailure.InvalidResponse);}
+    }
+    private static double NonNegative(JsonElement value) {
+        var number=value.GetDouble();if(!double.IsFinite(number)||number<0)throw new JsonException();return number;
     }
     private static List<RouteCoordinate> ReadGeometry(JsonElement coordinates)
     {

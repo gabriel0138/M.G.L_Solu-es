@@ -294,7 +294,8 @@ test('the freshness interval and registered listeners are released by destroy', 
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(env.intervals.size, 0);
     assert.equal(env.events.size, 0);
-    assert.equal(env.removedMapListeners.length, 1);
+    assert.equal(env.removedMapListeners.length, 2);
+    assert.ok(env.removedMapListeners.some(([event])=>event==='dragstart'));
     assert.equal(env.stopped(), 1);
     assert.equal(env.tracker.applyTelemetryPosition(env.payload()), false);
 });

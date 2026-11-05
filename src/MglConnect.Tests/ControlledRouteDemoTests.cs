@@ -60,6 +60,9 @@ public sealed class ControlledRouteDemoTests
         var first=await Send(body);Assert.Equal("confirmado",first.GetProperty("receipt").GetProperty("estado").GetString());
         Assert.True(first.GetProperty("latest").GetProperty("isSimulated").GetBoolean());
         Assert.Equal("duplicado",(await Send(body)).GetProperty("receipt").GetProperty("estado").GetString());
+        using(var mismatch=new HttpRequestMessage(HttpMethod.Post,endpoint){Content=JsonContent.Create(body with{Sample=4})}) {
+            mismatch.Headers.Add("RequestVerificationToken",token);Assert.Equal(HttpStatusCode.NotFound,(await driver.Client.SendAsync(mismatch)).StatusCode);
+        }
         var late=await Send(body with{EventId=Guid.NewGuid(),Sample=1,CapturedAt=body.CapturedAt.AddMilliseconds(-1)});
         Assert.Equal(first.GetProperty("latest").GetProperty("eventId").GetGuid(),late.GetProperty("latest").GetProperty("eventId").GetGuid());
         var detour=await Send(new(Guid.NewGuid(),0,true,DateTimeOffset.UtcNow));Assert.True(detour.GetProperty("recalculated").GetBoolean());

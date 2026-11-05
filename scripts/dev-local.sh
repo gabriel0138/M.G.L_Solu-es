@@ -44,7 +44,11 @@ exec env -u POSTGRES_URL -u DATABASE_URL -u POSTGRES_PRISMA_URL -u PORT -u VERCE
     DemoData__AdminPassword=admin123 \
     DemoData__DriverPassword=motorista123 \
     DemoData__ClientPassword=cliente123 \
-    Geocoding__PhotonEnabled=false Routing__OsrmBaseUrl="${MGL_OSRM_BASE_URL:-}" \
+    Geocoding__PhotonEnabled=false Routing__LocalRoadEngine="${MGL_LOCAL_ROAD_ENGINE:-false}" \
+  Routing__OsrmEngineVersion="${MGL_OSRM_ENGINE_VERSION:-}" \
+  Routing__DatasetVersion="${MGL_OSRM_DATASET_VERSION:-}" \
+  Routing__DatasetReference="${MGL_OSRM_DATASET_REFERENCE:-}" \
+  Routing__OsrmBaseUrl="${MGL_OSRM_BASE_URL:-}" \
     Routing__HistoricalGeometryPath="${MGL_ROAD_CAPTURE:-}" \
     GoogleMaps__ApiKey= GoogleMaps__GeocodingApiKey= \
     "$dotnet_bin" "$project_root/src/MglConnect.Web/bin/Debug/net10.0/MglConnect.Web.dll" \

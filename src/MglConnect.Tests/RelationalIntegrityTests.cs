@@ -151,9 +151,11 @@ public class RelationalIntegrityTests
 
         context.PerfisViagemRevisoes.Add(new(){TenantId=delivery.TenantId,EntregaId=delivery.Id,VeiculoId=vehicle.Id,AtorUsuarioId=admin.Id,Revisao=1,CriadoEmUtc=DateTime.UtcNow,PerfilJson=System.Text.Json.JsonSerializer.Serialize(new MglConnect.Web.Services.RouteTrust.OperationalTruckProfile{TripId=delivery.Id,VehicleId=vehicle.Id}),CadastroVeiculoJson=MglConnect.Web.Services.RouteTrust.TripProfiles.VehicleSnapshot(vehicle)});
         await context.SaveChangesAsync();
+        context.DeliveryRoadPlans.Add(new(){Id=Guid.NewGuid(),TenantId=delivery.TenantId,EntregaId=delivery.Id,CreatedAtUtc=DateTime.UtcNow,ValidUntilUtc=DateTime.UtcNow.AddHours(1),BindingHash="fixture",LocationsJson="[]",PlanJson="{}"});
+        await context.SaveChangesAsync();
         // Every declared relationship is exercised against a real relational engine.
         var keys = context.Model.GetRelationalModel().Tables.SelectMany(t => t.ForeignKeyConstraints).ToList();
-        Assert.Equal(37, keys.Count);
+        Assert.Equal(38, keys.Count);
         foreach (var key in keys)
         {
             object invalid = key.Columns[0].ProviderClrType == typeof(Guid) ? Guid.NewGuid() : int.MaxValue;

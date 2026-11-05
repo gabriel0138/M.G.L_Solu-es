@@ -5,7 +5,7 @@ using MglConnect.Web.Data;
 namespace MglConnect.Web.Services;
 
 // A fictional test circuit, never a provider of operational truck navigation.
-public sealed class ControlledRouteDemo(IConfiguration configuration, IWebHostEnvironment environment, MglDbContext db)
+public sealed class ControlledRouteDemo(IConfiguration configuration, IWebHostEnvironment environment, MglDbContext db, DeliveryRoadPlanning? planning = null)
 {
     public bool Enabled
     {
@@ -62,8 +62,14 @@ public sealed class ControlledRouteDemo(IConfiguration configuration, IWebHostEn
         var code=await db.Entregas.Where(e=>e.Id==trip).Select(e=>e.CodigoRastreio).SingleAsync(ct);
         return GpsIngestionService.Receipt(row,code,"confirmado",false).Posicao;
     }
+    public Task<TruckRoutePlan?> RecalculateRoadAsync(int trip,RouteTrust.RouteLocation position,RouteTrust.RouteLocation destination,int driver,CancellationToken ct)
+        => planning==null?Task.FromResult<TruckRoutePlan?>(null):planning.CalculateAsync(trip,[position,destination],ct,expectedDriver:driver);
     public async Task<TruckRoutePlan> ForTripAsync(int trip, CancellationToken ct=default)
     {
+        if(planning!=null && await planning.ReadAsync(trip,ct) is {} road) {
+            road.SimulationEnabled=Enabled;
+            return road;
+        }
         // Shared destination does not erase the last selected circuit after reload.
         var driver=await db.Entregas.Where(e=>e.Id==trip).Select(e=>e.MotoristaId).SingleAsync(ct);
         var lastBranch=await db.PosicoesGps.AsNoTracking().Where(p=>p.EntregaId==trip&&p.MotoristaId==driver&&p.Origem=="Simulacao"&&p.CapturaInformada

@@ -38,6 +38,10 @@ public static class RoadEvidenceAssociation
 }
 public sealed class ProviderRouteReply
 {
+    public string? EngineVersion { get; set; }
+    public string? DatasetReference { get; set; }
+    public List<RouteCoordinate> Waypoints { get; set; } = [];
+    public List<RoadAlternative> Alternatives { get; set; } = [];
     public string? SourceReference { get; set; }
     public string GeometrySource { get; set; } = "RoadNetwork";
     public double? DurationSeconds { get; set; }
@@ -58,7 +62,7 @@ public sealed class ProviderRouteReply
     public Dictionary<RestrictionKind, RestrictionOutcome> Coverage { get; set; } = Enum.GetValues<RestrictionKind>().ToDictionary(k => k, _ => RestrictionOutcome.Desconhecido);
     public TruckRoutePlan ToPlan() => new()
     {
-        ProviderResponseSha256=ResponseSha256,ProviderGraphVersion=GraphVersion,GeometrySourceReference=SourceReference,ProviderName=Provider,ProviderProfile=Profile,GeometrySource=GeometrySource,ProviderFailure=Failure,ProviderDurationSeconds=DurationSeconds,PassosNavegacao=Steps,
+        CalculatedAtUtc=ReceivedAtUtc,EngineVersion=EngineVersion,DatasetReference=DatasetReference,ProviderWaypoints=Waypoints,Alternatives=Alternatives,AlternativeCount=Alternatives.Count,ProviderResponseSha256=ResponseSha256,ProviderGraphVersion=GraphVersion,GeometrySourceReference=SourceReference,ProviderName=Provider,ProviderProfile=Profile,GeometrySource=GeometrySource,ProviderFailure=Failure,ProviderDurationSeconds=DurationSeconds,PassosNavegacao=Steps,
         RotaDisponivel = Failure == ProviderFailure.None && Geometry.Count > 1, TrajetoCoordenadas = Geometry,
         PerfilVeiculo = Profile=="driving"?"Leve":"Pesado", DistanciaKm = DistanceKm ?? 0, TempoEstimadoMinutos = EstimatedMinutes ?? 0,
         AvisoRota = Provider+": restrições e correspondência viária não comprovadas; orientação pesada suspensa. "+Detail

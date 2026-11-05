@@ -82,6 +82,7 @@ function leafletMock() {
         },
         tileLayer: () => ({ addTo(owner) { owner.addLayer(this); return this; } }),
         circleMarker: marker,
+        polyline: marker,
         marker,
         layerGroup: collection,
         featureGroup: collection,
@@ -282,4 +283,19 @@ test('a newly received historical fix is stale according to capture time', async
     const page=setup([trip({capturadoEmUtc:new Date(NOW-600000).toISOString(),recebidoEmUtc:new Date(NOW).toISOString()})]);
     try {await page.fleet.refresh();assert.match(page.listElement.textContent,/desatualizado/);assert.doesNotMatch(page.listElement.textContent,/GPS recebido/);}
     finally{page.fleet.destroy();}
+});
+
+test('a planned road is independent of GPS and disappears after a failed planning attempt', async () => {
+    let available=true;
+    const plan={planningId:'plan-1',rotaDisponivel:true,trajetoCoordenadas:[{latitude:-23.55,longitude:-46.63},{latitude:-23.551,longitude:-46.632}]};
+    const page=setup([trip({latitude:null,longitude:null})],async url=>url.includes('/Planejamento')
+        ?{ok:true,json:async()=>({plan:available?plan:{planningId:'failed',rotaDisponivel:false}})}
+        :response([trip({latitude:null,longitude:null})]));
+    await page.fleet.refresh();page.fleet.selectedId=7;await page.fleet.loadRoadPlan(7);
+    assert.equal(page.mapElement.dataset.planId,'plan-1');assert.equal(page.fleet.routeLayer.layers.size,4);
+    page.fleet.renderMap(page.fleet.items);
+    assert.ok(!page.fleet.emptyOverlay||page.fleet.emptyOverlay.hidden,'Waiting for GPS cannot mask the road plan');
+    available=false;await page.fleet.loadRoadPlan(7);
+    assert.equal(page.mapElement.dataset.planId,'');assert.equal(page.fleet.routeLayer.layers.size,0);
+    page.fleet.destroy();
 });

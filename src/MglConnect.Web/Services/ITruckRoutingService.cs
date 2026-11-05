@@ -37,8 +37,21 @@ namespace MglConnect.Web.Services
         public double Longitude { get; set; }
     }
 
+    public sealed record RoadAlternative(List<RouteCoordinate> Geometry, decimal DistanceKm, double DurationSeconds);
+
     public class TruckRoutePlan
     {
+        public Guid? PlanningId { get; set; }
+        public DateTime? CalculatedAtUtc { get; set; }
+        public DateTime? ValidUntilUtc { get; set; }
+        public string? EngineVersion { get; set; }
+        public string? DatasetReference { get; set; }
+        // Synthetic GPS rehearsal is independent of the origin of the geometry.
+        public bool SimulationEnabled { get; set; }
+        public List<RouteCoordinate> RequestedStops { get; set; } = new();
+        public List<RouteCoordinate> ProviderWaypoints { get; set; } = new();
+        public int AlternativeCount { get; set; }
+        public List<RoadAlternative> Alternatives { get; set; } = new();
         public string? ProviderResponseSha256 { get; set; }
         public string? ProviderGraphVersion { get; set; }
         public string? GeometrySourceReference { get; set; }

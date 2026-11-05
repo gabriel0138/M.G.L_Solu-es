@@ -143,6 +143,7 @@ builder.Services.AddScoped<MglConnect.Web.Services.RouteTrust.IRouteEvidenceSour
 builder.Services.AddScoped<MglConnect.Web.Services.RouteTrust.RouteTrustService>();
 builder.Services.AddHttpClient("OsrmRoad").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect=false }).RemoveAllLoggers();
 builder.Services.AddScoped<OsrmRoadRouter>();
+builder.Services.AddScoped<DeliveryRoadPlanning>();
 builder.Services.AddScoped<ControlledRouteDemo>();
 builder.Services.AddScoped<ControlledDemoNavigation>();
 builder.Services.AddScoped<ITruckRoutingService, TruckRoutingService>();

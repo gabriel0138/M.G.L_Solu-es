@@ -1,0 +1,21 @@
+{
+  "sourceUrls": [
+    "https://api.openstreetmap.org/api/0.6/map?bbox=-46.658,-23.564,-46.645,-23.556",
+    "https://api.openstreetmap.org/api/0.6/map?bbox=-46.645,-23.564,-46.632,-23.556",
+    "https://api.openstreetmap.org/api/0.6/map?bbox=-46.658,-23.556,-46.645,-23.548",
+    "https://api.openstreetmap.org/api/0.6/map?bbox=-46.645,-23.556,-46.632,-23.548"
+  ],
+  "downloadedAtUtc": "2026-11-05T00:08:42.005829+00:00",
+  "license": "ODbL 1.0",
+  "attribution": "\u00a9 OpenStreetMap contributors",
+  "bbox": [
+    -46.658,
+    -23.564,
+    -46.632,
+    -23.548
+  ],
+  "sha256": "3af516bd1d4204f2591d9d15c97a90baf56aac7675648d6f6f2443ed64589ba3",
+  "nodes": 9499,
+  "highwayWays": 2306,
+  "filter": "original highway ways, referenced nodes and available complete turn restrictions; small incomplete boundary, generic car profile only"
+}

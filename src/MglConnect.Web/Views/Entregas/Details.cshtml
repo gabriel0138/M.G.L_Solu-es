@@ -21,6 +21,7 @@
         </div>
 
         <div class="d-flex flex-wrap gap-2 cc-delivery-actions">
+            <a href="/Roteamento?entregaId=@Model.Id" class="btn btn-outline-secondary">Planejar rota viária</a>
             <a asp-action="Navegar" asp-route-id="@Model.Id" 
                class="btn btn-warning text-dark btn-sm fw-bold shadow-sm">
                 <i class="bi bi-compass me-1"></i> Abrir cockpit

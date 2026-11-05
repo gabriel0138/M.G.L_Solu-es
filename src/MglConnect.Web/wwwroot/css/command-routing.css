@@ -40,3 +40,6 @@
     .cc-route-diagnostics { grid-area:6/2; }
     .cc-route-capture-link { grid-area:7/1; }
 }
+
+#deliveryRoadPlanForm { min-width:0; overflow-wrap:anywhere; }
+@media(min-width:1200px){#deliveryRoadPlanForm { grid-column:1/-1; grid-row:8; }}

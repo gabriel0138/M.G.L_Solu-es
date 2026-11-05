@@ -80,6 +80,7 @@ class MglFleetMap {
             if (!Array.isArray(payload.items)) throw new Error('Invalid position response');
             this.items = payload.items.filter(item => item && Number.isSafeInteger(item.id) && item.id > 0);
             this.render();
+            if(this.selectedId)this.loadRoadPlan(this.selectedId);
             const count = this.filtered().length;
             const positioned = this.filtered().filter(item => this.position(item)).length;
             this.statusElement.textContent = `${count} viagem(ns) · ${positioned} com posição informada. Consulta automática a cada 10 segundos.`;
@@ -123,6 +124,7 @@ class MglFleetMap {
         this.renderMap(items);
         if (this.selectedId && !items.some(item => item.id === this.selectedId)) {
             this.selectedId = null;
+            this.routeLayer?.clearLayers();this.mapElement.dataset.planId='';
             if (this.detailElement) this.detailElement.textContent = 'Selecione uma viagem para consultar seu último sinal.';
         }
     }
@@ -134,6 +136,7 @@ class MglFleetMap {
         const located = items.map(item => ({ item, pos: this.position(item) })).filter(entry => entry.pos);
         this.markerLayer?.clearLayers();
         if (!located.length || !this.leaflet) {
+            if(this.mapElement.dataset.planId&&this.map){if(this.emptyOverlay)this.emptyOverlay.hidden=true;return;}
             if (!this.emptyOverlay || !this.map) {
                 const empty = this.node('div', 'cc-fleet-empty');
                 empty.append(this.node('strong', '', !this.leaflet ? 'Mapa indisponível neste navegador' : 'Aguardando GPS'),
@@ -145,15 +148,7 @@ class MglFleetMap {
             return;
         }
         if (this.emptyOverlay) this.emptyOverlay.hidden = true;
-        if (!this.map) {
-            this.mapElement.replaceChildren();
-            this.emptyOverlay = null;
-            this.map = this.leaflet.map(this.mapElement, { scrollWheelZoom: false });
-            this.leaflet.tileLayer(this.mapElement.dataset.tileUrl || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: this.mapElement.dataset.attribution || '© OpenStreetMap contributors', maxZoom: 19
-            }).addTo(this.map);
-            this.markerLayer = this.leaflet.layerGroup().addTo(this.map);
-        }
+        this.ensureMap();
         for (const { item, pos } of located) {
             const popup = this.node('div', 'cc-fleet-popup');
             popup.append(this.node('strong', '', this.text(item.codigoRastreio)), this.node('p', '', [item.veiculo, item.placa].filter(Boolean).join(' · ')),
@@ -172,9 +167,51 @@ class MglFleetMap {
             this.boundsInitialized = true;
         }
     }
+    ensureMap() {
+        if (!this.map) {
+            this.mapElement.replaceChildren();
+            this.emptyOverlay = null;
+            this.map = this.leaflet.map(this.mapElement, { scrollWheelZoom: false });
+            const tiles=this.leaflet.tileLayer(this.mapElement.dataset.tileUrl || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: this.mapElement.dataset.attribution || '© OpenStreetMap contributors', maxZoom: 19
+            }).addTo(this.map);
+            tiles.on?.('tileerror',()=>{this.mapElement.dataset.tileState='error';this.statusElement.textContent='Falha no mapa base; posições e rota continuam disponíveis.';});
+            tiles.on?.('tileload',()=>{this.mapElement.dataset.tileState='loaded';});
+            if(typeof ResizeObserver!=='undefined'){
+                this.mapResize=new ResizeObserver(()=>this.map?.invalidateSize({pan:false}));this.mapResize.observe(this.mapElement);
+            }
+            this.markerLayer = this.leaflet.layerGroup().addTo(this.map);
+        }
+    }
+    async loadRoadPlan(id) {
+        this.planAbort?.abort();this.planAbort=new AbortController();
+
+        try {
+            const response=await this.fetch(`/Entregas/${id}/Planejamento`,{credentials:'same-origin',cache:'no-store',signal:this.planAbort.signal});
+            if(!response.ok){this.routeLayer?.clearLayers();this.mapElement.dataset.planId='';return;}
+            const {plan}=await response.json();if(this.selectedId!==id)return;
+            if(!plan?.rotaDisponivel){this.routeLayer?.clearLayers();this.mapElement.dataset.planId='';return;}
+            if(this.mapElement.dataset.planId===plan.planningId)return;
+            const coords=plan.trajetoCoordenadas?.map(p=>[p.latitude,p.longitude]);
+            if(!coords||coords.length<2||coords.some(p=>!p.every(Number.isFinite)||Math.abs(p[0])>90||Math.abs(p[1])>180))return;
+            this.ensureMap();if(this.emptyOverlay)this.emptyOverlay.hidden=true;
+            this.routeLayer?.clearLayers();
+            this.routeLayer ||= this.leaflet.layerGroup().addTo(this.map);
+            this.leaflet.polyline(coords,{color:'#102c42',weight:8,opacity:.9}).addTo(this.routeLayer);
+            this.leaflet.polyline(coords,{color:'#00c9b7',weight:4,opacity:1}).addTo(this.routeLayer);
+            for(const [index,label] of [[0,'Origem planejada'],[coords.length-1,'Destino planejado']])
+                this.leaflet.circleMarker(coords[index],{radius:7,color:'#00c9b7',fillOpacity:1}).bindTooltip(label).addTo(this.routeLayer);
+            this.map.fitBounds(this.leaflet.latLngBounds(coords),{padding:[32,32]});
+            this.mapElement.dataset.planId=plan.planningId;
+            const source=plan.geometrySource==='HistoricalRoadCapture'?'Captura viária histórica':plan.geometrySource==='LocalProviderFixture'?'Provedor local simulado':plan.providerName;
+            this.mapElement.dataset.routeSource=plan.geometrySource;
+            this.planLabel?.remove();this.planLabel=this.node('span','',source+' · rota genérica; caminhão não validado. Planejamento '+plan.planningId);this.detailElement?.append(this.planLabel);
+        } catch { /* Authorization/network failure never draws an inferred route. */ }
+    }
     select(id) {
         const item = this.filtered().find(entry => entry.id === id);
         if (!item) return;
+        if(this.selectedId!==id){this.routeLayer?.clearLayers();this.mapElement.dataset.planId='';}
         this.selectedId = id;
         for (const [key, row] of this.rows) row.setAttribute('aria-pressed', String(key === id));
         const pos = this.position(item);
@@ -189,10 +226,13 @@ class MglFleetMap {
             this.detailElement.append(historyLink);
         }
         this.renderMap(this.filtered());
+        this.loadRoadPlan(id);
     }
     destroy() {
         this.stopped = true;
         this.abort?.abort();
+        this.planAbort?.abort();
+        this.mapResize?.disconnect();
         this.map?.remove();
         this.map = null;
     }

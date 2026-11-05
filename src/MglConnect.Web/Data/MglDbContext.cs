@@ -19,6 +19,7 @@ namespace MglConnect.Web.Data
         }
 
         public DbSet<PerfilViagemRevisao> PerfisViagemRevisoes => Set<PerfilViagemRevisao>();
+        public DbSet<DeliveryRoadPlan> DeliveryRoadPlans => Set<DeliveryRoadPlan>();
         public DbSet<RotaAvaliacao> RotaAvaliacoes => Set<RotaAvaliacao>();
         public DbSet<Empresa> Empresas => Set<Empresa>();
         public DbSet<Usuario> Usuarios => Set<Usuario>();
@@ -45,6 +46,10 @@ namespace MglConnect.Web.Data
             // Una conta autenticada sem tenant válido só pode consultar registros
             // do tenant vazio; não deve desabilitar o isolamento globalmente.
             // ══════════════════════════════════════════════════════════════════
+            modelBuilder.Entity<DeliveryRoadPlan>().HasQueryFilter(p => !_tenantIsBound || p.TenantId == _currentTenantId);
+            modelBuilder.Entity<DeliveryRoadPlan>().HasIndex(p => new { p.TenantId, p.EntregaId, p.CreatedAtUtc });
+            modelBuilder.Entity<DeliveryRoadPlan>().HasOne<Entrega>().WithMany().HasForeignKey(p => p.EntregaId).OnDelete(DeleteBehavior.Restrict);
+
             modelBuilder.Entity<Empresa>()
                 .HasQueryFilter(e => !_tenantIsBound || e.Id == _currentTenantId);
 

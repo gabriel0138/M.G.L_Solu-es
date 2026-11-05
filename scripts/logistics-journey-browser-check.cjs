@@ -24,13 +24,19 @@ async function until(client, expression, label=expression, timeout=20000) {
     throw new Error('Journey timed out: '+label);
 }
 async function startServer(restored, reusePort) {
-    if(process.env.MGL_ROUTING_UI_CHECK==='provider' && !roadProvider){
+    if((process.env.MGL_ROUTING_UI_CHECK==='provider'||process.env.MGL_ROAD_PROXY==='true') && !roadProvider){
         const http=require('node:http'),fs=require('node:fs');
         const fixture=JSON.parse(fs.readFileSync(resolve(__dirname,'../src/MglConnect.Tests/Fixtures/route-trust-public-landmarks.json'),'utf8'));
         roadProvider=http.createServer((req,res)=>{
             res.setHeader('Content-Type','application/json');
             if(roadMode==='unavailable'){res.statusCode=503;res.end('{}');return;}
             if(roadMode==='no-route'){res.end(JSON.stringify({code:'NoRoute',routes:[]}));return;}
+            if(process.env.MGL_ROAD_PROXY==='true') {
+                const upstream=new URL(process.env.MGL_OSRM_BASE_URL);
+                if(!['127.0.0.1','localhost'].includes(upstream.hostname))throw new Error('Road proxy requires a local engine');
+                http.get(new URL(req.url,upstream),remote=>{res.statusCode=remote.statusCode;remote.pipe(res);}).on('error',()=>{res.statusCode=503;res.end('{}');});
+                return;
+            }
             const reply={code:'Ok',data_version:'local-protocol-fixture',routes:[{distance:4962,duration:410.25,geometry:{type:'LineString',coordinates:fixture.RecordedPlan.TrajetoCoordenadas.map(p=>[p.Longitude,p.Latitude])},legs:[]}]};
             if(roadMode==='invalid')reply.routes[0].geometry.coordinates=[];
             const body=JSON.stringify(reply);
@@ -158,7 +164,13 @@ async function responsive(client, role) {
     assert.equal(await client.evaluate(`!!document.activeElement?.closest('[inert]')`),false,role+' keyboard focus must stay outside inert content');
 }
 async function main() {
-    const baseUrl=await startServer();
+    let baseUrl;
+    if(process.env.MGL_PREVIEW_READY_DIR) {
+        const {existsSync}=require('node:fs');const preview=resolve(process.env.MGL_PREVIEW_READY_DIR);
+        assert.ok(existsSync(join(preview,'.mgl-local-preview'))&&existsSync(join(preview,'mglconnect.db')),'Explicit disposable preview marker/database required');
+        baseUrl=process.env.MGL_UI_BASE_URL;assert.ok(baseUrl&&['127.0.0.1','localhost'].includes(new URL(baseUrl).hostname));
+        assert.notEqual(process.env.MGL_ROAD_PROXY,'true');
+    }else baseUrl=await startServer();
     stage='open independent Chromium profiles';
     profiles=Object.fromEntries(['admin','client','driver','public'].map(role=>[role,createBrowserClient({baseUrl})]));
     // Stagger startup; all four authenticated profiles remain independent and live.
@@ -223,6 +235,9 @@ async function main() {
     const fields={Descricao:cargo,TipoCarga:'Carga Geral Seca',PesoKg:'1200.50',ValorTotal:'5000',
         OrigemEndereco:'Rua de coleta sintética',OrigemNumero:'10',OrigemBairro:'Distrito de teste',OrigemCidade:'Campinas',OrigemEstado:'SP',OrigemCep:'00000-000',
         DestinoEndereco:'Rua de destino sintético',DestinoNumero:'20',DestinoBairro:'Distrito de teste',DestinoCidade:'Santos',DestinoEstado:'SP',DestinoCep:'00000-000'};
+    if(process.env.MGL_LINKED_ROAD==='true')Object.assign(fields,{
+        OrigemEndereco:'Avenida Paulista · MASP (marco público de teste)',OrigemNumero:'1578',OrigemBairro:'Bela Vista',OrigemCidade:'São Paulo',OrigemEstado:'SP',OrigemCep:'01310-200',
+        DestinoEndereco:'Praça da Sé · marco público de teste',DestinoNumero:'s/n',DestinoBairro:'Sé',DestinoCidade:'São Paulo',DestinoEstado:'SP',DestinoCep:'01001-000'});
     await profiles.client.evaluate(`(()=>{const form=document.getElementById('clientOrderForm');for(const[name,value]of Object.entries(${JSON.stringify(fields)})){if(!form.elements[name])throw new Error('Missing field '+name);form.elements[name].value=value;}form.requestSubmit();})()`);
     await until(profiles.client,`new RegExp('^/Cliente/Pedido/[0-9]+$').test(location.pathname) && document.readyState==='complete'`,'Customer order saved');
     const orderId=await profiles.client.evaluate(`Number(location.pathname.split('/').pop())`);
@@ -250,17 +265,67 @@ async function main() {
     const trackingCode=await profiles.admin.evaluate(`new URL(document.querySelector('a[href^="/Rastreio/"]').href).pathname.split('/').pop()`);
     assert.ok(deliveryId>1 && trackingCode);
     await profiles.admin.screenshot('journey-dispatch-created');
+    if(process.env.MGL_LINKED_ROAD==='true') {
+        stage='calculate road route and bind to the dispatched delivery';
+        await profiles.admin.navigate('/Roteamento?entregaId='+deliveryId);
+        await profiles.admin.screenshot('delivery4-before-linked-planning');
+        await profiles.admin.evaluate(`(()=>{const f=document.getElementById('deliveryRoadPlanForm');f.elements.coordenadas.value='-46.6559,-23.5614;-46.6333,-23.5505';f.requestSubmit();})()`);
+        await until(profiles.admin,"!!document.getElementById('linkedRoadPlan')&&document.readyState==='complete'",'Road planning persisted');
+        assert.equal(await profiles.admin.evaluate("document.getElementById('routeResult').dataset.routeState"),'GenericUnverifiedTruck');
+        for(const theme of ['dark','light']) {
+            await profiles.admin.evaluate(`document.documentElement.dataset.mglTheme=${JSON.stringify(theme)}`);
+            for(const width of [360,390,428,768,1024,1440]) {
+                await profiles.admin.viewport(width,width<500?844:1000);
+                assert.ok(await profiles.admin.evaluate('document.documentElement.scrollWidth<=innerWidth'));
+                await profiles.admin.screenshot('delivery4-linked-admin-'+theme+'-'+width);
+            }
+        }
+    }
 
     stage='assigned driver starts shift and streams synthetic device GPS';
     const shiftCode=await issueCode(deliveryId);
     await repeatCurrentAssignments(deliveryId);
     await startShift(deliveryId,shiftCode);
+    if(process.env.MGL_PREVIEW_READY_DIR) {
+        const plan=await profiles.driver.evaluate(`fetch('/Entregas/${deliveryId}/Planejamento').then(r=>r.json()).then(x=>x.plan)`);
+        assert.equal(plan.geometrySource,'RoadNetwork');assert.ok(plan.rotaDisponivel);assert.equal(plan.demonstracaoControlada,false);
+        await profiles.driver.screenshot('delivery4-preview-ready');
+        console.log('Preview ready (trip deliberately NOT completed): '+baseUrl+'/Entregas/Navegar/'+deliveryId);
+        console.log('Screenshots: '+JSON.stringify(Object.fromEntries(Object.entries(profiles).map(([role,client])=>[role,client.directory]))));
+        return;
+    }
     await profiles.public.navigate('/Rastreio/'+trackingCode);
     await until(profiles.public,`document.getElementById('trackingConnectionStatus').dataset.state==='connected'`,'Public tracking subscription');
     await profiles.client.navigate('/Cliente/Pedido/'+orderId);
     await until(profiles.client,`document.getElementById('clientOrderDetails').dataset.hasDelivery==='true'`,'Private customer shipment');
     const controlled=await profiles.driver.evaluate("!!document.getElementById('demoRouteControls')");
-    if(controlled) await require('./driver-navigation-browser-check.cjs').checkDriverNavigation(profiles.driver);
+    if(process.env.MGL_ROAD_PROXY==='true') {
+        stage='linked provider failure, no-route and recovery in actual cockpits';
+        for(const [mode,state] of [['unavailable','ProviderUnavailable'],['no-route','NoRoute'],['ok','GenericUnverifiedTruck']]) {
+            roadMode=mode;
+            await profiles.admin.navigate('/Roteamento?entregaId='+deliveryId);
+            await profiles.admin.evaluate("document.getElementById('deliveryRoadPlanForm').requestSubmit()");
+            await until(profiles.admin,`document.readyState==='complete'&&document.getElementById('routeResult').dataset.routeState===${JSON.stringify(state)}`,'Linked '+mode);
+            await profiles.driver.evaluate('window.mglControlledDemo.refresh()');
+            if(mode!=='ok') {
+                assert.equal(await profiles.admin.evaluate("document.getElementById('routeDistance').textContent"),'—');
+                assert.equal(await profiles.driver.evaluate('window.mglControlledDemo.tracker.routeCoordinates.length'),0);
+                assert.equal(await profiles.driver.evaluate("document.getElementById('distanceRemaining').textContent"),'—');
+                assert.equal(await profiles.driver.evaluate("getComputedStyle(document.getElementById('btnToggleGps')).display!=='none'"),true);
+            }else assert.ok(await profiles.driver.evaluate('window.mglControlledDemo.tracker.routeCoordinates.length>10'));
+            await profiles.driver.screenshot('delivery4-linked-provider-'+mode);
+        }
+        await profiles.driver.navigate('/Entregas/Navegar/'+deliveryId);
+        await until(profiles.driver,"!!window.mglControlledDemo?.tracker.routePolyline",'Recovered persisted road plan');
+    }
+
+    let roadResult;
+    if(controlled) roadResult=await require('./driver-navigation-browser-check.cjs').checkDriverNavigation(profiles.driver,process.env.MGL_ROAD_PROXY==='true'?{
+        setMode:mode=>{roadMode=mode;},recover:async()=>{
+            await profiles.admin.navigate('/Roteamento?entregaId='+deliveryId);
+            await profiles.admin.evaluate("document.getElementById('deliveryRoadPlanForm').requestSubmit()");
+            await until(profiles.admin,"document.readyState==='complete'&&document.getElementById('routeResult').dataset.routeState==='GenericUnverifiedTruck'",'Recover failed recalculation');
+        }}:{});
     else {
     await profiles.driver.command('Browser.grantPermissions',{origin:baseUrl,permissions:['geolocation']});
     await profiles.driver.command('Emulation.setGeolocationOverride',{latitude:-23.5505,longitude:-46.6333,accuracy:8});
@@ -270,7 +335,16 @@ async function main() {
     await profiles.admin.navigate('/Operacoes');
     await until(profiles.admin,`document.getElementById('fleetTripList').textContent.includes(${JSON.stringify(trackingCode)}) && document.querySelectorAll('#fleetMap .leaflet-interactive').length===1`,'Actual map consumes persisted GPS');
     const position=await profiles.admin.evaluate(`fetch('/Operacoes/Posicoes').then(r=>r.json()).then(data=>data.items.find(item=>item.id===${deliveryId}))`);
-    assert.equal(position.latitude,controlled?-23.5500:-23.5505);assert.equal(position.longitude,controlled?-46.6318:-46.6333);
+    assert.equal(position.latitude,roadResult?roadResult.latest.latitude:controlled?-23.5500:-23.5505);assert.equal(position.longitude,roadResult?roadResult.latest.longitude:controlled?-46.6318:-46.6333);
+    if(roadResult) {
+        await profiles.admin.evaluate(`document.querySelector('#fleetTripList button').click()`);
+        await until(profiles.admin,`document.getElementById('fleetMap').dataset.planId===${JSON.stringify(roadResult.plan.planningId)}`,'Operation displays same route version');
+        const observed=await profiles.admin.evaluate(`fetch('/Entregas/${deliveryId}/Planejamento').then(r=>r.json()).then(x=>x.plan)`);
+        assert.deepEqual(observed.trajetoCoordenadas,roadResult.plan.trajetoCoordenadas);
+        assert.equal(await profiles.public.evaluate(`fetch('/Entregas/${deliveryId}/Planejamento',{redirect:'manual'}).then(r=>r.status)`),0);
+        const history=await profiles.client.evaluate(`fetch('/api/gps/historico/${deliveryId}').then(r=>r.json())`);
+        assert.equal(history.total,0,'Synthetic fixes are absent from customer GPS projection');
+    }
     if(controlled)assert.equal(position.isSimulated,true);
     await profiles.admin.screenshot('journey-map-observed-gps');
     await profiles.admin.navigate('/Entregas/Details/'+deliveryId);

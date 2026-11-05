@@ -5,9 +5,17 @@
     ViewData["Title"] = isDriver ? "Navegação" : "Cockpit da viagem " + Model.CodigoRastreio;
     var plano = ViewBag.PlanoRota as MglConnect.Web.Services.TruckRoutePlan ?? new MglConnect.Web.Services.TruckRoutePlan();
     var custo = ViewBag.CustoViagem as MglConnect.Web.Services.TripCostResult ?? new MglConnect.Web.Services.TripCostResult();
-    bool demoMode = plano.DemonstracaoControlada;
+    bool demoMode = plano.DemonstracaoControlada || plano.SimulationEnabled;
+    bool roadRehearsal=plano.SimulationEnabled && !plano.DemonstracaoControlada;
+    string roadLabel=plano.GeometrySource switch {"HistoricalRoadCapture"=>"Captura viária histórica","LocalProviderFixture"=>"Provedor simulado",_=>"Rota viária"};
     bool guidanceAllowed = plano.Confianca is { NavigationAllowed:true, Obsolete:false, Synthetic:false };
     bool displayRoute = MglConnect.Web.Services.RoutePresentation.ValidGeometry(plano);
+    string navigationTitle=!displayRoute ? MglConnect.Web.Services.RoutePresentation.From(plano).Label
+        : demoMode ? roadRehearsal ? $"{roadLabel} · GPS sintético" : "Demonstração controlada"
+        : guidanceAllowed ? "Rota disponível" : "Traçado · orientação suspensa";
+    string navigationHint=!displayRoute ? "GPS disponível · sem orientação ou métricas de rota."
+        : demoMode ? roadRehearsal ? "OSRM genérico · caminhão não validado" : "Circuito e GPS fictícios · sem homologação"
+        : guidanceAllowed ? "Ative o GPS para acompanhar sua posição." : "GPS disponível; confirme o trajeto com a operação.";
     var savedGps = new {
         codigoRastreio = Model.CodigoRastreio,
         latitude = Model.UltimaLatitudeGps,
@@ -31,13 +39,13 @@
                 <div class="cc-cockpit-hud cc-driver-nav-header rounded-4">
                     <div class="d-flex align-items-center gap-2">
                         <i id="maneuverIcon" class="bi bi-compass text-teal" aria-hidden="true"></i>
-                        <h1 id="maneuverRoad">@(demoMode ? "Demonstração controlada" : guidanceAllowed ? "Rota disponível" : displayRoute ? "Traçado · orientação suspensa" : "Sem rota")</h1>
+                        <h1 id="maneuverRoad">@navigationTitle</h1>
                         <a asp-action="Index" class="cc-cockpit-close btn btn-outline-light ms-auto" aria-label="Voltar às viagens"><i class="bi bi-x-lg" aria-hidden="true"></i></a>
                     </div>
-                    <p id="maneuverInstruction">@(demoMode ? "Circuito e GPS fictícios · sem homologação" : guidanceAllowed ? "Ative o GPS para acompanhar sua posição." : "GPS disponível; confirme o trajeto com a operação.")</p>
+                    <p id="maneuverInstruction">@navigationHint</p>
                     <span id="maneuverDist" hidden></span>
-                    <span id="routeTrustBadge" hidden data-confidence="@(demoMode ? "SINTÉTICA" : "NÃO VERIFICADA")" data-navigation-allowed="@(guidanceAllowed ? "true" : "false")"></span>
-                    <div class="progress cc-cockpit-progress"><div id="tripProgressBar" class="progress-bar" role="progressbar" aria-label="@(demoMode ? "Progresso no circuito sintético" : "Progresso estimado sobre o trajeto")" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" style="width:0%"></div></div>
+                    <span id="routeTrustBadge" hidden data-confidence="@(roadRehearsal ? "GENÉRICA NÃO VALIDADA" : demoMode ? "SINTÉTICA" : "NÃO VERIFICADA")" data-navigation-allowed="@(guidanceAllowed ? "true" : "false")"></span>
+                    <div class="progress cc-cockpit-progress"><div id="tripProgressBar" class="progress-bar" role="progressbar" aria-label="@(roadRehearsal ? "Progresso do GPS sintético sobre rota viária" : demoMode ? "Progresso no circuito sintético" : "Progresso estimado sobre o trajeto")" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" style="width:0%"></div></div>
                 </div>
             </div>
         </header>
@@ -115,10 +123,10 @@
     <div class="cc-cockpit-controls position-absolute end-0 top-50 translate-middle-y me-3 d-flex flex-column gap-2 z-2">
         @if (demoMode && isDriver)
         {
-            <div id="demoRouteControls" data-delivery="@Model.Id" data-route-available="@(plano.RotaDisponivel ? "true" : "false")">
+            <div id="demoRouteControls" data-road-rehearsal="@(roadRehearsal ? "true" : "false")" data-route-source="@plano.GeometrySource" data-plan-id="@plano.PlanningId" data-delivery="@Model.Id" data-route-available="@(plano.RotaDisponivel ? "true" : "false")">
                 @Html.AntiForgeryToken()
                 <button id="btnDemoGps" class="btn btn-driver-primary" type="button" aria-pressed="false" disabled="@(!plano.RotaDisponivel || isFinalDelivery)">Iniciar GPS sintético</button>
-                <button id="btnDemoDetour" class="btn btn-outline-light" type="button" disabled="@(!plano.RotaDisponivel || isFinalDelivery)">Desvio de ensaio</button>
+                <button id="btnDemoDetour" class="btn btn-outline-light" type="button" disabled="@(!plano.RotaDisponivel || isFinalDelivery)">@(roadRehearsal ? "Desvio e recálculo OSRM" : "Desvio de ensaio")</button>
             </div>
         }
         @if (isDriver)
@@ -512,11 +520,11 @@
                 }
 
                 if (mode === 'operational' && tracker.routePolyline) {
-                    map.fitBounds(tracker.routePolyline.getBounds(), { padding: [40, 40] });
+                    tracker.fitPlannedRoute();
                 } else if (mode === 'gps' && tracker.currentLatLng) {
                     map.setView(tracker.currentLatLng, Math.max(map.getZoom(), 15), { animate: true });
                 } else if (mode === 'gps' && coordinates.length > 0) {
-                    map.setView(coordinates[0], 15, { animate: true });
+                    tracker.fitPlannedRoute();
                     mapElement.dataset.mapStatus = 'Aguardando uma posição GPS válida; a posição simulada não será usada como GPS real.';
                 }
             }

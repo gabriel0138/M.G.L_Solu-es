@@ -22,6 +22,7 @@ namespace MglConnect.Web.Services
         private static readonly PublicApiThrottle PhotonThrottle = new(TimeSpan.FromSeconds(1));
         private ProviderRouteReply? _lastOsrmReply;
         private readonly OsrmRoadRouter? _osrm;
+        private readonly DeliveryRoadPlanning? _planning;
 
         private readonly IConfiguration _configuration;
         private readonly MglDbContext _context;
@@ -41,7 +42,7 @@ namespace MglConnect.Web.Services
             IMemoryCache routeCache,
             IConfiguration configuration,
             ILogger<TruckRoutingService> logger,
-            IRouteDeviationEngine deviationEngine, RouteTrustService? trust = null,IHttpContextAccessor? request = null,IExperimentalTruckRouter? experimental = null, ControlledRouteDemo? demo = null, OsrmRoadRouter? osrm = null)
+            IRouteDeviationEngine deviationEngine, RouteTrustService? trust = null,IHttpContextAccessor? request = null,IExperimentalTruckRouter? experimental = null, ControlledRouteDemo? demo = null, OsrmRoadRouter? osrm = null, DeliveryRoadPlanning? planning = null)
         {
             _context = context;
             _httpClientFactory = httpClientFactory;
@@ -49,7 +50,7 @@ namespace MglConnect.Web.Services
             _configuration = configuration;
             _logger = logger;
             _deviationEngine = deviationEngine;
-            _trust = trust;_request=request;_experimental=experimental;_demo=demo;_osrm=osrm;
+            _trust = trust;_request=request;_experimental=experimental;_demo=demo;_osrm=osrm;_planning=planning;
 
             // Validar gabarito físico imediatamente após injeção de dependência
             // (para garantir que parâmetros padrão sejam consistentes)
@@ -464,6 +465,10 @@ namespace MglConnect.Web.Services
                 throw new ArgumentException("Entrega não encontrada.");
             }
 
+            if (_planning != null && await _planning.ReadAsync(entregaId,Abort) is {} roadPlan) {
+                roadPlan.SimulationEnabled=_demo?.Enabled==true;
+                return roadPlan;
+            }
             if (_demo?.Enabled == true) return await _demo.ForTripAsync(entregaId, Abort);
 
             var cachedTrust=_trust==null?null:await _trust.CachedForReadAsync(entregaId);
@@ -611,6 +616,11 @@ namespace MglConnect.Web.Services
             if (rotaGeo == null)
             {
                 _logger.LogWarning("O provedor de roteamento não retornou uma rota alternativa.");
+                if(ticket!=null) {
+                    var failed=(_lastOsrmReply??new ProviderRouteReply{Failure=ProviderFailure.InvalidResponse}).ToPlan();
+                    await _trust!.FinishAsync(ticket,failed,Abort);
+                    _deviationEngine.RemoveState(key);
+                }
                 return null;
             }
 

@@ -28,6 +28,12 @@ public static class RouteTrustSchemaUpdater
             CONSTRAINT "FK_PerfilViagem_Veiculo" FOREIGN KEY ("VeiculoId") REFERENCES "Veiculos"("Id"),
             CONSTRAINT "FK_PerfilViagem_Ator" FOREIGN KEY ("AtorUsuarioId") REFERENCES "Usuarios"("Id"));
             {(sql?"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_PerfisViagemRevisoes_TenantId_EntregaId_Revisao' AND object_id=OBJECT_ID('PerfisViagemRevisoes')) CREATE UNIQUE INDEX":"CREATE UNIQUE INDEX IF NOT EXISTS")} "IX_PerfisViagemRevisoes_TenantId_EntregaId_Revisao" ON "PerfisViagemRevisoes" ("TenantId","EntregaId","Revisao");
+            {(sql?"IF OBJECT_ID(N'DeliveryRoadPlans',N'U') IS NULL CREATE TABLE":"CREATE TABLE IF NOT EXISTS")} "DeliveryRoadPlans" (
+            "Id" {guid} NOT NULL PRIMARY KEY,"TenantId" {guid} NOT NULL,"EntregaId" INTEGER NOT NULL,
+            "CreatedAtUtc" {date} NOT NULL,"ValidUntilUtc" {date} NOT NULL,"BindingHash" VARCHAR(64) NOT NULL,
+            "LocationsJson" {text} NOT NULL,"PlanJson" {text} NOT NULL,
+            CONSTRAINT "FK_DeliveryRoadPlan_Entrega" FOREIGN KEY ("EntregaId") REFERENCES "Entregas"("Id"));
+            {(sql?"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_DeliveryRoadPlans_TenantId_EntregaId_CreatedAtUtc' AND object_id=OBJECT_ID('DeliveryRoadPlans')) CREATE INDEX":"CREATE INDEX IF NOT EXISTS")} "IX_DeliveryRoadPlans_TenantId_EntregaId_CreatedAtUtc" ON "DeliveryRoadPlans" ("TenantId","EntregaId","CreatedAtUtc");
             """;
         await command.ExecuteNonQueryAsync();
     }
