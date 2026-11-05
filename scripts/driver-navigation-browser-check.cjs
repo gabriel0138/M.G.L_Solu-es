@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 async function checkDriverNavigation(client,options={}) {
     if(await client.evaluate("document.getElementById('demoRouteControls')?.dataset.roadRehearsal==='true'"))return checkLinkedRoad(client,options);
     if(await client.evaluate("!!document.getElementById('demoRouteControls')"))return checkControlledDemo(client);
+    if(process.env.MGL_NATIVE_GPS_CHECK==='only')return checkNativeGpsLifecycle(client);
     const navigationPath = await client.evaluate('location.pathname');
     console.log('No-route initial map: '+JSON.stringify(await client.evaluate("({tiles:document.querySelectorAll('#cockpitMap .leaflet-tile').length,position:document.getElementById('positionSourceBadge').dataset.state,...document.getElementById('cockpitMap').dataset})")));
     for (const theme of ['dark', 'light']) {
@@ -88,6 +89,7 @@ async function checkDriverNavigation(client,options={}) {
     await client.pause(150);
     assert.equal(await client.evaluate(`geometryProbe.map.getSize().x`),280);
     await client.evaluate(`geometryProbe.destroy();geometryProbe.map.remove();document.getElementById('geometryFixture').remove();delete window.geometryProbe`);
+    if(process.env.MGL_NATIVE_GPS_CHECK==='true')await checkNativeGpsLifecycle(client);
     await client.navigate('/Entregas/PerfilMotorista');
     assert.ok(await client.evaluate(`!!document.getElementById('driverProfileTitle')`));
     for(const width of [360,390]) {
@@ -297,4 +299,50 @@ async function checkLinkedRoad(client,options={}) {
     await client.screenshot('delivery4-road-arrived-still-in-transit');
     console.log('Linked road passed: persisted OSRM geometry, sixteen layouts, raw synthetic GPS, progress, stale/duplicate, real recalculation, reload, reconnect, tiles and resize.');
     return {plan:rerouted.plan,latest:final.latest};
+}
+
+// CDP geolocation exercises the browser API, not a physical GPS sensor.
+async function checkNativeGpsLifecycle(client) {
+    const wait=async(expression,label)=>{for(let i=0;i<100;i++){if(await client.evaluate(expression))return;await client.pause(100);}throw new Error('GPS lifecycle timed out: '+label);};
+    await client.viewport(390,844);
+    await client.evaluate("document.querySelectorAll('.cc-driver-diagnostics, #driverGpsSync details').forEach(d=>d.open=false);scrollTo(0,0);const original=MglCockpitTracker.prototype.updateVehiclePosition;MglCockpitTracker.prototype.updateVehiclePosition=function(...args){window.__gpsLifecycleTracker=this;return original.apply(this,args);}");
+    const origin=await client.evaluate('location.origin');
+    await client.command('Browser.setPermission',{origin,permission:{name:'geolocation'},setting:'granted'});
+    await client.command('Emulation.setGeolocationOverride',{latitude:-23.5505,longitude:-46.6333,accuracy:8});
+    await client.evaluate("document.getElementById('btnToggleGps').click()");
+    await wait("!!window.__gpsLifecycleTracker&&document.getElementById('btnToggleGps').getAttribute('aria-pressed')==='true'",'initial granted position');
+    await client.pause(500);
+    await client.evaluate("document.getElementById('btnFollowPosition').click();window.__gpsLifecycleTracker.map.setView([-23.54,-46.64],16,{animate:false});void 0");
+    const before=await client.evaluate("({lat:window.__gpsLifecycleTracker.map.getCenter().lat,lng:window.__gpsLifecycleTracker.map.getCenter().lng})");
+    assert.equal(await client.evaluate('window.__gpsLifecycleTracker.followVehicle'),false);
+    await client.screenshot('delivery7-manual-camera-before-fix');
+    await client.command('Emulation.setGeolocationOverride',{latitude:-23.5506,longitude:-46.6334,accuracy:8});
+    await wait("Math.abs(window.__gpsLifecycleTracker.currentLatLng.lat+23.5506)<0.000001",'next native API position');
+    await client.pause(500);await client.screenshot('delivery7-manual-camera-next-fix');
+    const after=await client.evaluate("({lat:window.__gpsLifecycleTracker.map.getCenter().lat,lng:window.__gpsLifecycleTracker.map.getCenter().lng})");
+    const cameraDrift=await client.evaluate(`window.__gpsLifecycleTracker.map.distance(${JSON.stringify(before)},${JSON.stringify(after)})`);
+    console.log('Manual camera drift (meters): '+cameraDrift.toFixed(2));
+    assert.ok(cameraDrift<5,'GPS update must preserve manual camera when Follow is off');
+    await client.evaluate("document.getElementById('btnToggleGps').click()");
+    await client.command('Browser.setPermission',{origin,permission:{name:'geolocation'},setting:'denied'});
+    await client.evaluate("document.getElementById('btnToggleGps').click()");
+    await wait("document.getElementById('btnToggleGps').getAttribute('aria-pressed')==='false'&&document.getElementById('cockpitMap').dataset.gpsState==='denied'",'denied permission');
+    assert.match(await client.evaluate("document.getElementById('gpsCollectionStatus').textContent"),/Permissão de localização negada/);
+    await client.screenshot('delivery7-permission-denied');
+    assert.ok(await client.evaluate("(()=>{const e=document.getElementById('gpsCollectionStatus');e.scrollIntoView({block:'center',behavior:'instant'});const r=e.getBoundingClientRect();return r.height>0&&e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})()"),'GPS permission error must be visible with technical diagnostics collapsed');
+    await client.command('Browser.setPermission',{origin,permission:{name:'geolocation'},setting:'granted'});
+    await client.command('Emulation.setGeolocationOverride',{latitude:-23.5507,longitude:-46.6335,accuracy:8});
+    await client.evaluate("document.getElementById('btnToggleGps').click()");
+    await wait("Math.abs(window.__gpsLifecycleTracker.currentLatLng.lat+23.5507)<0.000001",'position after permission restored');
+    await client.screenshot('delivery7-permission-recovered');
+    assert.equal(await client.evaluate("document.getElementById('gpsCollectionStatus').hidden"),true,'Recovered GPS must clear the previous permission error');
+    await client.command('Emulation.setGeolocationOverride',{});
+    await wait("document.getElementById('cockpitMap').dataset.gpsState==='unavailable'",'temporary signal unavailable');
+    await client.command('Emulation.setGeolocationOverride',{latitude:-23.5508,longitude:-46.6336,accuracy:8});
+    await wait("document.getElementById('cockpitMap').dataset.gpsState==='received'&&document.getElementById('gpsCollectionStatus').hidden",'signal recovery clears error');
+    await client.command('Browser.setPermission',{origin,permission:{name:'geolocation'},setting:'denied'});
+    await wait("document.getElementById('btnToggleGps').getAttribute('aria-pressed')==='false'",'revocation stops collection');
+    assert.ok(await client.evaluate('!!window.__gpsLifecycleTracker.currentLatLng'),'Revocation keeps the last observed position');
+    await client.command('Browser.setPermission',{origin,permission:{name:'geolocation'},setting:'granted'});
+    console.log('Native API emulation: manual camera, denied/granted/revoked permission and retained last observation (not physical GPS).');
 }

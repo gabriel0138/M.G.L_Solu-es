@@ -166,6 +166,7 @@
             <div class="card cc-cockpit-hud text-white rounded-4 p-3">
                 <div class="cc-cockpit-connection"><i class="bi bi-broadcast" aria-hidden="true"></i><span id="telemetryConnectionState" role="status">Conectando à operação…</span></div>
                 @if (!isDriver) { <p id="cockpitMapStatus" class="cc-cockpit-map-status" role="status" hidden></p> }
+                <p id="gpsCollectionStatus" class="cc-cockpit-feedback text-warning" role="status" hidden></p>
                 <p id="routePositionStatus" class="small text-warning mb-2" role="status" hidden></p>
                 @if (isDriver)
                 {
@@ -709,6 +710,7 @@
                 let emergencyPosition = null;
                 const btnGps = document.getElementById('btnToggleGps');
                 const gpsIcon = document.getElementById('gpsIcon');
+                const gpsCollectionStatus = document.getElementById('gpsCollectionStatus');
 
                 window.addEventListener('mgl:gps-scope-unavailable', () => {
                     if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
@@ -737,6 +739,9 @@
                         btnGps.setAttribute('aria-label', 'Desativar GPS do aparelho');
                         const label = document.getElementById('gpsActionLabel');
                         if (label) label.textContent = 'Desativar GPS';
+                        gpsCollectionStatus.hidden = true; gpsCollectionStatus.textContent = '';
+                        mapElement.dataset.gpsState = 'waiting';
+                        mapElement.dataset.mapStatus = 'Aguardando uma posição GPS válida do aparelho.';
                         watchId = navigator.geolocation.watchPosition(
                             function (pos) {
                                 const lat = pos.coords.latitude;
@@ -762,18 +767,28 @@
                                 };
 
                                 hasGpsFix = true;
-                                if (mapElement.dataset.mapStatus?.startsWith('Aguardando uma posição GPS')) {
+                                if (['waiting','denied','unavailable','timeout'].includes(mapElement.dataset.gpsState)
+                                    || mapElement.dataset.mapStatus?.startsWith('Aguardando uma posição GPS')) {
                                     delete mapElement.dataset.mapStatus;
                                 }
+                                gpsCollectionStatus.hidden = true; gpsCollectionStatus.textContent = '';
+                                gpsIcon.className = 'bi bi-broadcast text-success fs-5';
+                                mapElement.dataset.gpsState = 'received';
                                 tracker.emitTelemetry(lat, lng, speed, heading, pos.coords.accuracy, false, timestamp);
-                                if (viewMode === 'gps') {
-                                    map.setView([lat, lng], Math.max(map.getZoom(), 15), { animate: true });
-                                }
+                                // The tracker owns camera movement and respects the Follow control.
                             },
                             function (err) {
-                                console.warn('Erro GPS:', err.message);
+                                const states = { 1: 'denied', 2: 'unavailable', 3: 'timeout' };
+                                const messages = {
+                                    1: 'Permissão de localização negada. Autorize nas configurações do navegador e ative o GPS novamente.',
+                                    2: 'Localização indisponível. Confira o sinal e aguarde uma nova leitura.',
+                                    3: 'Tempo de espera do GPS esgotado. Aguardando uma nova leitura.'
+                                };
                                 gpsIcon.className = 'bi bi-geo-alt text-danger fs-5';
-                                mapElement.dataset.mapStatus = `Não foi possível obter o GPS: ${err.message}`;
+                                mapElement.dataset.gpsState = states[err.code] || 'unavailable';
+                                delete mapElement.dataset.mapStatus;
+                                gpsCollectionStatus.textContent = messages[err.code] || messages[2];
+                                gpsCollectionStatus.hidden = false;
                                 if (err.code === 1) {
                                     if (watchId !== null) navigator.geolocation.clearWatch(watchId);
                                     watchId = null;
