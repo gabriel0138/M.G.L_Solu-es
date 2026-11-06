@@ -11,7 +11,7 @@ Pré-requisitos: SDK .NET 10 e Node.js para os testes JavaScript. Docker é opci
 ```sh
 dotnet restore MglConnect.sln
 dotnet build MglConnect.sln --no-restore -c Debug
-# Sem conexões externas configuradas: cinco PostgreSQL e quatro SQL Server são ignorados.
+# Sem conexões externas: sete PostgreSQL e quatro SQL Server são ignorados.
 env -u MGLCONNECT_SQLSERVER_TEST_CONNECTION -u MGLCONNECT_POSTGRES_TEST_CONNECTION dotnet test MglConnect.sln --no-build --no-restore -c Debug
 node --test src/MglConnect.Tests/JavaScript/*.test.cjs
 ```
@@ -24,7 +24,7 @@ Para uma prévia local sintética, após revisar os efeitos do script:
 bash scripts/dev-local.sh
 ```
 
-O script compila e inicia a aplicação em loopback, com banco/chaves de demonstração em diretório próprio. Não foi executado nesta consolidação. Não substitui configuração ou provisionamento de produção.
+O script compila e inicia a aplicação em loopback, com banco/chaves de demonstração em diretório próprio. Foi exercitado nas jornadas locais registradas; não substitui configuração ou provisionamento de produção.
 
 ## Capacidades e limites
 
@@ -51,6 +51,10 @@ Photon/OSRM públicos são demonstrações sem SLA. Leaflet exibe mapas e não h
 O [workflow](./.github/workflows/ci.yml) executa em pull requests e também pode ser iniciado manualmente (`workflow_dispatch`). As ações são fixadas por SHA; a validação inclui restore/build/testes locais .NET, testes JavaScript, verificação do diff e Gitleaks, sem Docker/PostgreSQL/SQL Server. O check remoto só pode ser confirmado após publicar a atualização da branch.
 
 Documentos acadêmicos privados, backups, bancos e chaves ficam fora do conteúdo versionado atual. Arquivos acadêmicos já existentes no histórico público anterior não foram expurgados: esta missão não reescreve histórico. Avaliar eventual exposição anterior separadamente.
+
+## Migração para Windows 11
+
+[Guia de restauração](./docs/migration/WINDOWS_11.md), [inventário de branches](./docs/migration/BRANCHES.md) e [consolidação final](./docs/migration/CONSOLIDACAO_FINAL.md). A validação atual foi realizada em Kali; Windows e Android físico continuam pendentes. O backup privado e sua chave devem ser verificados fora do notebook antes de formatar.
 
 ## Evidências e continuidade
 
