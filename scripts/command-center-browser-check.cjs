@@ -58,8 +58,15 @@ async function screenshot(name) {
     await evaluate(`window.scrollTo({left:${scroll.x},top:${scroll.y},behavior:"instant"})`);
 }
 async function key(key, code = key, modifiers = 0) {
-    await command('Input.dispatchKeyEvent', { type: 'keyDown', key, code, modifiers });
-    await command('Input.dispatchKeyEvent', { type: 'keyUp', key, code, modifiers: 0 });
+    // Chromium's native default actions need a virtual key code (keyCode 0 only
+    // dispatched DOM events, so Enter never activated a focused button).
+    const virtual = { Enter: 13, Tab: 9, Escape: 27, ' ': 32, Space: 32,
+        ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40 }[key];
+    const text = !modifiers && (key === 'Enter' ? '\r' : key === ' ' ? ' ' : undefined);
+    await command('Input.dispatchKeyEvent', { type: 'keyDown', key, code, modifiers,
+        windowsVirtualKeyCode: virtual, nativeVirtualKeyCode: virtual, text, unmodifiedText: text });
+    await command('Input.dispatchKeyEvent', { type: 'keyUp', key, code, modifiers: 0,
+        windowsVirtualKeyCode: virtual, nativeVirtualKeyCode: virtual });
 }
 async function openBrowser() {
     // This directory is created by this helper, never an existing user profile.

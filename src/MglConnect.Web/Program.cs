@@ -144,6 +144,7 @@ builder.Services.AddScoped<MglConnect.Web.Services.RouteTrust.RouteTrustService>
 builder.Services.AddHttpClient("OsrmRoad").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect=false }).RemoveAllLoggers();
 builder.Services.AddScoped<OsrmRoadRouter>();
 builder.Services.AddScoped<DeliveryRoadPlanning>();
+builder.Services.AddSingleton<RoadPreviewStore>();
 builder.Services.AddScoped<DeliveryPlanningPublisher>();
 builder.Services.AddScoped<PhotonGeocoder>();
 builder.Services.AddHttpClient("Photon").ConfigurePrimaryHttpMessageHandler(()=>new HttpClientHandler{AllowAutoRedirect=false}).RemoveAllLoggers();

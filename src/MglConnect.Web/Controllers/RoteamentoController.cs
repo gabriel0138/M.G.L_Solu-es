@@ -37,6 +37,16 @@ namespace MglConnect.Web.Controllers
             }catch(System.Text.Json.JsonException){return null;}
         }
 
+        private static object DraftReply(ApprovedRoadPreview draft,string status="Preview",TruckRoutePlan? previous=null)
+        {
+            var p=draft.Plan;var view=RoutePresentation.From(p);var available=view.HasGeometry&&draft.ApprovalId!=null;
+            return new{status,state=view.State.ToString(),label=view.HasGeometry&&!available?"Prévia indisponível; gere novamente":view.Label,available,
+                distanceKm=available?view.DistanceKm:null,durationSeconds=available?view.DurationSeconds:null,
+                coordinates=available?p.TrajetoCoordenadas:[],provider=p.ProviderName,profile=p.ProviderProfile,geometrySource=p.GeometrySource,
+                draft.ApprovalId,draft.ExpiresAtUtc,draft.BaseRevision,stopCount=available?(int?)(p.RequestedStops.Count-2):null,
+                previous=previous==null?null:new{distanceKm=previous.DistanciaKm,durationSeconds=previous.ProviderDurationSeconds}};
+        }
+
         [HttpPost,ValidateAntiForgeryToken]
         [ResponseCache(NoStore=true,Location=ResponseCacheLocation.None)]
         public async Task<IActionResult> Previa(int entregaId,string? confirmedStops,string? binding,CancellationToken ct)
@@ -47,13 +57,11 @@ namespace MglConnect.Web.Controllers
             var stops=ConfirmedPoints(confirmedStops);
             if(stops==null)return BadRequest("Confirme endereço e posição de cada parada no mapa.");
             try {
-                var plan=await _planning.PreviewAsync(entregaId,stops,binding,ct);
-                if(plan==null)return Conflict("Entrega indisponível para prévia.");
+                var draft=await _planning.CreateApprovalAsync(entregaId,scope.Actor.Id,stops,binding,ct);
+                if(draft==null)return Conflict("Entrega indisponível para prévia.");
                 if((await _access!.ResolveAsync(User,entregaId,ct))?.Admin!=true)return NotFound();
-                var view=RoutePresentation.From(plan);
-                return Json(new{state=view.State.ToString(),label=view.Label,available=view.HasGeometry,view.DistanceKm,view.DurationSeconds,
-                    coordinates=view.HasGeometry?plan.TrajetoCoordenadas:[],provider=plan.ProviderName,profile=plan.ProviderProfile,geometrySource=plan.GeometrySource});
-            }catch(PlanningContextChangedException){return Conflict("Pedido, endereço ou atribuição mudou. Atualize a página e confirme os pontos novamente.");}
+                return Json(DraftReply(draft));
+            }catch(PlanningContextChangedException){return Conflict("Prévia expirada, já utilizada, versão ou vínculo alterado. Atualize o planejador e gere uma nova prévia.");}
         }
 
         [HttpPost,ValidateAntiForgeryToken]
@@ -61,9 +69,7 @@ namespace MglConnect.Web.Controllers
         {
             var scope=_access==null?null:await _access.ResolveAsync(User,entregaId,ct);
             if(scope?.Admin!=true||_planning==null)return NotFound();
-            if(!OsrmRoadRouter.TryLocations(coordenadas,out var points))return BadRequest("Informe de 2 a 10 coordenadas válidas, longitude/latitude.");
-            if(await _planning.CalculateAsync(entregaId,points,ct)==null)return Conflict("Entrega indisponível para planejamento.");
-            return RedirectToAction(nameof(Index),new {entregaId});
+            return Conflict("Publicação direta desativada. Confirme os pontos, gere a prévia e aprove o percurso no planejador.");
         }
 
         [HttpPost,ValidateAntiForgeryToken]
@@ -75,7 +81,7 @@ namespace MglConnect.Web.Controllers
             return Json(await geocoder.SearchAsync(endereco,ct));
         }
         [HttpPost,ValidateAntiForgeryToken]
-        public async Task<IActionResult> Confirmar(int entregaId,string? confirmedStops,string? binding,CancellationToken ct)
+        public async Task<IActionResult> Confirmar(int entregaId,string? confirmedStops,string? binding,string? approvalId,CancellationToken ct)
         {
             var scope=_access==null?null:await _access.ResolveAsync(User,entregaId,ct);
             if(scope?.Admin!=true||_planning==null)return NotFound();
@@ -83,9 +89,9 @@ namespace MglConnect.Web.Controllers
             var stops=ConfirmedPoints(confirmedStops);
             if(stops==null)return BadRequest("Confirme endereço e posição de cada parada no mapa.");
             try {
-                var plan=await _planning.CalculateAsync(entregaId,stops.Select(p=>new MglConnect.Web.Services.RouteTrust.RouteLocation(p.Latitude,p.Longitude)).ToList(),ct,confirmedStops:stops,expectedBinding:binding);
-                if(plan==null)return Conflict("Entrega indisponível para planejamento.");
-            }catch(PlanningContextChangedException){return Conflict("Pedido, endereço ou atribuição mudou. Atualize a página e confirme os pontos novamente.");}
+                var outcome=await _planning.PublishApprovedAsync(entregaId,scope.Actor.Id,approvalId,stops,binding,ct);
+                if(outcome.Status!="Published")return StatusCode(409,DraftReply(outcome.Replacement!,outcome.Status,outcome.Previous));
+            }catch(PlanningContextChangedException){return Conflict("Prévia expirada, já utilizada, versão ou vínculo alterado. Atualize o planejador e gere uma nova prévia.");}
             return RedirectToAction(nameof(Index),new {entregaId});
         }
 

@@ -180,26 +180,25 @@ public sealed class DeliveryRoadPlanningTests
             using var response=await admin.Client.PostAsync("/Roteamento/Confirmar",new FormUrlEncodedContent(new Dictionary<string,string>{{"entregaId",id.ToString()},{"binding",binding},{"confirmedStops",JsonSerializer.Serialize(stops)},{"__RequestVerificationToken",token}}));return response.StatusCode;
         }
         Assert.Equal(HttpStatusCode.BadRequest,await Submit(false));Assert.Equal(HttpStatusCode.BadRequest,await Submit(true,91));
-        Assert.Equal(HttpStatusCode.Redirect,await Submit(true));
+        Assert.Equal(HttpStatusCode.Conflict,await Submit(true));
         await f.ChangeAsync(db=>db.Entregas.Single(e=>e.Id==id).EnderecoDestino="A new fictitious public landmark");
         Assert.Equal(HttpStatusCode.Conflict,await Submit(true));
-        await using var db=new MglDbContext(f.Options);Assert.Equal(1,await db.DeliveryRoadPlans.CountAsync());
-        var saved=JsonSerializer.Deserialize<TruckRoutePlan>((await db.DeliveryRoadPlans.SingleAsync()).PlanJson)!;
-        Assert.Equal(2,saved.ConfirmedStops.Count);Assert.All(saved.ConfirmedStops,p=>Assert.NotNull(p.ConfirmedAtUtc));
+        await using var db=new MglDbContext(f.Options);Assert.Empty(await db.DeliveryRoadPlans.ToListAsync());
     }
     [Fact]
     public async Task ScopedEndpointAndMutationRequireOwnerRoleAndAntiforgery()
     {
-        await using var f=await SecurityHttpFixture.CreateAsync();int id=f.Deliveries[0].Id;
+        await using var f=await SecurityHttpFixture.CreateAsync(hostingConfiguration:RoadApprovalHttp.Configuration());int id=f.Deliveries[0].Id;
         using var admin=await f.LoginAsync("admin-a");using var foreign=await f.LoginAsync("admin-b");using var customer=await f.LoginAsync("client-a");using var driver=await f.LoginAsync("driver-a");
         var fields=new Dictionary<string,string>{{"entregaId",id.ToString()},{"coordenadas","-46.63,-23.55;-46.632,-23.551"}};
         Assert.Equal(HttpStatusCode.BadRequest,(await admin.Client.PostAsync("/Roteamento/Planejar",new FormUrlEncodedContent(fields))).StatusCode);
         fields["__RequestVerificationToken"]=await SecurityHttpFixture.AntiForgeryAsync(foreign.Client,"/Roteamento");
         Assert.Equal(HttpStatusCode.NotFound,(await foreign.Client.PostAsync("/Roteamento/Planejar",new FormUrlEncodedContent(fields))).StatusCode);
         fields["__RequestVerificationToken"]=await SecurityHttpFixture.AntiForgeryAsync(admin.Client,"/Roteamento?entregaId="+id);
-        Assert.Equal(HttpStatusCode.Redirect,(await admin.Client.PostAsync("/Roteamento/Planejar",new FormUrlEncodedContent(fields))).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict,(await admin.Client.PostAsync("/Roteamento/Planejar",new FormUrlEncodedContent(fields))).StatusCode);
+        await RoadApprovalHttp.Publish(admin,id);
         var response=await driver.Client.GetAsync($"/Entregas/{id}/Planejamento");Assert.Equal(HttpStatusCode.OK,response.StatusCode);
-        var json=JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("plan");Assert.False(json.GetProperty("rotaDisponivel").GetBoolean());Assert.NotEqual(JsonValueKind.Null,json.GetProperty("planningId").ValueKind);
+        var json=JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("plan");Assert.True(json.GetProperty("rotaDisponivel").GetBoolean());Assert.NotEqual(JsonValueKind.Null,json.GetProperty("planningId").ValueKind);
         Assert.Equal(HttpStatusCode.NotFound,(await foreign.Client.GetAsync($"/Entregas/{id}/Planejamento")).StatusCode);
         Assert.Contains((await customer.Client.GetAsync($"/Entregas/{id}/Planejamento")).StatusCode,new[]{HttpStatusCode.Redirect,HttpStatusCode.Forbidden});
     }

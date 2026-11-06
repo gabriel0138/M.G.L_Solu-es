@@ -1,10 +1,5 @@
 (() => {
     const result=document.getElementById('routeResult'), form=document.getElementById('rotaForm');
-    document.getElementById('deliveryRoadPlanForm')?.addEventListener('submit',()=>{
-        result.dataset.routeState='Calculating';result.setAttribute('aria-busy','true');
-        document.getElementById('routeStateLabel').textContent='Calculando e vinculando rota…';
-        document.getElementById('saveDeliveryRoadPlan').disabled=true;
-    });
     form.addEventListener('submit',()=>{
         result.dataset.routeState='Calculating';result.setAttribute('aria-busy','true');
         document.getElementById('routeStateLabel').textContent='Calculando rota…';

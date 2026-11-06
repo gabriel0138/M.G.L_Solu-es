@@ -28,21 +28,23 @@
 
 .cc-route-parameters-panel > summary { min-height:44px; padding:.65rem .25rem; font-weight:700; }
 .cc-routing #truckMap { scroll-margin-block-start:calc(var(--mgl-topbar-height) + 1rem); }
+/* Keep the map/results in one track: a long editor must not stretch the rows above it. */
+.cc-routing-results { display:flex; flex-direction:column; gap:.75rem; min-width:0; }
+.cc-routing-results > * { margin:0; }
 @media(min-width:1200px){
-    .cc-routing { display:grid; grid-template-columns:minmax(16rem,19rem) minmax(0,1fr); column-gap:1rem; align-items:start; }
-    .cc-routing-heading { grid-area:1/1/2/3; }
-    .cc-route-parameters-panel { grid-area:2/1/7/2; }
+    .cc-routing { display:grid; grid-template-columns:minmax(16rem,19rem) minmax(0,1fr); gap:1rem; align-items:start; }
+    .cc-routing-heading { grid-column:1/-1; grid-row:1; }
+    .cc-route-parameters-panel { grid-column:1; grid-row:2; }
     .cc-route-parameters,.cc-route-cost-inputs { grid-template-columns:minmax(0,1fr); }
-    .cc-routing-notice { grid-area:2/2; padding:.5rem 0; }
-    .cc-routing-source { grid-area:3/2; }
-    .cc-routing-metrics { grid-area:4/2; grid-template-columns:repeat(3,minmax(0,1fr)); }
-    .cc-routing-map-panel { grid-area:5/2; }
-    .cc-route-diagnostics { grid-area:6/2; }
-    .cc-route-capture-link { grid-area:7/1; }
+    .cc-routing-results { grid-column:2; grid-row:2; position:sticky; top:calc(var(--mgl-topbar-height) + .5rem); max-height:calc(100dvh - var(--mgl-topbar-height) - 1rem); overflow-y:auto; }
+    .cc-routing-metrics { grid-template-columns:repeat(3,minmax(0,1fr)); }
+    .cc-routing-notice { padding:.5rem 0; }
+    .cc-routing:has(#geographicPlanning) #truckMap { height:clamp(22rem,45dvh,40rem); }
+    .cc-route-capture-link { grid-column:1; grid-row:3; }
 }
 
-#deliveryRoadPlanForm { min-width:0; overflow-wrap:anywhere; }
-@media(min-width:1200px){#deliveryRoadPlanForm { grid-column:1/-1; grid-row:8; }}
+#publishedRoadPlan { min-width:0; overflow-wrap:anywhere; }
+@media(min-width:1200px){#publishedRoadPlan { grid-column:1/-1; grid-row:8; }}
 
 #geographicPlanning { min-width:0; }
 #geographicPlanning h2 { font-size:1rem; }
@@ -56,7 +58,15 @@
 .cc-geographic-confirm { display:flex; align-items:center; gap:.6rem; min-height:44px; cursor:pointer; }
 .cc-geographic-confirm input { min-width:20px; min-height:20px; }
 @media(min-width:1200px){
- .cc-routing:has(#geographicPlanning) #geographicPlanning { grid-area:2/1/7/2; }
- .cc-routing:has(#geographicPlanning) .cc-route-parameters-panel { grid-area:8/1/9/3; }
- .cc-routing:has(#geographicPlanning) #deliveryRoadPlanForm { grid-area:9/1/10/3; }
+ .cc-routing:has(#geographicPlanning) #geographicPlanning { grid-column:1; grid-row:2; }
+ .cc-routing:has(#geographicPlanning) .cc-route-parameters-panel { grid-column:1/-1; grid-row:3; }
+ .cc-routing:has(#geographicPlanning) #publishedRoadPlan { grid-column:1/-1; grid-row:4; }
 }
+
+.cc-route-comparison { display:grid; gap:.5rem; margin-block:.75rem; }
+.cc-route-comparison[hidden] { display:none; }
+.cc-route-comparison section { padding:.6rem; border:1px solid var(--mgl-border-subtle); border-radius:var(--mgl-radius-md); }
+.cc-route-comparison h3 { font-size:.85rem; margin:0 0 .35rem; }
+.cc-route-comparison p { font-size:.75rem; margin:.2rem 0; overflow-wrap:anywhere; }
+.cc-stop-order { font-weight:700; }
+.cc-geographic-stop legend:focus { outline:2px solid var(--mgl-focus-ring); }

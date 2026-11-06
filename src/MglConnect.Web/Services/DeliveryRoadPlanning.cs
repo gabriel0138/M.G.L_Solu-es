@@ -17,7 +17,7 @@ public sealed record ConfirmedRouteStop(string Address,double Latitude,double Lo
 }
 public sealed record PlanningAddressContext(string Origin,string Destination,string Binding,int Revision);
 public sealed class PlanningContextChangedException : Exception;
-public sealed class DeliveryRoadPlanning(MglDbContext db, OsrmRoadRouter router,DeliveryPlanningPublisher? publisher=null,TimeProvider? clock=null)
+public sealed class DeliveryRoadPlanning(MglDbContext db, OsrmRoadRouter router,DeliveryPlanningPublisher? publisher=null,TimeProvider? clock=null,RoadPreviewStore? drafts=null)
 {
     private DateTime Now => (clock??TimeProvider.System).GetUtcNow().UtcDateTime;
     private static string Binding(Entrega e) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new {
@@ -26,6 +26,72 @@ public sealed class DeliveryRoadPlanning(MglDbContext db, OsrmRoadRouter router,
         e.Pedido?.OrigemEndereco,e.Pedido?.OrigemNumero,e.Pedido?.OrigemBairro,e.Pedido?.OrigemCidade,e.Pedido?.OrigemEstado,e.Pedido?.OrigemCep
     }))));
     private Task<Entrega?> Delivery(int id,CancellationToken ct) => db.Entregas.AsNoTracking().Include(e=>e.Pedido).SingleOrDefaultAsync(e=>e.Id==id,ct);
+    private Task<bool> ActiveAdmin(int actor,Guid tenant,CancellationToken ct)=>db.Usuarios.AnyAsync(u=>u.Id==actor&&u.TenantId==tenant&&u.Ativo&&(u.Perfil=="Admin"||u.Perfil=="Administrador"),ct);
+    private static string StopsIdentity(IReadOnlyList<ConfirmedRouteStop> stops)=>JsonSerializer.Serialize(stops.Select(s=>s with{ConfirmedAtUtc=null}));
+    // Strict comparison: even a small change needs explicit reapproval; receipt times do not.
+    private static string RouteIdentity(TruckRoutePlan p)=>JsonSerializer.Serialize(new {
+        p.ProviderName,p.ProviderProfile,p.GeometrySource,p.GeometrySourceReference,p.EngineVersion,p.DatasetReference,p.ProviderGraphVersion,
+        p.TrajetoCoordenadas,p.ProviderWaypoints,p.DistanciaKm,p.ProviderDurationSeconds,p.PassosNavegacao
+    });
+    private static bool PublicationConflict(Exception error)
+    {
+        // EF's execution strategy can wrap a provider serialization/deadlock
+        // exception. Translate only known conflicts, never retry an approval.
+        for(Exception? current=error;current!=null;current=current.InnerException)
+            if(current is DbUpdateConcurrencyException
+                or Microsoft.Data.Sqlite.SqliteException{SqliteErrorCode:5 or 6}
+                or Npgsql.PostgresException{SqlState:"40001" or "40P01"}
+                or Microsoft.Data.SqlClient.SqlException{Number:1205 or 3960})return true;
+        return false;
+    }
+    private ApprovedRoadPreview Remember(Entrega e,int actor,IReadOnlyList<ConfirmedRouteStop> stops,TruckRoutePlan plan)
+    {
+        var expiry=Now.AddMinutes(5);plan.CalculatedAtUtc=Now;
+        plan.RequestedStops=stops.Select(p=>new RouteCoordinate{Latitude=p.Latitude,Longitude=p.Longitude}).ToList();
+        var id=RoutePresentation.ValidGeometry(plan)?drafts?.Put(new(e.TenantId,actor,e.Id,e.RoadPlanRevision,Binding(e),expiry,StopsIdentity(stops),JsonSerializer.Serialize(plan))):null;
+        return new(plan,id,expiry,e.RoadPlanRevision);
+    }
+    public async Task<ApprovedRoadPreview?> CreateApprovalAsync(int id,int actor,IReadOnlyList<ConfirmedRouteStop> stops,string binding,CancellationToken ct=default)
+    {
+        var before=await Delivery(id,ct);
+        if(before==null||!await ActiveAdmin(actor,before.TenantId,ct))return null;
+        var plan=await PreviewAsync(id,stops,binding,ct);if(plan==null)return null;
+        var after=await Delivery(id,ct);
+        if(after==null||after.RoadPlanRevision!=before.RoadPlanRevision||Binding(after)!=binding||!await ActiveAdmin(actor,after.TenantId,ct))throw new PlanningContextChangedException();
+        return Remember(after,actor,stops,plan);
+    }
+    public async Task<RoadPublicationResult> PublishApprovedAsync(int id,int actor,string? approvalId,IReadOnlyList<ConfirmedRouteStop> stops,string binding,CancellationToken ct=default)
+    {
+        var e=await Delivery(id,ct);
+        if(e==null||!await ActiveAdmin(actor,e.TenantId,ct))throw new PlanningContextChangedException();
+        var snapshot=drafts?.Take(approvalId,actor,id,e.TenantId);
+        if(snapshot==null||snapshot.ExpiresAtUtc<=Now||snapshot.Binding!=binding||Binding(e)!=binding||snapshot.BaseRevision!=e.RoadPlanRevision||snapshot.StopsJson!=StopsIdentity(stops))throw new PlanningContextChangedException();
+        var approved=JsonSerializer.Deserialize<TruckRoutePlan>(snapshot.PlanJson)!;
+        // The browser supplies only an opaque identifier. Recalculate without reserving a revision.
+        var fresh=await PreviewAsync(id,stops,binding,ct);
+        var current=await Delivery(id,ct);
+        if(fresh==null||current==null||snapshot.ExpiresAtUtc<=Now||current.RoadPlanRevision!=snapshot.BaseRevision||Binding(current)!=binding||!await ActiveAdmin(actor,current.TenantId,ct))throw new PlanningContextChangedException();
+        if(!RoutePresentation.ValidGeometry(fresh))return new("Unavailable",Replacement:new(fresh,null,Now,snapshot.BaseRevision));
+        if(RouteIdentity(approved)!=RouteIdentity(fresh))return new("Changed",Replacement:Remember(current,actor,stops,fresh),Previous:approved);
+
+        // CAS + short serializable transaction: two approvals based on the same version cannot both win.
+        try {
+            await using var tx=await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable,ct);
+            var claimed=await db.Entregas.Where(d=>d.Id==id&&d.TenantId==snapshot.TenantId&&d.RoadPlanRevision==snapshot.BaseRevision&&d.StatusEntrega!="Entregue"&&d.StatusEntrega!="Cancelada")
+                .ExecuteUpdateAsync(set=>set.SetProperty(d=>d.RoadPlanRevision,d=>d.RoadPlanRevision+1),ct);
+            current=await Delivery(id,ct);
+            if(claimed!=1||current==null||Binding(current)!=binding||snapshot.ExpiresAtUtc<=Now||!await ActiveAdmin(actor,snapshot.TenantId,ct))throw new PlanningContextChangedException();
+            var row=new DeliveryRoadPlan{Id=Guid.NewGuid(),TenantId=snapshot.TenantId,EntregaId=id,Revision=snapshot.BaseRevision+1,
+                CreatedAtUtc=Now,ValidUntilUtc=Now.AddHours(4),BindingHash=binding,LocationsJson=JsonSerializer.Serialize(stops.Select(p=>new RouteLocation(p.Latitude,p.Longitude)))};
+            // Persist the server's approved snapshot, never geometry or metrics from the form.
+            approved.PlanningId=row.Id;approved.PlanRevision=row.Revision;approved.ValidUntilUtc=row.ValidUntilUtc;
+            approved.PerfilVeiculo="Pesado";approved.EixosVeiculo=current.QtdEixos;approved.Origem=stops[0].Address;approved.Destino=stops[^1].Address;
+            approved.RequestedStops=stops.Select(p=>new RouteCoordinate{Latitude=p.Latitude,Longitude=p.Longitude}).ToList();
+            approved.ConfirmedStops=stops.Select(p=>p with{ConfirmedAtUtc=Now}).ToList();
+            row.PlanJson=JsonSerializer.Serialize(approved);db.DeliveryRoadPlans.Add(row);await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);
+        }catch(Exception error) when(PublicationConflict(error)){throw new PlanningContextChangedException();}
+        await NotifyCurrentAsync(id,approved.PlanningId!.Value);return new("Published",Published:approved);
+    }
     // A draft is never a planning revision, GPS sample or published notification.
     public async Task<TruckRoutePlan?> PreviewAsync(int id,IReadOnlyList<ConfirmedRouteStop> stops,string binding,CancellationToken ct=default)
     {

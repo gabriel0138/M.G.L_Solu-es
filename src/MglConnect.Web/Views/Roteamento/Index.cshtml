@@ -2,6 +2,7 @@
 @using MglConnect.Web.Services
 @{
     ViewData["Title"]="Roteamento";
+    var invariant=System.Globalization.CultureInfo.InvariantCulture;
     var state=ViewBag.RoutePresentation as RoutePresentation ?? RoutePresentation.From(Model);
     var deliveries=ViewBag.Entregas as List<MglConnect.Web.Models.Entrega> ?? new();
     var cost=ViewBag.CustoViagem as TripCostResult ?? new();
@@ -11,7 +12,6 @@
         i==0 ? string.IsNullOrWhiteSpace(Model.Origem)?geo?.Origin??"Origem declarada":Model.Origem
         : i==Model.RequestedStops.Count-1 ? string.IsNullOrWhiteSpace(Model.Destino)?geo?.Destination??"Destino declarado":Model.Destino
         : $"Parada planejada {i}",p.Latitude,p.Longitude,"Manual",false,"Coordenada anterior; reconfirme no mapa")).ToList();
-    var invariant=System.Globalization.CultureInfo.InvariantCulture;
 }
 <section class="cc-routing" id="routeResult" data-route-state="@state.State" data-has-geometry="@state.HasGeometry.ToString().ToLowerInvariant()">
     <header class="cc-routing-heading"><div><span class="cc-driver-eyebrow">Planejamento de viagem</span><h1>Roteamento</h1><p id="routeStateLabel" role="status">@state.Label</p></div>
@@ -26,10 +26,13 @@
             <button id="addGeographicStop" type="button" class="btn btn-outline-secondary my-2">Adicionar parada</button>
             <p data-message role="status" class="small">A busca envia ao Photon somente o endereço consultado ao clicar.</p>
             <div class="cc-geographic-actions"><button id="previewConfirmedRoute" type="button" class="btn btn-outline-secondary" disabled>Pré-visualizar percurso</button><button id="saveConfirmedRoute" type="submit" class="btn btn-mgl-teal" disabled>Publicar planejamento confirmado</button><a id="viewDraftOnMap" class="btn btn-outline-secondary" href="#truckMap" hidden>Ver prévia no mapa</a></div>
+            <p id="geographicOrderStatus" role="status" class="small"></p>
+            <button id="cancelRoutePreview" type="button" class="btn btn-outline-secondary" hidden>Cancelar prévia</button>
+            <div id="routeComparison" class="cc-route-comparison" aria-label="Comparação entre rota publicada e proposta" hidden></div>
             <p id="geographicPreview" role="status" class="small mt-2" hidden></p>
-            <p class="small text-muted mb-0">Laranja tracejado: prévia não publicada. Verde: planejamento salvo. Ao publicar, o servidor recalcula o percurso. Caminhão não validado.</p>
+            <p class="small text-muted mb-0">Contínuo: rota publicada. Tracejado: proposta. Pontilhado: prévia anterior quando o recálculo mudar. Se o recálculo mudar o percurso, será necessária nova aprovação. Caminhão não validado.</p>
         </form>
-        <script id="geographyContext" type="application/json">@Html.Raw(System.Text.Json.JsonSerializer.Serialize(new {origin=geo.Origin,destination=geo.Destination,currentDistanceKm=state.DistanceKm,stops=editableStops.Select(s=>new{address=s.Address,latitude=s.Latitude,longitude=s.Longitude,source=s.Source,candidateLabel=s.CandidateLabel})}))</script>
+        <script id="geographyContext" type="application/json">@Html.Raw(System.Text.Json.JsonSerializer.Serialize(new {origin=geo.Origin,destination=geo.Destination,currentDistanceKm=state.DistanceKm,currentDurationSeconds=state.DurationSeconds,currentStopCount=Model.RequestedStops.Count>=2?(int?)(Model.RequestedStops.Count-2):null,stops=editableStops.Select(s=>new{address=s.Address,latitude=s.Latitude,longitude=s.Longitude,source=s.Source,candidateLabel=s.CandidateLabel})}))</script>
     }
     <details id="routeParameters" class="cc-route-parameters-panel" open><summary>Parâmetros do percurso</summary>
     <form method="get" id="rotaForm" class="cc-panel cc-route-parameters">
@@ -49,16 +52,12 @@
     </form></details>
     @if(ViewBag.HistoricalCaptureEnabled is true){<a href="/Roteamento?calcular=true&amp;coordenadas=-46.6559%2C-23.5614%3B-46.6333%2C-23.5505&amp;perfilVeiculo=Pesado" class="btn btn-outline-secondary my-2 cc-route-capture-link">Abrir captura histórica MASP → Praça da Sé</a>}
     @if(selected.HasValue){
-        <form id="deliveryRoadPlanForm" method="post" action="/Roteamento/Planejar" class="cc-panel p-3 mb-2">
-            @Html.AntiForgeryToken()
-            <input type="hidden" name="entregaId" value="@selected" />
-            <label for="deliveryRoadLocations">Planejamento vinculado à entrega · coordenadas declaradas (longitude,latitude)</label>
-            <input id="deliveryRoadLocations" name="coordenadas" class="form-control my-2" required value="@(string.Join(";",Model.RequestedStops.Select(p=>$"{p.Longitude.ToString(invariant)},{p.Latitude.ToString(invariant)}")))" placeholder="Origem; paradas opcionais; destino" />
-            <button id="saveDeliveryRoadPlan" type="submit" class="btn btn-mgl-teal">Calcular e vincular à entrega</button>
-            <p class="small mb-0 mt-2">Confirme as coordenadas do pedido. O cálculo genérico não verifica acesso de caminhões.</p>
+        <div id="publishedRoadPlan" class="cc-panel p-3 mb-2">
+            <p class="small">A publicação exige uma prévia aprovada e vigente. Uma alteração do provedor requer nova aprovação.</p>
             @if(Model.PlanningId.HasValue){<p id="linkedRoadPlan" data-plan-id="@Model.PlanningId" data-revision="@Model.PlanRevision">Versão @Model.PlanRevision · planejamento @Model.PlanningId · calculado @Model.CalculatedAtUtc?.ToString("u") · validade @Model.ValidUntilUtc?.ToString("u")</p>}
-        </form>
+        </div>
     }
+    <div class="cc-routing-results" role="region" aria-label="Resultados e mapa do planejamento">
     <div class="cc-routing-notice" role="status">@state.Notice</div>
     <p class="cc-routing-source" id="routeSource">@(state.GeometrySource switch {"HistoricalRoadCapture"=>"Captura viária histórica OSRM · não reconsultada · duração original desconhecida", "LocalProviderFixture"=>"Resposta de provedor local simulado · métricas de teste", "SyntheticCircuit"=>"Circuito sintético autorado · não representa ruas reais", "RoadNetwork"=>"Resposta do provedor rodoviário configurado", _=>state.HasGeometry?"Fonte de geometria não documentada":"Sem fonte de geometria utilizável"})</p>
     <dl class="cc-routing-metrics">
@@ -68,12 +67,13 @@
         <div><dt>Pedágio da rota</dt><dd id="routeToll">—</dd><small>Não consultado</small></div>
         <div><dt>Cenário com pedágio fixo</dt><dd id="routeScenarioCost">@(state.ScenarioCost.HasValue?$"R$ {state.ScenarioCost:N2}":"—")</dd><small>Hipótese, não orçamento</small></div>
     </dl>
-    <div class="cc-routing-map-panel cc-panel"><div class="cc-routing-map-heading"><h2>Geometria do percurso</h2><span id="routeGeometryCount">@(state.HasGeometry?Model.TrajetoCoordenadas.Count:0) vértices · não são amostras GPS</span></div><p id="routeMapStatus" role="status">@(state.HasGeometry?"Carregando mapa…":"Nenhuma rota disponível para desenhar.")</p><div id="geographicPreviewMap" hidden><p class="small text-warning">Prévia laranja não publicada; os indicadores acima são do planejamento salvo.</p><a href="#geographicPreview" class="btn btn-outline-secondary">Voltar à confirmação</a></div><div id="truckMap" role="region" aria-label="Mapa do percurso planejado"></div></div>
+    <div class="cc-routing-map-panel cc-panel"><div class="cc-routing-map-heading"><h2>Geometria do percurso</h2><span id="routeGeometryCount">@(state.HasGeometry?Model.TrajetoCoordenadas.Count:0) vértices · não são amostras GPS</span></div><p id="routeMapStatus" role="status">@(state.HasGeometry?"Carregando mapa…":"Nenhuma rota disponível para desenhar.")</p><div id="geographicPreviewMap" hidden><p class="small text-warning">Publicada: contínua. Proposta: tracejada. Prévia anterior: pontilhada, quando houver recálculo.</p><a href="#geographicPreview" class="btn btn-outline-secondary">Voltar à confirmação</a></div><div id="truckMap" role="region" aria-label="Mapa do percurso planejado"></div></div>
     <details class="cc-panel cc-route-diagnostics"><summary>Confiança, provedor e restrições</summary><dl><dt>Provedor / perfil</dt><dd>@state.Provider / @state.Profile</dd><dt>Resultado do provedor</dt><dd>@Model.ProviderFailure</dd><dt>Origem da geometria</dt><dd>@state.GeometrySource</dd><dt>SHA256 da evidência</dt><dd>@(Model.ProviderResponseSha256??"Indisponível")</dd><dt>Motor</dt><dd>@(Model.EngineVersion??"Não informado")</dd><dt>Dados públicos</dt><dd>@(Model.DatasetReference??"Não documentados")</dd><dt>Alternativas retornadas</dt><dd>@Model.AlternativeCount</dd><dt>Paradas localizadas pelo provedor</dt><dd>@Model.ProviderWaypoints.Count</dd><dt>Versão da malha</dt><dd>@(Model.ProviderGraphVersion??"Não informada")</dd><dt>Orientação pesada</dt><dd>@(Model.Confianca?.NavigationAllowed==true ? "Verificação limitada ao escopo registrado; não é homologação independente." : "Suspensa sem evidência suficiente de restrições e vínculo ao veículo.")</dd></dl>
         @if(selected.HasValue){<a href="/Rotas/Entrega/@selected" class="btn btn-outline-secondary">Avaliar perfil e restrições da entrega</a>}
         @foreach(var group in Model.Alertas.GroupBy(a=>a.Severidade).OrderBy(g=>g.Key=="Perigo"?0:1)){<h3>@group.Key</h3>@foreach(var alert in group){<p>@alert.Mensagem</p>}}
         @if(!string.IsNullOrWhiteSpace(Model.AvisoRota)){<p>@Model.AvisoRota</p>}
     </details>
+    </div>
 </section>
 @section Styles {<link rel="stylesheet" href="~/css/command-routing.css" asp-append-version="true" />}
 @section Scripts {

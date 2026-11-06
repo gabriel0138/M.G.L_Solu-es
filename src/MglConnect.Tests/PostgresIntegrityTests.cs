@@ -24,6 +24,9 @@ public sealed class PostgresFactAttribute : FactAttribute
 public sealed class PostgresIntegrityTests
 {
     [PostgresFact,Trait("Provider","Postgres")]
+    public async Task ApprovedRoutePublicationUsesAtomicRevisionOnPostgres(){await using var db=await CreateAsync();await RoadApprovalTests.VerifyConcurrentAsync(db.Database.GetConnectionString());}
+
+    [PostgresFact,Trait("Provider","Postgres")]
     public async Task StageSevenATripProfileUpgradeIsAdditiveAndKeepsTheLegacyDeclaration()
     { await using var db=await CreateAsync();await db.Database.EnsureCreatedAsync();await TripProfileIsolationTests.VerifyStageSevenAUpgrade(db); }
     [PostgresFact, Trait("Provider", "Postgres")]
